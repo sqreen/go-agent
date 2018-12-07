@@ -35,10 +35,10 @@ RUN apt-get -q update && \
 ENV PATH /usr/lib/go-1.11/bin:$PATH
 
 # Protocol Buffers Compiler
-RUN v=3.6.1 && m=$(uname -m) && curl -sSL https://github.com/protocolbuffers/protobuf/releases/download/v$v/protoc-$v-linux-$m.zip > /tmp/protoc-$v-linux-$m.zip \
-    && unzip /tmp/protoc-$v-linux-$m.zip -d /opt/protoc-$v \
-    && chmod -R a+rx /opt/protoc-$v
-ENV PATH /opt/protoc-3.6.1/bin:$PATH
+#RUN v=3.6.1 && m=$(uname -m) && curl -sSL https://github.com/protocolbuffers/protobuf/releases/download/v$v/protoc-$v-linux-$m.zip > /tmp/protoc-$v-linux-$m.zip \
+#    && unzip /tmp/protoc-$v-linux-$m.zip -d /opt/protoc-$v \
+#    && chmod -R a+rx /opt/protoc-$v
+#ENV PATH /opt/protoc-3.6.1/bin:$PATH
 
 # Additional go tools
 # RUN GOBIN=/usr/local/bin go get -u -v github.com/gogo/protobuf/protoc-gen-gogo
@@ -52,5 +52,11 @@ RUN useradd -M --uid $uid --user-group devuser \
     && echo 'Defaults exempt_group+=user' >> /etc/sudoers.d/devuser \
     && chmod a=r,o= /etc/sudoers.d/devuser
 USER devuser
+
+RUN sudo mkdir /go && sudo chown devuser:devuser /go
+# GOPATH is unfortunately  required for module caching.
+ENV GOPATH /go
+# Made a volume to be able to share it with the host or other containers.
+VOLUME /go
 
 ENTRYPOINT bash

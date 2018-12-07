@@ -7,6 +7,14 @@ define lib/docker/is_container_running =
 endef
 
 ##
+# lib/docker/is_make_in_docker()
+# Return True (non-empty string) when make is inside a container.
+#
+define lib/docker/is_in_container =
+test -f /.dockerinit -o -f /.dockerenv
+endef
+
+##
 # Mandatory argument getters.
 #
 lib/argv/1  = $(call lib/argv, $1)
