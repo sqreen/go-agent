@@ -12,11 +12,13 @@ templates.dockerTemplate(label) {
         stage('Checkout') {
           gitHub.checkoutWithSubModules()
         }
-        //container('docker') {
-        //    def devImage = docker.build("sqreen/go-agent-dev", "./tools/docker/dev/Dockerfile")
-        //    devImage.inside {
-        //        sh 'make test'
-        //    }
-        //}
+        container('docker') {
+            stage('Build') {
+                def devImage = docker.build("sqreen/go-agent-dev", "./tools/docker/dev/Dockerfile")
+                devImage.inside {
+                    sh 'make test'
+                }
+            }
+        }
     }
 }
