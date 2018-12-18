@@ -5,13 +5,14 @@ import io.sqreen.pipeline.scm.GitHubSCM;
 def templates = new PodTemplate();
 def gitHub = new GitHubSCM();
 
-String dockerLabel = templates.generateSlaveName();
+String label = templates.generateSlaveName();
 
-templates.dockerTemplate(dockerLabel) {
-    node(dockerLabel) {
+templates.dockerTemplate(label) {
+    node(label) {
         gitHub.checkoutWithSubModules()
-        container('docker') {
-            sh "make test"
+        def devImage = docker.build("sqreen/go-agent-dev", "./tools/docker/dev/Dockerfile")
+        devImage.inside {
+            sh 'make test'
         }
     }
 }
