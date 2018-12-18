@@ -5,7 +5,7 @@
 # to make possible compiling "natively" without docker.
 #
 
-FROM debian:sid AS base
+FROM debian:sid
 
 # set noninteractive front-end during the build
 ARG DEBIAN_FRONTEND=noninteractive
@@ -15,8 +15,6 @@ RUN apt-get -q update \
     && apt-get -q install -y --no-install-recommends locales && locale-gen C.UTF-8
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
-
-FROM base AS dev
 
 RUN apt-get -q update && \
     apt-get -q install -y --no-install-recommends \
