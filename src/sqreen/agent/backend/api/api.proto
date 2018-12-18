@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package sqreen.agent.backend.api;
+
+import "google/protobuf/timestamp.proto";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+option go_package = "api";
+option (gogoproto.gostring_all) = true;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = true;
+option (gogoproto.benchgen_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.equal_all) = true;
+
+message AppLoginRequest {
+  message VariousInfos {
+    google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    uint32 pid = 3;
+    uint32 ppid = 4;
+    uint32 euid = 5;
+    uint32 egid = 6;
+    uint32 uid = 7;
+    uint32 gid = 8;
+    string name = 9;
+  }
+
+  string bundle_signature = 1;
+  VariousInfos various_infos = 2 [(gogoproto.nullable) = false];
+  string agent_type = 3;
+  string agent_version = 4;
+  string os_type = 5;
+  string hostname = 6;
+  string runtime_type = 7;
+  string runtime_version = 8;
+  string framework_type = 9;
+  string framework_version = 10;
+  string environment = 11;
+}
+
+message AppLoginResponse {
+  message Feature {
+    uint32 batch_size = 1;
+    uint32 max_staleness = 2;
+    uint32 heartbeat_delay = 3;
+  }
+
+  string session_id = 1;
+  bool status = 2;
+  repeated CommandRequest commands = 3 [(gogoproto.nullable) = false];
+  Feature features = 4 [(gogoproto.nullable) = false];
+  string pack_id = 5;
+  repeated Rule rules = 6 [(gogoproto.nullable) = false];
+}
+
+message CommandRequest {
+  string name = 1;
+  repeated string params = 2;
+  string uuid = 3;
+}
+
+message CommandResponse {
+}
+
+message MetricResponse {
+}
+
+message AppBeatRequest {
+  map<string, CommandResponse> command_results = 1 [(gogoproto.nullable) = false];
+  repeated MetricResponse metrics = 2 [(gogoproto.nullable) = false];
+}
+
+message AppBeatResponse {
+  repeated CommandRequest commands = 1 [(gogoproto.nullable) = false];
+  bool status = 2;
+}
+
+message Rule {
+}
+
+message Dependency {
+  message Source {
+    string name = 1;
+    repeated string remotes = 2;
+  }
+
+  string name = 1;
+  string version = 2;
+  string homepage = 3;
+  Source source = 4;
+}
