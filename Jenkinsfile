@@ -9,10 +9,12 @@ String label = templates.generateSlaveName();
 
 templates.dockerTemplate(label) {
     node(label) {
-        gitHub.checkoutWithSubModules()
-        def devImage = docker.build("sqreen/go-agent-dev", "./tools/docker/dev/Dockerfile")
-        devImage.inside {
-            sh 'make test'
+          gitHub.checkoutWithSubModules()
+          container('docker') {
+            def devImage = docker.build("sqreen/go-agent-dev", "./tools/docker/dev/Dockerfile")
+            devImage.inside {
+                sh 'make test'
+            }
         }
     }
 }
