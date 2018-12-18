@@ -1,30 +1,30 @@
-include sdk/Makefile/lib.mk
+include tools/Makefile/lib.mk
 
 vendors := src/sqreen/vendor
 # Tracking .git/HEAD allows to recompile things
 global-deps := $(MAKEFILE_LIST) .git/HEAD
 clean      := .cache
 distclean  := $(vendors)
-docker/sdk/image := sqreen/go-agent-sdk
-docker/sdk/container := go-agent-sdk
-docker/sdk/container/options := -e GOPATH=$$PWD -e GOCACHE=$$PWD/.cache
-docker/sdk/container/dockerfile := sdk/docker/dev/Dockerfile
+docker/dev/image := sqreen/go-agent-dev
+docker/dev/container := go-agent-dev
+docker/dev/container/options := -e GOPATH=$$PWD -e GOCACHE=$$PWD/.cache
+docker/dev/container/dockerfile := tools/docker/dev/Dockerfile
 go/target := $(shell go env GOOS)_$(shell go env GOARCH)
 agent/library/static := pkg/$(go/target)/sqreen/agent.a
 protobufs := $(patsubst %.proto,%.pb.go,$(shell find src/sqreen -name '*.proto'))
 
 define dockerize =
-$(lib/docker/is_in_container) && $(lib/argv/1) || docker exec -i $(docker/sdk/container) bash -c "$(lib/argv/1)"
+if $(lib/docker/is_in_container); then $(lib/argv/1); else docker exec -i $(docker/dev/container) bash -c "$(lib/argv/1)"; fi
 endef
 
 ##
 # Helper variables to make easier reading the rules requiring docker images or
 # containers.
 #
-sdk-container := .cache/docker/dev/run
-sdk-image := .cache/docker/dev/build
-needs-sdk-container := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(sdk-container))
-needs-sdk-image := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(sdk-image))
+dev-container := .cache/docker/dev/run
+dev-image := .cache/docker/dev/build
+needs-dev-container := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(dev-container))
+needs-dev-image := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(dev-image))
 needs-protobufs := $(protobufs)
 needs-vendors := .cache/go/vendor
 
@@ -36,14 +36,18 @@ help:
 all: $(agent/library/static)
 help += all
 
-$(agent/library/static): $(needs-sdk-container) $(needs-protobufs) $(needs-vendors)
+$(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendors)
 	$(call dockerize, go install -v sqreen/agent)
+
+.PHONY: test
+test: $(needs-dev-container) $(needs-vendors)
+	$(call dockerize, ./bin/ginkgo -r --randomizeAllSpecs --randomizeSuites --progress ./src/sqreen)
 
 .PHONY: clean
 clean:
 	rm -rf $(clean)
-	docker rm -f $(docker/sdk/container) || true
-	docker rmi -f $(docker/sdk/image) || true
+	docker rm -f $(docker/dev/container) || true
+	docker rmi -f $(docker/dev/image) || true
 help += clean
 
 .PHONY: distclean
@@ -55,7 +59,7 @@ help += distclean
 # Vendor directory
 #-----------------------------------------------------------------------------
 
-$(needs-vendors): src/sqreen/go.mod $(global-deps)
+$(needs-vendors): src/sqreen/go.mod $(global-deps) $(needs-dev-container)
 	$(call dockerize, cd src/sqreen && env GO111MODULE=on go mod vendor)
 	mkdir -p $(@D) && touch $@
 
@@ -63,7 +67,7 @@ $(needs-vendors): src/sqreen/go.mod $(global-deps)
 # Protocol buffers
 #-----------------------------------------------------------------------------
 
-%.pb.go: %.proto
+%.pb.go: %.proto  $(needs-dev-container) $(needs-vendors)
 	$(call dockerize, protoc -Isrc -Isrc/sqreen/vendor --gogo_out=src $<)
 
 #-----------------------------------------------------------------------------
@@ -71,15 +75,15 @@ $(needs-vendors): src/sqreen/go.mod $(global-deps)
 #------------------------------------------------------------------------------
 
 .PHONY: shell
-shell: $(needs-sdk-container)
-	docker exec -it $(docker/sdk/container) bash
+shell: $(needs-dev-container)
+	docker exec -it $(docker/dev/container) bash
 help += shell
 
-$(sdk-image): $(docker/sdk/container/dockerfile) $(global-deps)
-	docker build -t $(docker/sdk/image) --build-arg uid=$(shell id -u) -f $< .
+$(dev-image): $(docker/dev/container/dockerfile) $(global-deps)
+	docker build -t $(docker/dev/image) --build-arg uid=$(shell id -u) -f $< .
 	mkdir -p $(@D) && touch $@
 
-$(sdk-container): $(needs-sdk-image)
-	$(call lib/docker/is_container_running, $(docker/sdk/container)) && docker rm -f $(docker/sdk/container) || true
-	docker run $(docker/sdk/container/options) -ditv $$PWD:$$PWD -w $$PWD $(docker/sdk/container/options) --name $(docker/sdk/container) $(docker/sdk/image)
+$(dev-container): $(needs-dev-image)
+	$(call lib/docker/is_container_running, $(docker/dev/container)) && docker rm -f $(docker/dev/container) || true
+	docker run $(docker/dev/container/options) -ditv $$PWD:$$PWD -w $$PWD $(docker/dev/container/options) --name $(docker/dev/container) $(docker/dev/image)
 	mkdir -p $(@D) && touch $@
