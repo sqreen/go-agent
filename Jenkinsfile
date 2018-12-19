@@ -15,7 +15,9 @@ templates.dockerTemplate(label) {
         container('docker') {
             stage('Build') {
                 def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
-                devImage.inside {
+                devImage.inside("-v $PWD:$PWD -w $PWD --name go-agent-dev") {
+                    sh 'ls -a'
+                    sh 'pwd'
                     sh 'make test'
                 }
             }
