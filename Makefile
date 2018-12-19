@@ -12,6 +12,7 @@ docker/dev/container/dockerfile := tools/docker/dev/Dockerfile
 go/target := $(shell go env GOOS)_$(shell go env GOARCH)
 agent/library/static := pkg/$(go/target)/sqreen/agent.a
 protobufs := $(patsubst %.proto,%.pb.go,$(shell find src/sqreen -name '*.proto'))
+ginkgo/flags := -r --randomizeAllSpecs --randomizeSuites --progress -p
 
 define dockerize =
 if $(lib/docker/is_in_container); then $(lib/argv/1); else docker exec -i $(docker/dev/container) bash -c "$(lib/argv/1)"; fi
@@ -41,11 +42,11 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo -r --randomizeAllSpecs --randomizeSuites --progress ./src/sqreen)
+	$(call dockerize, ginkgo $(ginkgo/flags) ./src/sqreen)
 
 .PHONY: test-with-coverage
 test-with-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo -r --randomizeAllSpecs --randomizeSuites --progress -cover ./src/sqreen)
+	$(call dockerize, ginkgo $(ginkgo/flags) -cover ./src/sqreen)
 
 .PHONY: clean
 clean:
