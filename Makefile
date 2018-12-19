@@ -41,7 +41,7 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-vendors)
-	$(call dockerize, ./bin/ginkgo -r --randomizeAllSpecs --randomizeSuites --progress ./src/sqreen)
+	$(call dockerize, ginkgo -r --randomizeAllSpecs --randomizeSuites --progress ./src/sqreen)
 
 .PHONY: clean
 clean:

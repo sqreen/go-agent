@@ -40,7 +40,8 @@ RUN v=$protocversion && m=$(uname -m) && curl -sSL https://github.com/protocolbu
 ENV PATH /opt/protoc-$protocversion/bin:$PATH
 
 # Additional go tools
-RUN GOBIN=/usr/local/bin go get -u -v github.com/gogo/protobuf/protoc-gen-gogo
+RUN GOBIN=/usr/local/bin go get -u -v github.com/gogo/protobuf/protoc-gen-gogo \
+                                      github.com/onsi/ginkgo/ginkgo
 
 # Create a non-root user with the same uid as on the host to allow proper file
 # permissions created from the container in volumes, and to Since it is not root, allow
