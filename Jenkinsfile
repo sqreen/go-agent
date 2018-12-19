@@ -17,6 +17,7 @@ templates.dockerTemplate(label) {
                 sh 'docker info'
                 def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
                 devImage.inside("--name go-agent-dev -e GOPATH=$PWD -e GOCACHE=$PWD/.cache") {
+                    sh 'go env'
                     sh 'make test'
                 }
             }
