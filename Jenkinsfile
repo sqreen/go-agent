@@ -2,7 +2,7 @@
 import io.sqreen.pipeline.kubernetes.PodTemplate;
 import io.sqreen.pipeline.scm.GitHubSCM;
 
-def templates = new Pod();
+def templates = new PodTemplate();
 def gitHub = new GitHubSCM();
 
 String label = templates.generateSlaveName();
