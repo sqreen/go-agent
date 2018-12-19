@@ -43,6 +43,10 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 	$(call dockerize, ginkgo -r --randomizeAllSpecs --randomizeSuites --progress ./src/sqreen)
 
+.PHONY: test-with-coverage
+test-with-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	$(call dockerize, ginkgo -r --randomizeAllSpecs --randomizeSuites --progress -cover ./src/sqreen)
+
 .PHONY: clean
 clean:
 	rm -rf $(clean)
