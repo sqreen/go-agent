@@ -21,11 +21,10 @@ templates.dockerTemplate(label) {
                     sh 'go env'
                     sh 'make test'
                     parallel([
-                              'Coverage': {
-                                  sh 'make test-with-coverage'
-                              }
-                            ])
-                    }
+                        'Coverage': {
+                            sh 'make test-with-coverage'
+                        }
+                    ])
                 }
             }
         }
