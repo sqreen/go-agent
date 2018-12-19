@@ -46,7 +46,7 @@ test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 
 .PHONY: test-coverage
 test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -cover ./src/sqreen)
+	$(call dockerize, ginkgo $(ginkgo/flags) -cover -coverprofile=coverage.txt ./src/sqreen)
 
 .PHONY: test-race
 test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)

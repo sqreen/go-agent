@@ -1,6 +1,7 @@
 @Library('sqreen-pipeline-library')
 import io.sqreen.pipeline.kubernetes.PodTemplate;
 import io.sqreen.pipeline.scm.GitHubSCM;
+import io.sqreen.pipeline.tools.analyze;
 
 def templates = new PodTemplate();
 def gitHub = new GitHubSCM();
@@ -29,6 +30,7 @@ templates.dockerTemplate(label) {
                         },
                         'With coverage': {
                             sh 'make test-coverage'
+                            analyze('codecov-agent-go-token')
                         },
                         'With race detection': {
                             sh 'make test-race'
