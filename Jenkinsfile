@@ -18,18 +18,18 @@ templates.dockerTemplate(label) {
             def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
                 devImage.inside("--name go-agent-dev -e GOPATH=$WORKSPACE -e GOCACHE=$WORKSPACE/.cache") {
                 stage('Tests') {
-                    parallel {
-                    stage('Regular') {
-                        sh 'go env'
-                        sh 'make test'
-                    }
-                    stage('With coverage') {
-                        sh 'make test-coverage'
-                    }
-                    stage('With race detection') {
-                        sh 'make test-race'
-                    }
-                    }
+                    parallel([
+                        'Regular': {
+                            sh 'go env'
+                            sh 'make test'
+                        },
+                        'With coverage': {
+                            sh 'make test-coverage'
+                        },
+                        'With race detection': {
+                            sh 'make test-race'
+                        }
+                    ])
                 }
             }
         }
