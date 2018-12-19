@@ -1,27 +1,18 @@
 @Library('sqreen-pipeline-library')
-import io.sqreen.pipeline.kubernetes.*;
+import io.sqreen.pipeline.kubernetes.PodTemplate;
 import io.sqreen.pipeline.scm.GitHubSCM;
 
+def templates = new Pod();
 def gitHub = new GitHubSCM();
 
 String label = templates.generateSlaveName();
 
-public void dockerTemplate(String label, String cloud = 'kubernetes-cluster', Closure body) {
-    podTemplate(label: label, cloud: cloud, containers: [
-        containerTemplate(name: 'docker', image: 'docker', command: 'cat', ttyEnabled: true)
-    ], volumes: [
-        hostPathVolume(hostPath: '/var/run/docker.sock', mountPath: '/var/run/docker.sock')
-    ]) {
-        body();
-    }
-}
-
-dockerTemplate(label) {
+templates.dockerTemplate(label) {
     node(label) {
-        stage('Checkout') {
-          gitHub.checkoutWithSubModules()
-        }
         container('docker') {
+            stage('Checkout') {
+                gitHub.checkoutWithSubModules()
+            }
             stage('Build') {
                 sh 'pwd'
                 sh 'ls -a'
