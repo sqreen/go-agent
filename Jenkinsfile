@@ -13,12 +13,13 @@ templates.dockerTemplate(label) {
             stage('Checkout') {
                 gitHub.checkoutWithSubModules()
             }
-            stage('Build') {
-                sh 'docker info'
-                def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
-                    devImage.inside("--name go-agent-dev -e GOPATH=$WORKSPACE -e GOCACHE=$WORKSPACE/.cache") {
-                    sh 'pwd && ls -a'
-                    sh 'go env'
+
+            sh 'docker info'
+            def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
+                devImage.inside("--name go-agent-dev -e GOPATH=$WORKSPACE -e GOCACHE=$WORKSPACE/.cache") {
+                sh 'go env'
+
+                stage('Test') {
                     sh 'make test'
                 }
             }
