@@ -20,7 +20,9 @@ templates.dockerTemplate(label) {
                 sh 'go env'
 
                 stage('Test') {
-                    sh 'make test'
+                    linux: {
+                        sh 'make test'
+                    }
                 }
             }
         }
