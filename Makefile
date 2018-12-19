@@ -44,9 +44,13 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 	$(call dockerize, ginkgo $(ginkgo/flags) ./src/sqreen)
 
-.PHONY: test-with-coverage
-test-with-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+.PHONY: test-coverage
+test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 	$(call dockerize, ginkgo $(ginkgo/flags) -cover ./src/sqreen)
+
+.PHONY: test-race
+test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	$(call dockerize, ginkgo $(ginkgo/flags) -race ./src/sqreen)
 
 .PHONY: clean
 clean:
