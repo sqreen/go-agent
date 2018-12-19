@@ -72,6 +72,9 @@ $(needs-vendors): src/sqreen/go.mod $(global-deps) $(needs-dev-container)
 	$(call dockerize, cd src/sqreen && env GO111MODULE=on go mod vendor)
 	mkdir -p $(@D) && touch $@
 
+.PHONY: vendor
+vendor: $(needs-vendors)
+
 #-----------------------------------------------------------------------------
 # Protocol buffers
 #-----------------------------------------------------------------------------

@@ -10,8 +10,9 @@ String label = templates.generateSlaveName();
 templates.dockerTemplate(label) {
     node(label) {
         container('docker') {
-            stage('Checkout') {
+            stage('Bootstrap') {
                 gitHub.checkoutWithSubModules()
+                sh 'make vendor'
             }
 
             sh 'docker info'
