@@ -14,8 +14,6 @@ templates.dockerTemplate(label) {
                 gitHub.checkoutWithSubModules()
             }
             stage('Build') {
-                sh 'pwd'
-                sh 'ls -a'
                 sh 'docker info'
                 def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
                 devImage.inside("--name go-agent-dev") {

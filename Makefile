@@ -40,7 +40,7 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 	$(call dockerize, go install -v sqreen/agent)
 
 .PHONY: test
-test: $(needs-dev-container) $(needs-vendors)
+test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 	$(call dockerize, ginkgo -r --randomizeAllSpecs --randomizeSuites --progress ./src/sqreen)
 
 .PHONY: clean
