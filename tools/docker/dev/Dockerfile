@@ -5,7 +5,7 @@
 # to make possible compiling "natively" without docker.
 #
 
-FROM debian:sid AS base
+FROM debian:sid
 
 # set noninteractive front-end during the build
 ARG DEBIAN_FRONTEND=noninteractive
@@ -15,8 +15,6 @@ RUN apt-get -q update \
     && apt-get -q install -y --no-install-recommends locales && locale-gen C.UTF-8
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
-
-FROM base AS dev
 
 RUN apt-get -q update && \
     apt-get -q install -y --no-install-recommends \
@@ -42,12 +40,13 @@ RUN v=$protocversion && m=$(uname -m) && curl -sSL https://github.com/protocolbu
 ENV PATH /opt/protoc-$protocversion/bin:$PATH
 
 # Additional go tools
-RUN GOBIN=/usr/local/bin go get -u -v github.com/gogo/protobuf/protoc-gen-gogo
+RUN GOBIN=/usr/local/bin go get -u -v github.com/gogo/protobuf/protoc-gen-gogo \
+                                      github.com/onsi/ginkgo/ginkgo
 
 # Create a non-root user with the same uid as on the host to allow proper file
 # permissions created from the container in volumes, and to Since it is not root, allow
 # calling sudo without password when required.
-ARG uid
+ARG uid=10000
 RUN useradd -M --uid $uid --user-group devuser \
     && echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers.d/devuser \
     && echo 'Defaults exempt_group+=user' >> /etc/sudoers.d/devuser \
