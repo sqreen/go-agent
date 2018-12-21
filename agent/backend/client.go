@@ -5,8 +5,10 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"sqreen/agent/backend/api"
-	"sqreen/agent/config"
+
+	"github.com/sqreen/AgentGo/agent/config"
+
+	"github.com/sqreen/AgentGo/agent/backend/api"
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"

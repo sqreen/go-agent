@@ -1,17 +1,17 @@
 include tools/Makefile/lib.mk
 
-vendors := src/sqreen/vendor
+vendors := vendor
 # Tracking .git/HEAD allows to recompile things
 global-deps := $(MAKEFILE_LIST) .git/HEAD
 clean      := .cache
 distclean  := $(vendors)
 docker/dev/image := sqreen/go-agent-dev
 docker/dev/container := go-agent-dev
-docker/dev/container/options := -e GOPATH=$$PWD -e GOCACHE=$$PWD/.cache
+docker/dev/container/options := -e GO111MODULE=on -e GOCACHE=$$PWD/.cache -e GOPATH=$$PWD/.cache/go
 docker/dev/container/dockerfile := tools/docker/dev/Dockerfile
 go/target := $(shell go env GOOS)_$(shell go env GOARCH)
 agent/library/static := pkg/$(go/target)/sqreen/agent.a
-protobufs := $(patsubst %.proto,%.pb.go,$(shell find src/sqreen -name '*.proto'))
+protobufs := $(patsubst %.proto,%.pb.go,$(shell find agent -name '*.proto'))
 ginkgo/flags := -r --randomizeAllSpecs --randomizeSuites --progress -p
 
 define dockerize =
@@ -38,19 +38,19 @@ all: $(agent/library/static)
 help += all
 
 $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendors)
-	$(call dockerize, go install -v sqreen/agent)
+	$(call dockerize, go install -v agent)
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) ./src/sqreen)
+	$(call dockerize, ginkgo $(ginkgo/flags) ./agent)
 
 .PHONY: test-coverage
 test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -cover -coverprofile=coverage.txt ./src/sqreen)
+	$(call dockerize, ginkgo $(ginkgo/flags) -cover -coverprofile=coverage.txt ./agent)
 
 .PHONY: test-race
 test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -race ./src/sqreen)
+	$(call dockerize, ginkgo $(ginkgo/flags) -race ./agent)
 
 .PHONY: clean
 clean:
@@ -68,8 +68,8 @@ help += distclean
 # Vendor directory
 #-----------------------------------------------------------------------------
 
-$(needs-vendors): src/sqreen/go.mod $(global-deps) $(needs-dev-container)
-	$(call dockerize, cd src/sqreen && env GO111MODULE=on go mod vendor)
+$(needs-vendors): go.mod $(global-deps) $(needs-dev-container)
+	$(call dockerize, env GO111MODULE=on go mod vendor)
 	mkdir -p $(@D) && touch $@
 
 .PHONY: vendor
@@ -80,7 +80,7 @@ vendor: $(needs-vendors)
 #-----------------------------------------------------------------------------
 
 %.pb.go: %.proto  $(needs-dev-container) $(needs-vendors)
-	$(call dockerize, protoc -Isrc -Isrc/sqreen/vendor --gogo_out=src $<)
+	$(call dockerize, protoc -I. -Ivendor --gogo_out=. $<)
 	rm $(needs-vendors)
 	make vendor
 
