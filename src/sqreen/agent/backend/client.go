@@ -31,26 +31,23 @@ func NewClient(backendURL string) (*Client, error) {
 		client: &http.Client{
 			Timeout: config.BackendHTTPAPIRequestTimeout,
 		},
-		backendURL: backendURL,
-		pbMarshaler: jsonpb.Marshaler{
-			OrigName:     true,
-			EmitDefaults: true,
-		},
+		backendURL:  backendURL,
+		pbMarshaler: api.DefaultJSONPBMarshaler,
 	}
 
 	var err error
 
-	err = client.httpRequest.appLogin.prepare(&config.BackendHTTPAPIEndpoint.AppLogin)
+	err = client.httpRequest.appLogin.prepare(&config.BackendHTTPAPIEndpoint.AppLogin, backendURL)
 	if err != nil {
 		return nil, err
 	}
 
-	err = client.httpRequest.appLogout.prepare(&config.BackendHTTPAPIEndpoint.AppLogout)
+	err = client.httpRequest.appLogout.prepare(&config.BackendHTTPAPIEndpoint.AppLogout, backendURL)
 	if err != nil {
 		return nil, err
 	}
 
-	err = client.httpRequest.appBeat.prepare(&config.BackendHTTPAPIEndpoint.AppBeat)
+	err = client.httpRequest.appBeat.prepare(&config.BackendHTTPAPIEndpoint.AppBeat, backendURL)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +65,7 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string) (*api.AppLogin
 }
 
 func (c *Client) AppBeat(req *api.AppBeatRequest, session string) (*api.AppBeatResponse, error) {
-	c.httpRequest.appLogout.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	c.httpRequest.appBeat.Header.Set(config.BackendHTTPAPIHeaderSession, session)
 	res := new(api.AppBeatResponse)
 	if err := c.Do(&c.httpRequest.appBeat, req, res); err != nil {
 		return nil, err
@@ -85,10 +82,10 @@ func (c *Client) AppLogout(session string) error {
 }
 
 // Helper method to build an API endpoint request structure.
-func (r *request) prepare(descriptor *config.HTTPAPIEndpoint) error {
+func (r *request) prepare(descriptor *config.HTTPAPIEndpoint, baseurl string) error {
 	req, err := http.NewRequest(
 		descriptor.Method,
-		config.BackendHTTPAPIBaseURL+descriptor.URL,
+		baseurl+descriptor.URL,
 		&r.buf)
 	if err != nil {
 		return err
@@ -109,6 +106,7 @@ func (c *Client) Do(r *request, request, response proto.Message) error {
 		}
 	}
 
+	r.Request.Body = ioutil.NopCloser(&r.buf)
 	res, err := c.client.Do(r.Request)
 	if err != nil {
 		return err
