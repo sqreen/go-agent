@@ -81,6 +81,8 @@ vendor: $(needs-vendors)
 
 %.pb.go: %.proto  $(needs-dev-container) $(needs-vendors)
 	$(call dockerize, protoc -Isrc -Isrc/sqreen/vendor --gogo_out=src $<)
+	rm $(needs-vendors)
+	make vendor
 
 #-----------------------------------------------------------------------------
 # Dockerized dev environment
