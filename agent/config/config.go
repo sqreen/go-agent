@@ -11,7 +11,7 @@ type HTTPAPIEndpoint struct {
 
 const (
 	// Default value of network timeouts.
-	DefaultNetworkTimeout = 60 * time.Second
+	DefaultNetworkTimeout = 5 * time.Second
 )
 
 // Backend client configuration.
@@ -20,7 +20,7 @@ var (
 	BackendHTTPAPIRequestTimeout = DefaultNetworkTimeout
 
 	// Base URL of the backend HTTP API.
-	BackendHTTPAPIBaseURL = "http://127.0.0.1:25000/sqreen"
+	BackendHTTPAPIBaseURL = "https://back.sqreen.io/sqreen"
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {

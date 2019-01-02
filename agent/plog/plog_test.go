@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 
-	"sqreen/agent/plog"
+	"github.com/sqreen/AgentGo/agent/plog"
 )
 
 var _ = Describe("plog", func() {
