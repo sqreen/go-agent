@@ -11,7 +11,7 @@ type HTTPAPIEndpoint struct {
 
 const (
 	// Default value of network timeouts.
-	DefaultNetworkTimeout = 60 * time.Second
+	DefaultNetworkTimeout = 5 * time.Second
 )
 
 // Backend client configuration.
