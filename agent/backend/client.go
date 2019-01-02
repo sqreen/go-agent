@@ -17,15 +17,7 @@ import (
 type Client struct {
 	client      *http.Client
 	backendURL  string
-	httpRequest struct {
-		appLogin, appLogout, appBeat request
-	}
 	pbMarshaler jsonpb.Marshaler
-}
-
-type request struct {
-	*http.Request
-	buf bytes.Buffer
 }
 
 func NewClient(backendURL string) (*Client, error) {
@@ -37,79 +29,61 @@ func NewClient(backendURL string) (*Client, error) {
 		pbMarshaler: api.DefaultJSONPBMarshaler,
 	}
 
-	var err error
-
-	err = client.httpRequest.appLogin.prepare(&config.BackendHTTPAPIEndpoint.AppLogin, backendURL)
-	if err != nil {
-		return nil, err
-	}
-
-	err = client.httpRequest.appLogout.prepare(&config.BackendHTTPAPIEndpoint.AppLogout, backendURL)
-	if err != nil {
-		return nil, err
-	}
-
-	err = client.httpRequest.appBeat.prepare(&config.BackendHTTPAPIEndpoint.AppBeat, backendURL)
-	if err != nil {
-		return nil, err
-	}
-
 	return client, nil
 }
 
 func (c *Client) AppLogin(req *api.AppLoginRequest, token string) (*api.AppLoginResponse, error) {
-	c.httpRequest.appLogin.Header.Set(config.BackendHTTPAPIHeaderToken, token)
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogin)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderToken, token)
 	res := new(api.AppLoginResponse)
-	if err := c.Do(&c.httpRequest.appLogin, req, res); err != nil {
+	if err := c.Do(httpReq, req, res); err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
 func (c *Client) AppBeat(req *api.AppBeatRequest, session string) (*api.AppBeatResponse, error) {
-	c.httpRequest.appBeat.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppBeat)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, session)
 	res := new(api.AppBeatResponse)
-	if err := c.Do(&c.httpRequest.appBeat, req, res); err != nil {
+	if err := c.Do(httpReq, req, res); err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
 func (c *Client) AppLogout(session string) error {
-	c.httpRequest.appLogout.Header.Set(config.BackendHTTPAPIHeaderSession, session)
-	if err := c.Do(&c.httpRequest.appLogout, nil, nil); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Helper method to build an API endpoint request structure.
-func (r *request) prepare(descriptor *config.HTTPAPIEndpoint, baseurl string) error {
-	req, err := http.NewRequest(
-		descriptor.Method,
-		baseurl+descriptor.URL,
-		&r.buf)
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogout)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	r.Request = req
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	if err := c.Do(httpReq); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (c *Client) Do(r *request, request, response proto.Message) error {
-	r.buf.Reset()
-	if request != nil {
-		err := c.pbMarshaler.Marshal(&r.buf, request)
+func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
+	var buf bytes.Buffer
+
+	if len(pbs) >= 1 {
+		err := c.pbMarshaler.Marshal(&buf, pbs[0])
 		if err != nil {
 			return err
 		}
 	}
 
-	r.Request.Body = ioutil.NopCloser(&r.buf)
-	res, err := c.client.Do(r.Request)
+	req.Body = ioutil.NopCloser(&buf)
+	req.ContentLength = int64(buf.Len())
+
+	res, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -130,12 +104,27 @@ func (c *Client) Do(r *request, request, response proto.Message) error {
 		return NewStatusError(res.StatusCode)
 	}
 
-	if response != nil {
-		err = jsonpb.Unmarshal(res.Body, response)
+	if len(pbs) >= 2 {
+		err = jsonpb.Unmarshal(res.Body, pbs[1])
 		if err != nil && err != io.EOF {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// Helper method to build an API endpoint request structure.
+func (c *Client) newRequest(descriptor *config.HTTPAPIEndpoint) (*http.Request, error) {
+	req, err := http.NewRequest(
+		descriptor.Method,
+		c.backendURL+descriptor.URL,
+		nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	return req, nil
 }
