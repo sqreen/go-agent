@@ -31,6 +31,7 @@ var _ = Describe("plog", func() {
 
 			Measure("it should be faster when disabled, slower when enabled", func(b Benchmarker) {
 				doLog := func() {
+					logger.Debug("debug")
 					logger.Info("info")
 					logger.Warn("warn")
 					logger.Error("error")
@@ -39,8 +40,9 @@ var _ = Describe("plog", func() {
 
 				var allDurationAvg, disabledDurationAvg uint64
 				for n := uint64(1); n <= 1000; n++ {
-					logger.SetLevel(plog.Info)
+					logger.SetLevel(plog.Debug)
 					allDuration := b.Time("info log level", doLog)
+					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "debug")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "info")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "warn")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
@@ -49,6 +51,7 @@ var _ = Describe("plog", func() {
 
 					logger.SetLevel(plog.Disabled)
 					disabledDuration := b.Time("back to disabled", doLog)
+					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "warn")))
 					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "error")))
@@ -60,32 +63,38 @@ var _ = Describe("plog", func() {
 			}, 1)
 
 			It("should be disabled", func() {
+				logger.Debug("debug")
 				logger.Info("info")
 				logger.Warn("warn")
 				logger.Error("error")
 				logger.Fatal("fatal")
+				Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 				Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 				Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "warn")))
 				Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "error")))
 				Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "fatal")))
 			})
 
-			Context("toggling from info to disabled", func() {
+			Context("toggling from debug to disabled", func() {
 				It("should log and no longer log", func() {
-					logger.SetLevel(plog.Info)
+					logger.SetLevel(plog.Debug)
+					logger.Debug("debug")
 					logger.Info("info")
 					logger.Warn("warn")
 					logger.Error("error")
 					logger.Fatal("fatal")
 					logger.SetLevel(plog.Disabled)
+					logger.Debug("debug")
 					logger.Info("info")
 					logger.Warn("warn")
 					logger.Error("error")
 					logger.Fatal("fatal")
+					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "debug")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "info")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "warn")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "fatal")))
+					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "warn")))
 					Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "error")))
@@ -101,10 +110,25 @@ var _ = Describe("plog", func() {
 				})
 
 				JustBeforeEach(func() {
+					logger.Debug("debug")
 					logger.Info("info")
 					logger.Warn("warn")
 					logger.Error("error")
 					logger.Fatal("fatal")
+				})
+
+				Context("to debug level", func() {
+					BeforeEach(func() {
+						level = plog.Debug
+					})
+
+					It("should log", func() {
+						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "debug")))
+						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "info")))
+						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "warn")))
+						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
+						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "fatal")))
+					})
 				})
 
 				Context("to info level", func() {
@@ -113,6 +137,7 @@ var _ = Describe("plog", func() {
 					})
 
 					It("should log", func() {
+						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "info")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "warn")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
@@ -126,6 +151,7 @@ var _ = Describe("plog", func() {
 					})
 
 					It("should log", func() {
+						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "warn")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
@@ -139,6 +165,7 @@ var _ = Describe("plog", func() {
 					})
 
 					It("should log", func() {
+						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "warn")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
@@ -152,6 +179,7 @@ var _ = Describe("plog", func() {
 					})
 
 					It("should log", func() {
+						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "warn")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "error")))

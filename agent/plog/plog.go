@@ -26,6 +26,8 @@ const (
 	Warn
 	// Info to Fatal logs.
 	Info
+	// Debug to Fatal logs.
+	Debug
 )
 
 // LogLevel type stringer.
@@ -39,6 +41,8 @@ func (l LogLevel) String() string {
 		return "warn"
 	case Info:
 		return "info"
+	case Debug:
+		return "debug"
 	}
 	return ""
 }
@@ -49,11 +53,12 @@ type Logger struct {
 	ErrorLogger
 	WarnLogger
 	InfoLogger
+	DebugLogger
 
 	output    io.Writer
 	namespace string
 	cache     struct {
-		fatal, error, warn, info logger
+		fatal, error, warn, info, debug logger
 	}
 }
 
@@ -81,6 +86,12 @@ type InfoLogger interface {
 	OutputSetter
 }
 
+type DebugLogger interface {
+	Debug(v ...interface{})
+	Debugf(format string, v ...interface{})
+	OutputSetter
+}
+
 type OutputSetter interface {
 	SetOutput(output io.Writer)
 }
@@ -93,6 +104,7 @@ func NewLogger(namespace string) *Logger {
 		ErrorLogger: disabledLogger{},
 		WarnLogger:  disabledLogger{},
 		InfoLogger:  disabledLogger{},
+		DebugLogger: disabledLogger{},
 		namespace:   namespace,
 	}
 	loggers[namespace] = logger
@@ -111,6 +123,7 @@ func (l *Logger) SetOutput(output io.Writer) {
 	l.ErrorLogger.SetOutput(output)
 	l.WarnLogger.SetOutput(output)
 	l.InfoLogger.SetOutput(output)
+	l.DebugLogger.SetOutput(output)
 }
 
 // SetLevel changes the level of the logger to `level`, possibly disabling it
@@ -118,30 +131,42 @@ func (l *Logger) SetOutput(output io.Writer) {
 func (l *Logger) SetLevel(level LogLevel) {
 	switch level {
 	case Disabled:
+		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
 		l.WarnLogger = disabledLogger{}
 		l.ErrorLogger = disabledLogger{}
 		l.FatalLogger = disabledLogger{}
 		break
+	case Debug:
+		l.DebugLogger = l.getLogger(Debug)
+		l.InfoLogger = l.getLogger(Info)
+		l.WarnLogger = l.getLogger(Warn)
+		l.ErrorLogger = l.getLogger(Error)
+		l.FatalLogger = l.getLogger(Fatal)
+		break
 	case Info:
+		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = l.getLogger(Info)
 		l.WarnLogger = l.getLogger(Warn)
 		l.ErrorLogger = l.getLogger(Error)
 		l.FatalLogger = l.getLogger(Fatal)
 		break
 	case Warn:
+		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
 		l.WarnLogger = l.getLogger(Warn)
 		l.ErrorLogger = l.getLogger(Error)
 		l.FatalLogger = l.getLogger(Fatal)
 		break
 	case Error:
+		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
 		l.WarnLogger = disabledLogger{}
 		l.ErrorLogger = l.getLogger(Error)
 		l.FatalLogger = l.getLogger(Fatal)
 		break
 	case Fatal:
+		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
 		l.WarnLogger = disabledLogger{}
 		l.ErrorLogger = disabledLogger{}
@@ -180,6 +205,8 @@ func newLogger(namespace string, level LogLevel, output io.Writer) logger {
 // Return the pointer to the cache entry.
 func (l *Logger) getCachedLogger(level LogLevel) *logger {
 	switch level {
+	case Debug:
+		return &l.cache.debug
 	case Info:
 		return &l.cache.info
 	case Warn:
@@ -197,6 +224,14 @@ func (l logger) Fatal(v ...interface{}) {
 }
 
 func (l logger) Fatalf(format string, v ...interface{}) {
+	l.logger.Output(3, fmt.Sprintf(format, v...))
+}
+
+func (l logger) Debug(v ...interface{}) {
+	l.logger.Output(3, fmt.Sprint(v...))
+}
+
+func (l logger) Debugf(format string, v ...interface{}) {
 	l.logger.Output(3, fmt.Sprintf(format, v...))
 }
 
@@ -246,6 +281,10 @@ func (_ disabledLogger) Warnf(_ string, _ ...interface{}) {
 func (_ disabledLogger) Info(_ ...interface{}) {
 }
 func (_ disabledLogger) Infof(_ string, _ ...interface{}) {
+}
+func (_ disabledLogger) Debug(_ ...interface{}) {
+}
+func (_ disabledLogger) Debugf(_ string, _ ...interface{}) {
 }
 func (_ disabledLogger) SetOutput(_ io.Writer) {
 }
