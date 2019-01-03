@@ -1,3 +1,7 @@
+# Disable built-in rules
+MAKEFLAGS += --no-builtin-rules
+.SUFFIXES:
+
 include tools/Makefile/lib.mk
 
 vendors := vendor
@@ -29,6 +33,10 @@ needs-dev-image := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(dev-
 needs-protobufs := $(protobufs)
 needs-vendors := .cache/go/vendor
 
+#-----------------------------------------------------------------------------
+# General
+#------------------------------------------------------------------------------
+
 .PHONY: help
 help:
 	@echo Targets: $(help)
@@ -36,21 +44,6 @@ help:
 .PHONY: all
 all: $(agent/library/static)
 help += all
-
-$(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendors)
-	$(call dockerize, go install -v agent)
-
-.PHONY: test
-test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) ./agent)
-
-.PHONY: test-coverage
-test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -cover -coverprofile=coverage.txt ./agent)
-
-.PHONY: test-race
-test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -race ./agent)
 
 .PHONY: clean
 clean:
@@ -65,24 +58,50 @@ distclean: clean
 help += distclean
 
 #-----------------------------------------------------------------------------
+# Library
+#------------------------------------------------------------------------------
+
+$(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendors)
+	$(call dockerize, go install -v agent)
+
+#-----------------------------------------------------------------------------
+# Tests
+#------------------------------------------------------------------------------
+
+.PHONY: test
+test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	$(call dockerize, ginkgo $(ginkgo/flags) ./agent)
+
+.PHONY: test-coverage
+test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	$(call dockerize, ginkgo $(ginkgo/flags) -cover -coverprofile=coverage.txt ./agent)
+
+.PHONY: test-race
+test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	$(call dockerize, ginkgo $(ginkgo/flags) -race ./agent)
+
+#-----------------------------------------------------------------------------
 # Vendor directory
 #-----------------------------------------------------------------------------
 
 $(needs-vendors): go.mod $(global-deps) $(needs-dev-container)
-	$(call dockerize, env GO111MODULE=on go mod vendor)
+	$(call dockerize, go mod vendor)
 	mkdir -p $(@D) && touch $@
 
 .PHONY: vendor
 vendor: $(needs-vendors)
 
+.PHONY: .revendor
+.revendor:
+	$(call dockerize, go mod vendor)
+
 #-----------------------------------------------------------------------------
 # Protocol buffers
 #-----------------------------------------------------------------------------
 
-%.pb.go: %.proto  $(needs-dev-container) $(needs-vendors)
+%.pb.go: %.proto $(needs-dev-container) $(needs-vendors)
 	$(call dockerize, protoc -I. -Ivendor --gogo_out=. $<)
-	rm $(needs-vendors)
-	make vendor
+	make .revendor
 
 #-----------------------------------------------------------------------------
 # Dockerized dev environment
