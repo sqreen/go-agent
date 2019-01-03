@@ -14,8 +14,6 @@ import (
 	"github.com/sqreen/AgentGo/agent/plog"
 )
 
-var token = os.Getenv("SQREEN_TOKEN")
-
 func init() {
 	start()
 }
@@ -26,10 +24,10 @@ func start() {
 
 func agent() {
 	logger := plog.NewLogger("sqreen/agent")
-	logger.SetLevel(plog.Info)
+	logger.SetLevelFromString(config.LogLevel())
 	logger.SetOutput(os.Stderr)
 
-	client, err := backend.NewClient(config.BackendHTTPAPIBaseURL)
+	client, err := backend.NewClient(config.BackendHTTPAPIBaseURL())
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -64,7 +62,7 @@ func agent() {
 		RuntimeVersion:  runtime.Version(),
 	}
 
-	appLoginRes, err := client.AppLogin(&appLoginReq, token)
+	appLoginRes, err := client.AppLogin(&appLoginReq, config.BackendHTTPAPIToken())
 	if err != nil {
 		logger.Fatal(err)
 	}
