@@ -83,8 +83,6 @@ func agent() {
 
 	sessionKey := appLoginRes.SessionId
 
-	logger.Info("Heartbeat!\n")
-
 	var appBeatReq api.AppBeatRequest
 	_, err = client.AppBeat(&appBeatReq, sessionKey)
 	if err != nil {
@@ -92,12 +90,13 @@ func agent() {
 	}
 
 	logger.Debug("up and running")
+	logger.Debug("heartbeat set to ", heartbeat)
 
 	for {
 		select {
 		// fixme: newtick > tick? to avoid leaks?
 		case <-time.Tick(heartbeat):
-			logger.Debug("heatbeat")
+			logger.Debug("heartbeat")
 			var appBeatReq api.AppBeatRequest
 			_, err := client.AppBeat(&appBeatReq, sessionKey)
 			if err != nil {

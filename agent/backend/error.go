@@ -8,5 +8,5 @@ type StatusError struct {
 
 func NewStatusError(code int) *StatusError { return &StatusError{StatusCode: code} }
 func (e *StatusError) Error() string {
-	return fmt.Sprintf("http status error")
+	return fmt.Sprintf("http status error %d", e.StatusCode)
 }
