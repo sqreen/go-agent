@@ -30,6 +30,21 @@ const (
 	Debug
 )
 
+const (
+	// Disabled value.
+	DisabledString = "disabled"
+	// Fatal logs.
+	FatalString = "fatal"
+	// Error and Fatal logs.
+	ErrorString = "error"
+	// Warn to Fatal logs.
+	WarnString = "warn"
+	// Info to Fatal logs.
+	InfoString = "info"
+	// Debug to Fatal logs.
+	DebugString = "debug"
+)
+
 // LogLevel type stringer.
 func (l LogLevel) String() string {
 	switch l {
@@ -124,6 +139,30 @@ func (l *Logger) SetOutput(output io.Writer) {
 	l.WarnLogger.SetOutput(output)
 	l.InfoLogger.SetOutput(output)
 	l.DebugLogger.SetOutput(output)
+}
+
+// SetLevelFromString change the level of the logger to `level`, possibly
+// disabling it when the "disabled" string is passed.
+func (l *Logger) SetLevelFromString(level string) {
+	lvl := Disabled
+	switch level {
+	case DebugString:
+		lvl = Debug
+		break
+	case InfoString:
+		lvl = Info
+		break
+	case WarnString:
+		lvl = Warn
+		break
+	case ErrorString:
+		lvl = Error
+		break
+	case FatalString:
+		lvl = Fatal
+		break
+	}
+	l.SetLevel(lvl)
 }
 
 // SetLevel changes the level of the logger to `level`, possibly disabling it
