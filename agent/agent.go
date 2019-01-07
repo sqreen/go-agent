@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"time"
 
+	"github.com/sqreen/AgentGo/agent/app"
 	"github.com/sqreen/AgentGo/agent/backend"
 	"github.com/sqreen/AgentGo/agent/backend/api"
 	"github.com/sqreen/AgentGo/agent/config"
@@ -37,7 +37,7 @@ func agent() {
 		logger.Fatal(err)
 	}
 
-	binname, err := filepath.Abs(os.Args[0])
+	binname, err := app.Executable()
 	if err != nil {
 		logger.Fatal(err)
 	}
