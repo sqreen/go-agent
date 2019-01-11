@@ -74,6 +74,14 @@ message AppBeatResponse {
   bool status = 2;
 }
 
+message BatchRequest {
+  message Event {
+    string event_type = 1;
+    google.protobuf.Struct event = 2 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
+  }
+  repeated Event batch = 1 [(gogoproto.nullable) = false];
+}
+
 message Rule {
 }
 
