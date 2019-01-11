@@ -1,6 +1,4 @@
 .cache
 bin
 pkg
-*.pb.go
-*pb_test.go
 coverage.txt
