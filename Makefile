@@ -17,6 +17,7 @@ go/target := $(shell go env GOOS)_$(shell go env GOARCH)
 agent/library/static := pkg/$(go/target)/sqreen/agent.a
 protobufs := $(patsubst %.proto,%.pb.go,$(shell find agent -name '*.proto'))
 ginkgo/flags := -r --randomizeAllSpecs --randomizeSuites --progress -p
+protoc/flags := -I. -Ivendor --gogo_out=google/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types:.
 
 define dockerize =
 if $(lib/docker/is_in_container); then $(lib/argv/1); else docker exec -i $(docker/dev/container) bash -c "$(lib/argv/1)"; fi
@@ -100,7 +101,7 @@ vendor: $(needs-vendors)
 #-----------------------------------------------------------------------------
 
 %.pb.go: %.proto $(needs-dev-container) $(needs-vendors)
-	$(call dockerize, protoc -I. -Ivendor --gogo_out=. $<)
+	$(call dockerize, protoc $(protoc/flags) $<)
 	make .revendor
 
 #-----------------------------------------------------------------------------
