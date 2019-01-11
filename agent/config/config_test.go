@@ -12,13 +12,14 @@ import (
 	"github.com/spf13/viper"
 )
 
+var lock sync.Mutex
+
 var _ = Describe("Config", func() {
 	DescribeTable("User-configurable values",
 		func(getCfgValue func() string, envKey, defaultValue, someValue string) {
 			// Specs are run in parallel and this test is not concurrency-safe because of
 			// shared env vars and the shared configuration file. This global mutex allows
 			// to enforce one test at a time to execute.
-			var lock sync.Mutex
 			lock.Lock()
 			defer lock.Unlock()
 
@@ -40,6 +41,8 @@ var _ = Describe("Config", func() {
 		Entry("Backend HTTP API Base URL", BackendHTTPAPIBaseURL, configKeyBackendHTTPAPIBaseURL, configDefaultBackendHTTPAPIBaseURL, "https://"+randString(2+rand.Intn(50))+":80806/is/cool"),
 		Entry("Backend HTTP API Token", BackendHTTPAPIToken, configKeyBackendHTTPAPIToken, "", randString(2+rand.Intn(30))),
 		Entry("Log Level", LogLevel, configKeyLogLevel, configDefaultLogLevel, randString(2+rand.Intn(30))),
+		Entry("App Name", AppName, configKeyAppName, "", randString(2+rand.Intn(30))),
+		Entry("IP Header", HTTPClientIPHeader, configKeyHTTPClientIPHeader, "", randString(2+rand.Intn(30))),
 	)
 })
 

@@ -13,9 +13,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 
-	"github.com/sqreen/AgentGo/agent/backend"
-	"github.com/sqreen/AgentGo/agent/backend/api"
-	"github.com/sqreen/AgentGo/agent/config"
+	"github.com/sqreen/go-agent/agent/backend"
+	"github.com/sqreen/go-agent/agent/backend/api"
+	"github.com/sqreen/go-agent/agent/config"
 )
 
 var (

@@ -6,11 +6,13 @@
 package config
 
 import (
+	"net"
 	"net/http"
 	"time"
 
+	"github.com/sqreen/go-agent/agent/plog"
+
 	"github.com/spf13/viper"
-	"github.com/sqreen/AgentGo/agent/plog"
 )
 
 type HTTPAPIEndpoint struct {
@@ -29,11 +31,12 @@ var (
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
-		AppLogin, AppLogout, AppBeat HTTPAPIEndpoint
+		AppLogin, AppLogout, AppBeat, Batch HTTPAPIEndpoint
 	}{
-		AppLogin:  HTTPAPIEndpoint{http.MethodPost, "/v1/app-login"},
-		AppLogout: HTTPAPIEndpoint{http.MethodGet, "/v0/app-logout"},
-		AppBeat:   HTTPAPIEndpoint{http.MethodPost, "/v1/app-beat"},
+		AppLogin:  HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
+		AppLogout: HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
+		AppBeat:   HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
+		Batch:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
 	}
 
 	// Header name of the API token.
@@ -41,6 +44,114 @@ var (
 
 	// Header name of the API session.
 	BackendHTTPAPIHeaderSession = "X-Session-Key"
+
+	// BackendHTTPAPIRequestRetryPeriod is the time period to retry failed backend
+	// HTTP requests.
+	BackendHTTPAPIRequestRetryPeriod = time.Minute
+
+	// BackendHTTPAPIBackoffRate is the backoff rate to compute the next sleep
+	// duration before retrying the failed request.
+	BackendHTTPAPIBackoffRate = 2.0
+
+	// BackendHTTPAPIBackoffMaxDuration is the maximum backoff's sleep duration.
+	BackendHTTPAPIBackoffMaxDuration = 30 * time.Minute
+
+	// BackendHTTPAPIBackoffMaxDuration is the minimum backoff's sleep duration.
+	BackendHTTPAPIBackoffMinDuration = time.Millisecond
+
+	// BackendHTTPAPIDefaultHeartbeatDelay is the default heartbeat delay when not
+	// correctly provided by the backend.
+	BackendHTTPAPIDefaultHeartbeatDelay = time.Minute
+)
+
+const (
+	MaxEventsPerHeatbeat = 1000
+)
+
+var (
+	TrackedHTTPHeaders = []string{
+		"X-Forwarded-For",
+		"X-Forwarded-Host",
+		"X-Forwarded-Proto",
+		"X-Client-Ip",
+		"X-Real-Ip",
+		"X-Forwarded",
+		"X-Cluster-Client-Ip",
+		"Forwarded-For",
+		"Forwarded",
+		"Via",
+		"User-Agent",
+		"Content-Type",
+		"Content-Length",
+		"Host",
+		"X-Requested-With",
+		"X-Request-Id",
+		"HTTP_X_FORWARDED_FOR",
+		"HTTP_X_REAL_IP",
+		"HTTP_CLIENT_IP",
+		"HTTP_X_FORWARDED",
+		"HTTP_X_CLUSTER_CLIENT_IP",
+		"HTTP_FORWARDED_FOR",
+		"HTTP_FORWARDED",
+		"HTTP_VIA",
+	}
+
+	IPRelatedHTTPHeaders = []string{
+		"X-Forwarded-For",
+		"X-Client-Ip",
+		"X-Real-Ip",
+		"X-Forwarded",
+		"X-Cluster-Client-Ip",
+		"Forwarded-For",
+		"Forwarded",
+		"Via",
+		"HTTP_X_FORWARDED_FOR",
+		"HTTP_X_REAL_IP",
+		"HTTP_CLIENT_IP",
+		"HTTP_X_FORWARDED",
+		"HTTP_X_CLUSTER_CLIENT_IP",
+		"HTTP_FORWARDED_FOR",
+		"HTTP_FORWARDED",
+		"HTTP_VIA",
+	}
+)
+
+// Helper function to return the IP network out of a string.
+func ipnet(s string) *net.IPNet {
+	_, n, _ := net.ParseCIDR(s)
+	return n
+}
+
+// IP networks allowing to compute whether to
+var (
+	IPPrivateNetworks = []*net.IPNet{
+		ipnet("0.0.0.0/8"),
+		ipnet("10.0.0.0/8"),
+		ipnet("127.0.0.0/8"),
+		ipnet("169.254.0.0/16"),
+		ipnet("172.16.0.0/12"),
+		ipnet("192.0.0.0/29"),
+		ipnet("192.0.0.170/31"),
+		ipnet("192.0.2.0/24"),
+		ipnet("192.168.0.0/16"),
+		ipnet("198.18.0.0/15"),
+		ipnet("198.51.100.0/24"),
+		ipnet("203.0.113.0/24"),
+		ipnet("240.0.0.0/4"),
+		ipnet("255.255.255.255/32"),
+		ipnet("::1/128"),
+		ipnet("::/128"),
+		ipnet("::ffff:0:0/96"),
+		ipnet("100::/64"),
+		ipnet("2001::/23"),
+		ipnet("2001:2::/48"),
+		ipnet("2001:db8::/32"),
+		ipnet("2001:10::/28"),
+		ipnet("fc00::/7"),
+		ipnet("fe80::/10"),
+	}
+
+	IPv4PublicNetwork = ipnet("100.64.0.0/10")
 )
 
 const (
@@ -53,11 +164,14 @@ const (
 	configKeyBackendHTTPAPIBaseURL = `url`
 	configKeyBackendHTTPAPIToken   = `token`
 	configKeyLogLevel              = `log_level`
+	configKeyAppName               = `app_name`
+	configKeyHTTPClientIPHeader    = `ip_header`
 )
 
+// User configuration's default values.
 const (
-	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.io/sqreen`
-	configDefaultLogLevel              = `debug`
+	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
+	configDefaultLogLevel              = `warn`
 )
 
 func init() {
@@ -68,6 +182,8 @@ func init() {
 
 	viper.SetDefault(configKeyBackendHTTPAPIBaseURL, configDefaultBackendHTTPAPIBaseURL)
 	viper.SetDefault(configKeyLogLevel, configDefaultLogLevel)
+	viper.SetDefault(configKeyAppName, "")
+	viper.SetDefault(configKeyHTTPClientIPHeader, "")
 
 	logger := plog.NewLogger("sqreen/agent/config")
 
@@ -90,4 +206,14 @@ func BackendHTTPAPIToken() string {
 // LogLevel returns the default log level.
 func LogLevel() string {
 	return viper.GetString(configKeyLogLevel)
+}
+
+// AppName returns the default log level.
+func AppName() string {
+	return viper.GetString(configKeyAppName)
+}
+
+// HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
+func HTTPClientIPHeader() string {
+	return viper.GetString(configKeyHTTPClientIPHeader)
 }

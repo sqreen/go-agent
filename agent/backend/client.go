@@ -5,14 +5,18 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 
-	"github.com/sqreen/AgentGo/agent/config"
+	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/agent/plog"
 
-	"github.com/sqreen/AgentGo/agent/backend/api"
+	"github.com/sqreen/go-agent/agent/backend/api"
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 )
+
+var logger = plog.NewLogger("agent/backend")
 
 type Client struct {
 	client      *http.Client
@@ -70,6 +74,18 @@ func (c *Client) AppLogout(session string) error {
 	return nil
 }
 
+func (c *Client) Batch(req *api.BatchRequest, session string) error {
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.Batch)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	if err := c.Do(httpReq, req); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	var buf bytes.Buffer
 
@@ -83,10 +99,16 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	req.Body = ioutil.NopCloser(&buf)
 	req.ContentLength = int64(buf.Len())
 
+	dumpReq, _ := httputil.DumpRequestOut(req, true)
+	logger.Debugf("sending request\n%s", dumpReq)
+
 	res, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
+
+	dumpRes, _ := httputil.DumpResponse(res, true)
+	logger.Debugf("received response\n%s", dumpRes)
 
 	// As documented (https://golang.org/pkg/net/http/#Response), connections are
 	// reused iif the response body was fully drained. The following chunk thus
