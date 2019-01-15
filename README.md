@@ -27,7 +27,7 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
 1. Download the Go agent and the SDK using `go get`:
 
     ```sh
-    $ go get https://github.com/sqreen/go-agent/...
+    $ go get github.com/sqreen/go-agent/...
     ```
 
 1. Import package `agent` in your `main` package of your app:
