@@ -207,12 +207,12 @@ func BackendHTTPAPIToken() string {
 	return viper.GetString(configKeyBackendHTTPAPIToken)
 }
 
-// LogLevel returns the default log level.
+// LogLevel returns the log level.
 func LogLevel() string {
 	return viper.GetString(configKeyLogLevel)
 }
 
-// AppName returns the default log level.
+// AppName returns the app name.
 func AppName() string {
 	return viper.GetString(configKeyAppName)
 }
