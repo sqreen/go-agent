@@ -166,6 +166,7 @@ const (
 	configKeyLogLevel              = `log_level`
 	configKeyAppName               = `app_name`
 	configKeyHTTPClientIPHeader    = `ip_header`
+	configKeyDisable               = `disable`
 )
 
 // User configuration's default values.
@@ -184,6 +185,7 @@ func init() {
 	viper.SetDefault(configKeyLogLevel, configDefaultLogLevel)
 	viper.SetDefault(configKeyAppName, "")
 	viper.SetDefault(configKeyHTTPClientIPHeader, "")
+	viper.SetDefault(configKeyDisable, "")
 
 	logger := plog.NewLogger("sqreen/agent/config")
 
@@ -216,4 +218,9 @@ func AppName() string {
 // HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
 func HTTPClientIPHeader() string {
 	return viper.GetString(configKeyHTTPClientIPHeader)
+}
+
+func Disable() bool {
+	disable := viper.GetString(configKeyDisable)
+	return disable != "" || BackendHTTPAPIToken() == ""
 }

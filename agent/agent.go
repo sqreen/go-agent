@@ -22,6 +22,9 @@ func init() {
 }
 
 func start() {
+	if config.Disable() {
+		return
+	}
 	go agent()
 }
 
