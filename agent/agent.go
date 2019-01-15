@@ -3,8 +3,7 @@ package agent
 import (
 	"context"
 	"os"
-	"os/signal"
-	"runtime"
+	"sync"
 	"time"
 
 	"github.com/sqreen/go-agent/agent/backend"
@@ -29,8 +28,8 @@ func start() {
 }
 
 var (
-	logger     = plog.NewLogger("sqreen/agent")
-	eventsChan = make(chan (*httpRequestRecord), config.MaxEventsPerHeatbeat)
+	logger   = plog.NewLogger("sqreen/agent")
+	eventMng *eventManager
 )
 
 func agent() {
@@ -81,7 +80,16 @@ func agent() {
 	if batchSize == 0 {
 		batchSize = config.MaxEventsPerHeatbeat
 	}
-	batch := (*batch)(&api.BatchRequest{})
+	maxStaleness := time.Duration(appLoginRes.Features.MaxStaleness) * time.Second
+	if maxStaleness == 0 {
+		maxStaleness = config.EventBatchMaxStaleness
+	}
+
+	eventMng = newEventManager(rulespackId, batchSize, maxStaleness)
+	// Start the event manager's loop
+	go eventMng.Loop(ctx, client, sessionID)
+
+	// Start the heartbeat's loop
 	for {
 		select {
 		case <-ticker:
@@ -91,17 +99,6 @@ func agent() {
 			if err != nil {
 				logger.Error("heartbeat failed: ", err)
 				continue
-			}
-
-			nbEvents := batch.processEvents(rulespackId, batchSize)
-			if nbEvents > 0 {
-				err = client.Batch((*api.BatchRequest)(batch), sessionID)
-				if err == nil {
-					logger.Debugf("sent %d events", nbEvents)
-					batch.Reset()
-				} else {
-					logger.Error("could not send the event batch: ", err)
-				}
 			}
 
 		case <-ctx.Done():
@@ -118,28 +115,100 @@ func agent() {
 	}
 }
 
-type batch api.BatchRequest
+type eventManager struct {
+	req          api.BatchRequest
+	rulespackID  string
+	count        int
+	eventsChan   chan (*httpRequestRecord)
+	reqLock      sync.Mutex
+	maxStaleness time.Duration
+}
 
-func (b *batch) processEvents(rulespackId string, count int) int {
-	n := 0
-	for i := 0; i < count; i++ {
+func newEventManager(rulespackID string, count int, maxStaleness time.Duration) *eventManager {
+	return &eventManager{
+		eventsChan:   make(chan (*httpRequestRecord), count),
+		count:        count,
+		rulespackID:  rulespackID,
+		maxStaleness: maxStaleness,
+	}
+}
+
+func (m *eventManager) addEvent(r *httpRequestRecord) {
+	select {
+	case m.eventsChan <- r:
+		return
+	default:
+		// The channel buffer is full - drop this new event
+		logger.Debug("event channel is full, dropping the event")
+	}
+}
+
+func (m *eventManager) Loop(ctx context.Context, client *backend.Client, sessionID string) {
+	var isFull, isSent chan struct{}
+	for {
 		select {
-		case event := <-eventsChan:
-			event.SetRulespackId(rulespackId)
-			b.Batch = append(b.Batch, api.BatchRequest_Event{
+		case <-ctx.Done():
+			return
+		case event := <-m.eventsChan:
+			logger.Debug("new event")
+			event.SetRulespackId(m.rulespackID)
+			m.reqLock.Lock()
+			m.req.Batch = append(m.req.Batch, api.BatchRequest_Event{
 				EventType: "request_record",
 				Event:     api.Struct{api.NewRequestRecordFromFace(event)},
 			})
-			n++
-		default:
-			break
+			batchLen := len(m.req.Batch)
+			m.reqLock.Unlock()
+			if batchLen == 1 {
+				// First event of this batch.
+				// Given the amount of external events, it is easier to create a
+				// goroutine to select{} one of them.
+				logger.Debug("batching event data for ", m.maxStaleness)
+				isFull = make(chan struct{})
+				isSent = make(chan struct{}, 1)
+				go func() {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(m.maxStaleness):
+						logger.Debug("event batch data staleness reached")
+					case <-isFull:
+						logger.Debug("event batch is full")
+					}
+					m.send(client, sessionID)
+					logger.Debug("event batch sent")
+					close(isSent)
+				}()
+			} else if batchLen >= m.count {
+				// No more room in the batch
+				close(isFull)
+				<-isSent
+				// Block until it is sent. There are many reasons to this, but it is
+				// mainly to avoid running this loop and the sender goroutines
+				// concurrently. For example, it allows to make sure the previous
+				// len(m.req.Batch) == 1 to be observable.
+			}
 		}
 	}
-	return n
 }
 
-func (b *batch) Reset() {
-	b.Batch = b.Batch[0:0]
+func (m *eventManager) send(client *backend.Client, sessionID string) {
+	m.reqLock.Lock()
+	defer m.reqLock.Unlock()
+	// Send the batch.
+	if err := client.Batch(&m.req, sessionID); err != nil {
+		logger.Error("could not send an event batch: ", err)
+		// drop it
+	}
+	m.req.Batch = m.req.Batch[0:0]
+}
+
+func addEvent(r *httpRequestRecord) {
+	if eventMng == nil {
+		// Disabled or not yet initialized agent
+		return
+	}
+	eventMng.addEvent(r)
 }
 
 // Helper function returning true when having to exit the agent and panic-ing

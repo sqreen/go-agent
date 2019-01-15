@@ -62,6 +62,11 @@ var (
 	// BackendHTTPAPIDefaultHeartbeatDelay is the default heartbeat delay when not
 	// correctly provided by the backend.
 	BackendHTTPAPIDefaultHeartbeatDelay = time.Minute
+
+	// EventBatchMaxStaleness is the time when the data in the event manager's
+	// batch is considered too long, and is therefore immediatly sent to the
+	// backend, without waiting for the batch to become full.
+	EventBatchMaxStaleness = 20 * time.Second
 )
 
 const (

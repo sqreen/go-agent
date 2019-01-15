@@ -54,9 +54,7 @@ func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 }
 
 func (ctx *HTTPRequestContext) Close() {
-	go func() {
-		eventsChan <- newHTTPRequestRecord(ctx)
-	}()
+	addEvent(newHTTPRequestRecord(ctx))
 }
 
 func (ctx *HTTPRequestContext) addEvent(event *HTTPRequestEvent) {
