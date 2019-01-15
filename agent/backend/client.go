@@ -6,14 +6,15 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 
 	"github.com/sqreen/go-agent/agent/config"
 	"github.com/sqreen/go-agent/agent/plog"
 
-	"github.com/sqreen/go-agent/agent/backend/api"
-
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/sqreen/go-agent/agent/backend/api"
+	"golang.org/x/net/http/httpproxy"
 )
 
 var logger = plog.NewLogger("agent/backend")
@@ -25,9 +26,21 @@ type Client struct {
 }
 
 func NewClient(backendURL string) (*Client, error) {
+	proxyCfg := httpproxy.Config{
+		HTTPSProxy: config.BackendHTTPAPIProxy(),
+	}
+	proxyURL := proxyCfg.ProxyFunc()
+	proxy := func(req *http.Request) (*url.URL, error) {
+		return proxyURL(req.URL)
+	}
+
+	transport := *(http.DefaultTransport).(*http.Transport)
+	transport.Proxy = proxy
+
 	client := &Client{
 		client: &http.Client{
-			Timeout: config.BackendHTTPAPIRequestTimeout,
+			Timeout:   config.BackendHTTPAPIRequestTimeout,
+			Transport: &transport,
 		},
 		backendURL:  backendURL,
 		pbMarshaler: api.DefaultJSONPBMarshaler,

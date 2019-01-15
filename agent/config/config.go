@@ -166,6 +166,7 @@ const (
 	configKeyLogLevel              = `log_level`
 	configKeyAppName               = `app_name`
 	configKeyHTTPClientIPHeader    = `ip_header`
+	configKeyBackendHTTPAPIProxy   = `proxy`
 	configKeyDisable               = `disable`
 )
 
@@ -185,6 +186,7 @@ func init() {
 	viper.SetDefault(configKeyLogLevel, configDefaultLogLevel)
 	viper.SetDefault(configKeyAppName, "")
 	viper.SetDefault(configKeyHTTPClientIPHeader, "")
+	viper.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	viper.SetDefault(configKeyDisable, "")
 
 	logger := plog.NewLogger("sqreen/agent/config")
@@ -218,6 +220,11 @@ func AppName() string {
 // HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
 func HTTPClientIPHeader() string {
 	return viper.GetString(configKeyHTTPClientIPHeader)
+}
+
+// Proxy returns the proxy configuration to use for backend HTTP calls.
+func BackendHTTPAPIProxy() string {
+	return viper.GetString(configKeyBackendHTTPAPIProxy)
 }
 
 func Disable() bool {
