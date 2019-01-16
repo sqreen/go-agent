@@ -12,10 +12,6 @@ import (
 	"github.com/sqreen/go-agent/agent/plog"
 )
 
-const (
-	agentVersion = "0.1.0"
-)
-
 func init() {
 	start()
 }

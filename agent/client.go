@@ -24,7 +24,7 @@ func appLogin(ctx context.Context, client *backend.Client) (*api.AppLoginRespons
 		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace(procInfo),
 		BundleSignature: "",
 		AgentType:       "golang",
-		AgentVersion:    agentVersion,
+		AgentVersion:    version,
 		OsType:          app.GoBuildTarget(),
 		Hostname:        app.Hostname(),
 		RuntimeVersion:  app.GoVersion(),
