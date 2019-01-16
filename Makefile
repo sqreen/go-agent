@@ -71,7 +71,7 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) ./agent)
+	$(call dockerize, ginkgo $(ginkgo/flags) ./agent ./sdk)
 
 .PHONY: test-coverage
 test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)

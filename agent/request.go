@@ -28,6 +28,10 @@ type HTTPRequestContext struct {
 }
 
 func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
+	if config.Disable() {
+		return nil
+	}
+
 	return &HTTPRequestContext{
 		request: req,
 	}
@@ -43,6 +47,10 @@ type HTTPRequestEvent struct {
 type EventPropertyMap map[string]interface{}
 
 func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
+	if ctx == nil {
+		return nil
+	}
+
 	evt := &HTTPRequestEvent{
 		method:     "track",
 		event:      event,
@@ -54,21 +62,33 @@ func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 }
 
 func (ctx *HTTPRequestContext) Close() {
+	if ctx == nil {
+		return
+	}
 	addEvent(newHTTPRequestRecord(ctx))
 }
 
 func (ctx *HTTPRequestContext) addEvent(event *HTTPRequestEvent) {
+	if ctx == nil {
+		return
+	}
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
 }
 
 func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.timestamp = t
 	return e
 }
 
 func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.properties = p
 	return e
 }
