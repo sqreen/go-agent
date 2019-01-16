@@ -30,6 +30,8 @@ func start() {
 var (
 	logger   = plog.NewLogger("sqreen/agent")
 	eventMng *eventManager
+	cancel   context.CancelFunc
+	isDone   chan struct{}
 )
 
 func agent() {
@@ -45,17 +47,10 @@ func agent() {
 	plog.SetLevelFromString(config.LogLevel())
 	plog.SetOutput(os.Stderr)
 
-	// Cleanly stop the agent execution when receiving an interrupt signal
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
-		defer signal.Stop(c)
-		<-c
-		logger.Debug("interrupt signal received: canceling the agent")
-		cancel()
-		runtime.Gosched()
-	}()
+	// Agent stopping using context cancelation externally called through the SDK.
+	var ctx context.Context
+	ctx, cancel = context.WithCancel(context.Background())
+	isDone = make(chan struct{})
 
 	client, err := backend.NewClient(config.BackendHTTPAPIBaseURL())
 	if checkErr(err) {
@@ -109,10 +104,20 @@ func agent() {
 				logger.Error("logout failed: ", err)
 				return
 			}
-			logger.Debug("successfully logged out\n")
+			logger.Debug("successfully logged out")
+			// Signal we are done
+			close(isDone)
 			return
 		}
 	}
+}
+
+func GracefulStop() {
+	if config.Disable() {
+		return
+	}
+	cancel()
+	<-isDone
 }
 
 type eventManager struct {
