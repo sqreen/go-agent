@@ -16,8 +16,8 @@ docker/dev/container/dockerfile := tools/docker/dev/Dockerfile
 go/target := $(shell go env GOOS)_$(shell go env GOARCH)
 agent/library/static := pkg/$(go/target)/sqreen/agent.a
 protobufs := $(patsubst %.proto,%.pb.go,$(shell find agent -name '*.proto'))
-ginkgo/flags := -r --randomizeAllSpecs --randomizeSuites --progress -p
 protoc/flags := -I. -Ivendor --gogo_out=google/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types:.
+test/packages := ./agent/... ./sdk/...
 
 define dockerize =
 if $(lib/docker/is_in_container); then $(lib/argv/1); else docker exec -i $(docker/dev/container) bash -c "$(lib/argv/1)"; fi
@@ -71,15 +71,15 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) ./agent ./sdk)
+	$(call dockerize, go test -v $(test/packages))
 
 .PHONY: test-coverage
 test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -cover -coverprofile=coverage.txt ./agent)
+	$(call dockerize, go test -v -cover -coverprofile=coverage.txt $(test/packages))
 
 .PHONY: test-race
 test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, ginkgo $(ginkgo/flags) -race ./agent)
+	$(call dockerize, go test -v -race $(test/packages))
 
 #-----------------------------------------------------------------------------
 # Vendor directory

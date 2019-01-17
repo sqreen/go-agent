@@ -232,6 +232,7 @@ func BackendHTTPAPIProxy() string {
 	return viper.GetString(configKeyBackendHTTPAPIProxy)
 }
 
+// Disable returns true when the agent should be disabled, false otherwise.
 func Disable() bool {
 	disable := viper.GetString(configKeyDisable)
 	return disable != "" || BackendHTTPAPIToken() == ""
