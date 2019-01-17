@@ -64,11 +64,17 @@ func (ctx *HTTPRequestContext) addEvent(event *HTTPRequestEvent) {
 }
 
 func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.timestamp = t
 	return e
 }
 
 func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.properties = p
 	return e
 }

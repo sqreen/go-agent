@@ -170,7 +170,6 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client, session
 				go func() {
 					select {
 					case <-ctx.Done():
-						return
 					case <-time.After(m.maxStaleness):
 						logger.Debug("event batch data staleness reached")
 					case <-isFull:
@@ -205,7 +204,7 @@ func (m *eventManager) send(client *backend.Client, sessionID string) {
 }
 
 func addEvent(r *httpRequestRecord) {
-	if eventMng == nil {
+	if config.Disable() || eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}

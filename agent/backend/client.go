@@ -108,7 +108,6 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 			return err
 		}
 	}
-
 	req.Body = ioutil.NopCloser(&buf)
 	req.ContentLength = int64(buf.Len())
 
