@@ -13,6 +13,8 @@ require (
 	github.com/onsi/ginkgo v1.7.0
 	github.com/onsi/gomega v1.4.3
 	github.com/spf13/viper v1.3.1
+	github.com/stretchr/testify v1.2.2
+	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
 	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 )

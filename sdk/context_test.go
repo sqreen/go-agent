@@ -1,43 +1,30 @@
 package sdk_test
 
 import (
+	"testing"
 	"time"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/stretchr/testify/require"
 )
 
-func performSDKCalls(ctx *sdk.HTTPRequestContext) func() {
-	return func() {
-		event := ctx.Track(testlib.RandString(0, 50))
-		Expect(event).To(BeNil())
-		event = event.WithTimestamp(time.Now())
-		Expect(event).To(BeNil())
-		event = event.WithProperties(nil)
-		Expect(event).To(BeNil())
-		event = ctx.Track(testlib.RandString(0, 50))
-		Expect(event).To(BeNil())
-		event = event.WithProperties(nil)
-		Expect(event).To(BeNil())
-		event = event.WithTimestamp(time.Now())
-		Expect(event).To(BeNil())
-		ctx.Close()
-	}
+func TestSDK(t *testing.T) {
+	testDisabledSDKCalls(t, nil)
 }
 
-var _ = Describe("SDK", func() {
-	var ctx *sdk.HTTPRequestContext
-	Context("when used with zero value (nil)", func() {
-		It("should not panic", func() {
-			Expect(performSDKCalls(ctx)).ToNot(Panic())
-		})
-	})
-	Context("when used with zero value (nil)", func() {
-		It("should not panic", func() {
-			Expect(performSDKCalls(ctx)).ToNot(Panic())
-		})
-	})
-})
+func testDisabledSDKCalls(t *testing.T, ctx *sdk.HTTPRequestContext) {
+	event := ctx.Track(testlib.RandString(0, 50))
+	require.Nil(t, event)
+	event = event.WithTimestamp(time.Now())
+	require.Nil(t, event)
+	event = event.WithProperties(nil)
+	require.Nil(t, event)
+	event = ctx.Track(testlib.RandString(0, 50))
+	require.Nil(t, event)
+	event = event.WithProperties(nil)
+	require.Nil(t, event)
+	event = event.WithTimestamp(time.Now())
+	require.Nil(t, event)
+	ctx.Close()
+}
