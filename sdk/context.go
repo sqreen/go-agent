@@ -30,6 +30,9 @@ func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
 // Close signals the request handling is now done. Every collected security
 // event can thus be considered by the agnt.
 func (ctx *HTTPRequestContext) Close() {
+	if ctx == nil {
+		return
+	}
 	ctx.ctx.Close()
 }
 
@@ -37,5 +40,8 @@ func (ctx *HTTPRequestContext) Close() {
 // Additional options can be set using the returned value's methods, such
 // WithProperties() or WithTimestamp().
 func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
+	if ctx == nil {
+		return nil
+	}
 	return (ctx.ctx.Track(event))
 }

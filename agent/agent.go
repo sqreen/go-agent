@@ -205,7 +205,7 @@ func (m *eventManager) send(client *backend.Client, sessionID string) {
 }
 
 func addEvent(r *httpRequestRecord) {
-	if eventMng == nil {
+	if config.Disable() || eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
