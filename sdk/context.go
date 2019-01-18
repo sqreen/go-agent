@@ -19,6 +19,8 @@ type HTTPRequestEvent = agent.HTTPRequestEvent
 
 type EventPropertyMap = agent.EventPropertyMap
 
+type EventUserIdentifierMap = agent.EventUserIdentifierMap
+
 // NewHTTPRequestContext returns a new HTTP request context for the given HTTP
 // request.
 func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {

@@ -145,6 +145,7 @@ message RequestRecord {
     message SDKEvent {
       message Options {
         google.protobuf.Struct properties = 1 [(gogoproto.customtype) = "Struct"];
+        google.protobuf.Struct user_identifiers = 2 [(gogoproto.customtype) = "Struct"];
       }
 
       google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
