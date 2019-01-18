@@ -8,6 +8,7 @@ package config
 import (
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sqreen/go-agent/agent/plog"
@@ -44,6 +45,11 @@ var (
 
 	// Header name of the API session.
 	BackendHTTPAPIHeaderSession = "X-Session-Key"
+
+	// Header name of the App name.
+	BackendHTTPAPIHeaderAppName = "X-App-Name"
+
+	BackendHTTPAPIOrganizationTokenPrefix = "org_"
 
 	// BackendHTTPAPIRequestRetryPeriod is the time period to retry failed backend
 	// HTTP requests.
@@ -204,36 +210,40 @@ func init() {
 
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
 func BackendHTTPAPIBaseURL() string {
-	return viper.GetString(configKeyBackendHTTPAPIBaseURL)
+	return sanitizeString(viper.GetString(configKeyBackendHTTPAPIBaseURL))
 }
 
 // BackendHTTPAPIToken returns the access token to the backend API.
 func BackendHTTPAPIToken() string {
-	return viper.GetString(configKeyBackendHTTPAPIToken)
+	return sanitizeString(viper.GetString(configKeyBackendHTTPAPIToken))
 }
 
 // LogLevel returns the log level.
 func LogLevel() string {
-	return viper.GetString(configKeyLogLevel)
+	return sanitizeString(viper.GetString(configKeyLogLevel))
 }
 
 // AppName returns the app name.
 func AppName() string {
-	return viper.GetString(configKeyAppName)
+	return sanitizeString(viper.GetString(configKeyAppName))
 }
 
 // HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
 func HTTPClientIPHeader() string {
-	return viper.GetString(configKeyHTTPClientIPHeader)
+	return sanitizeString(viper.GetString(configKeyHTTPClientIPHeader))
 }
 
 // Proxy returns the proxy configuration to use for backend HTTP calls.
 func BackendHTTPAPIProxy() string {
-	return viper.GetString(configKeyBackendHTTPAPIProxy)
+	return sanitizeString(viper.GetString(configKeyBackendHTTPAPIProxy))
 }
 
 // Disable returns true when the agent should be disabled, false otherwise.
 func Disable() bool {
-	disable := viper.GetString(configKeyDisable)
+	disable := sanitizeString(viper.GetString(configKeyDisable))
 	return disable != "" || BackendHTTPAPIToken() == ""
+}
+
+func sanitizeString(s string) string {
+	return strings.TrimSpace(s)
 }

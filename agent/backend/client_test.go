@@ -16,6 +16,7 @@ import (
 	"github.com/sqreen/go-agent/agent/backend"
 	"github.com/sqreen/go-agent/agent/backend/api"
 	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/tools/testlib"
 )
 
 var (
@@ -59,7 +60,10 @@ var _ = Describe("The backend client", func() {
 		})
 
 		Describe("AppLogin", func() {
-			var token string = "my-token"
+			var (
+				token   string = "my-token"
+				appName string = testlib.RandString(2, 50)
+			)
 
 			BeforeEach(func() {
 				endpointCfg = &config.BackendHTTPAPIEndpoint.AppLogin
@@ -73,12 +77,13 @@ var _ = Describe("The backend client", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				headers = http.Header{
-					config.BackendHTTPAPIHeaderToken: []string{token},
+					config.BackendHTTPAPIHeaderToken:   []string{token},
+					config.BackendHTTPAPIHeaderAppName: []string{appName},
 				}
 			})
 
 			It("should perform the API call", func() {
-				res, err := client.AppLogin(request.(*api.AppLoginRequest), token)
+				res, err := client.AppLogin(request.(*api.AppLoginRequest), token, appName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(res).Should(Equal(response))
 			})

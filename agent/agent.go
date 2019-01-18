@@ -53,7 +53,9 @@ func agent() {
 		return
 	}
 
-	appLoginRes, err := appLogin(ctx, client)
+	token := config.BackendHTTPAPIToken()
+	appName := config.AppName()
+	appLoginRes, err := appLogin(ctx, client, token, appName)
 	if checkErr(err) {
 		return
 	}

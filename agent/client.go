@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/sqreen/go-agent/agent/app"
@@ -17,7 +19,11 @@ var (
 
 // Login to the backend. When the API request fails, retry for ever and after
 // sleeping some time.
-func appLogin(ctx context.Context, client *backend.Client) (*api.AppLoginResponse, error) {
+func appLogin(ctx context.Context, client *backend.Client, token string, appName string) (*api.AppLoginResponse, error) {
+	if err := validateToken(token, appName); err != nil {
+		return nil, err
+	}
+
 	procInfo := app.GetProcessInfo()
 
 	appLoginReq := api.AppLoginRequest{
@@ -41,7 +47,7 @@ func appLogin(ctx context.Context, client *backend.Client) (*api.AppLoginRespons
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			appLoginRes, err = client.AppLogin(&appLoginReq, config.BackendHTTPAPIToken())
+			appLoginRes, err = client.AppLogin(&appLoginReq, token, appName)
 			if err != nil {
 				logger.Error(err)
 				appLoginRes = nil
@@ -73,4 +79,21 @@ func (b *backoff) sleep() {
 	b.next()
 	logger.Debugf("retrying the request in %s (number of failures: %d)", b.duration, b.fails)
 	time.Sleep(b.duration)
+}
+
+var (
+	ErrMissingAppName = errors.New("missing application name")
+	ErrMissingToken   = errors.New("missing token")
+)
+
+func validateToken(token, appName string) error {
+	if token == "" {
+		return ErrMissingToken
+	}
+
+	if strings.HasPrefix(token, config.BackendHTTPAPIOrganizationTokenPrefix) && appName == "" {
+		return ErrMissingAppName
+	}
+
+	return nil
 }
