@@ -34,13 +34,15 @@ func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
 }
 
 type HTTPRequestEvent struct {
-	method     string
-	event      string
-	properties EventPropertyMap
-	timestamp  time.Time
+	method         string
+	event          string
+	properties     EventPropertyMap
+	userIdentifier EventUserIdentifierMap
+	timestamp      time.Time
 }
 
 type EventPropertyMap map[string]interface{}
+type EventUserIdentifierMap map[string]interface{}
 
 func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 	evt := &HTTPRequestEvent{
@@ -79,6 +81,14 @@ func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent 
 	return e
 }
 
+func (e *HTTPRequestEvent) WithUserIdentifier(u EventUserIdentifierMap) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
+	e.userIdentifier = u
+	return e
+}
+
 func (e *HTTPRequestEvent) GetTime() time.Time {
 	return e.timestamp
 }
@@ -88,10 +98,16 @@ func (e *HTTPRequestEvent) GetName() string {
 }
 
 func (e *HTTPRequestEvent) GetArgs() api.ListValue {
-	opts := &api.RequestRecord_Observed_SDKEvent_Options{
-		Properties: &api.Struct{e.properties},
-	}
+	opts := api.NewRequestRecord_Observed_SDKEvent_OptionsFromFace(e)
 	return api.ListValue([]interface{}{e.event, opts})
+}
+
+func (e *HTTPRequestEvent) GetProperties() *api.Struct {
+	return &api.Struct{e.properties}
+}
+
+func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
+	return &api.Struct{e.userIdentifier}
 }
 
 func (e *HTTPRequestEvent) Proto() proto.Message {
