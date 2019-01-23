@@ -86,7 +86,7 @@ test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 #-----------------------------------------------------------------------------
 
 $(needs-vendors): go.mod $(global-deps) $(needs-dev-container)
-	$(call dockerize, go mod vendor)
+	$(call dockerize, go mod vendor -v)
 	mkdir -p $(@D) && touch $@
 
 .PHONY: vendor
