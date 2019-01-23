@@ -76,6 +76,8 @@ func testDisabledSDKCalls(t *testing.T, ctx *sdk.HTTPRequestContext) {
 	require.Nil(t, event)
 	uid := sdk.EventUserIdentifierMap{"uid": "uid"}
 	ctx.TrackAuth(true, uid)
+	ctx.TrackAuthSuccess(uid)
+	ctx.TrackAuthFailure(uid)
 	ctx.TrackSignup(uid)
 	ctx.Close()
 }
