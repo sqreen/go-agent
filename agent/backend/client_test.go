@@ -4,19 +4,20 @@ import (
 	"io/ioutil"
 	math_rand "math/rand"
 	"net/http"
+	"os"
 	"reflect"
-	time "time"
+	"testing"
+	"time"
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
-
 	"github.com/sqreen/go-agent/agent/backend"
 	"github.com/sqreen/go-agent/agent/backend/api"
 	"github.com/sqreen/go-agent/agent/config"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -175,4 +176,52 @@ func copyHeader(src http.Header, dst http.Header) {
 	for key, value := range src {
 		dst[key] = value
 	}
+}
+
+func TestProxy(t *testing.T) {
+	// ghttp uses gomega global functions so globally register `t` to gomega.
+	RegisterTestingT(t)
+	t.Run("HTTPS_PROXY", func(t *testing.T) { testProxy(t, "HTTPS_PROXY") })
+	t.Run("SQREEN_PROXY", func(t *testing.T) { testProxy(t, "SQREEN_PROXY") })
+}
+
+func testProxy(t *testing.T, envVar string) {
+	t.Skip()
+	// FIXME: (i) use an actual proxy, (ii) check requests go through it, (iii)
+	// use a fake backend and check the requests exactly like previous tests
+	// (ideally reuse them and add the proxy).
+	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
+	// Create a fake proxy checking it receives a CONNECT request.
+	proxy := ghttp.NewServer()
+	defer proxy.Close()
+	proxy.AppendHandlers(ghttp.CombineHandlers(
+		ghttp.VerifyRequest(http.MethodConnect, ""),
+		ghttp.RespondWith(http.StatusOK, nil),
+	))
+
+	//back := ghttp.NewUnstartedServer()
+	//back.HTTPTestServer.Listener.Close()
+	//listener, _ := net.Listen("tcp", testlib.GetNonLoopbackIP().String()+":0")
+	//back.HTTPTestServer.Listener = listener
+	//back.Start()
+	//defer back.Close()
+	//back.AppendHandlers(ghttp.CombineHandlers(
+	//	ghttp.VerifyRequest(http.MethodPost, "/sqreen/v1/app-login"),
+	//	ghttp.RespondWith(http.StatusOK, nil),
+	//))
+
+	// Setup the configuration
+	os.Setenv(envVar, proxy.URL())
+	defer os.Unsetenv(envVar)
+	require.Equal(t, os.Getenv(envVar), proxy.URL())
+
+	// The new client should take the proxy into account.
+	client, err := backend.NewClient(config.BackendHTTPAPIBaseURL())
+	require.Equal(t, err, nil)
+	// Perform a request that should go through the proxy.
+	request := api.NewPopulatedAppLoginRequest(popr, false)
+	_, err = client.AppLogin(request, "my-token")
+	// A request has been received:
+	//require.NotEqual(t, len(back.ReceivedRequests()), 0, "0 request received")
+	require.NotEqual(t, len(proxy.ReceivedRequests()), 0, "0 request received")
 }
