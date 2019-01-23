@@ -25,99 +25,125 @@ var (
 	popr = math_rand.New(math_rand.NewSource(seed))
 )
 
-var _ = Describe("The backend client", func() {
-	var (
-		server *ghttp.Server
-		client *backend.Client
-	)
+func TestClient(t *testing.T) {
+	RegisterTestingT(t)
+	g := NewGomegaWithT(t)
 
-	JustBeforeEach(func() {
-		var err error
-		server = ghttp.NewServer()
-		client, err = backend.NewClient(server.URL())
-		Expect(err).NotTo(HaveOccurred())
+	t.Run("AppLogin", func(t *testing.T) {
+		token := testlib.RandString(2, 50)
+
+		statusCode := http.StatusOK
+
+		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogin
+
+		response := api.NewPopulatedAppLoginResponse(popr, false)
+		err := JSONPBLoopback(response)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		request := api.NewPopulatedAppLoginRequest(popr, false)
+		err = JSONPBLoopback(request)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		headers := http.Header{
+			config.BackendHTTPAPIHeaderToken: []string{token},
+		}
+
+		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
+		defer server.Close()
+
+		client, err := backend.NewClient(server.URL())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		res, err := client.AppLogin(request, token)
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+		g.Expect(res).Should(Equal(response))
 	})
 
-	JustAfterEach(func() {
-		server.Close()
+	t.Run("AppBeat", func(t *testing.T) {
+		session := testlib.RandString(2, 50)
+
+		statusCode := http.StatusOK
+
+		endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
+
+		response := api.NewPopulatedAppBeatResponse(popr, false)
+		err := JSONPBLoopback(response)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		request := api.NewPopulatedAppBeatRequest(popr, false)
+		err = JSONPBLoopback(request)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		headers := http.Header{
+			config.BackendHTTPAPIHeaderSession: []string{session},
+		}
+
+		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
+		defer server.Close()
+
+		client, err := backend.NewClient(server.URL())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		res, err := client.AppBeat(request, session)
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+		g.Expect(res).Should(Equal(response))
 	})
 
-	Describe("request", func() {
-		var (
-			endpointCfg *config.HTTPAPIEndpoint
-			statusCode  = http.StatusOK
-			response    proto.Message
-			request     proto.Message
-			headers     http.Header
-		)
+	t.Run("Batch", func(t *testing.T) {
+		t.Skip("need json unmarshaler")
+		session := testlib.RandString(2, 50)
 
-		JustBeforeEach(func() {
-			server.AppendHandlers(ghttp.CombineHandlers(
-				ghttp.VerifyRequest(endpointCfg.Method, endpointCfg.URL),
-				ghttp.VerifyHeader(headers),
-				VerifyJSONPBRepresenting(request),
-				RespondWithJSONPB(&statusCode, response),
-			))
-		})
+		statusCode := http.StatusOK
 
-		Describe("AppLogin", func() {
-			var (
-				token   string = "my-token"
-				appName string = testlib.RandString(2, 50)
-			)
+		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
 
-			BeforeEach(func() {
-				endpointCfg = &config.BackendHTTPAPIEndpoint.AppLogin
+		request := api.NewPopulatedBatchRequest(popr, false)
+		err := JSONPBLoopback(request)
+		g.Expect(err).ToNot(HaveOccurred())
 
-				response = api.NewPopulatedAppLoginResponse(popr, false)
-				err := JSONPBLoopback(response)
-				Expect(err).ToNot(HaveOccurred())
+		headers := http.Header{
+			config.BackendHTTPAPIHeaderSession: []string{session},
+		}
 
-				request = api.NewPopulatedAppLoginRequest(popr, false)
-				err = JSONPBLoopback(request)
-				Expect(err).ToNot(HaveOccurred())
+		server := initFakeServer(endpointCfg, request, nil, statusCode, headers)
+		defer server.Close()
 
-				headers = http.Header{
-					config.BackendHTTPAPIHeaderToken:   []string{token},
-					config.BackendHTTPAPIHeaderAppName: []string{appName},
-				}
-			})
+		client, err := backend.NewClient(server.URL())
+		g.Expect(err).NotTo(HaveOccurred())
 
-			It("should perform the API call", func() {
-				res, err := client.AppLogin(request.(*api.AppLoginRequest), token, appName)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(res).Should(Equal(response))
-			})
-		})
-
-		Describe("AppBeat", func() {
-			var session string = "my-session"
-
-			BeforeEach(func() {
-				endpointCfg = &config.BackendHTTPAPIEndpoint.AppBeat
-
-				response = api.NewPopulatedAppBeatResponse(popr, false)
-				err := JSONPBLoopback(response)
-				Expect(err).ToNot(HaveOccurred())
-
-				request = api.NewPopulatedAppBeatRequest(popr, false)
-				err = JSONPBLoopback(request)
-				Expect(err).ToNot(HaveOccurred())
-
-				headers = http.Header{
-					config.BackendHTTPAPIHeaderSession: []string{session},
-				}
-			})
-
-			It("should perform the API call", func() {
-				res, err := client.AppBeat(request.(*api.AppBeatRequest), session)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(res).Should(Equal(response))
-			})
-		})
-
+		err = client.Batch(request, session)
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
 	})
-})
+
+	t.Run("AppLogout", func(t *testing.T) {
+		session := testlib.RandString(2, 50)
+
+		statusCode := http.StatusOK
+
+		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogout
+
+		headers := http.Header{
+			config.BackendHTTPAPIHeaderSession: []string{session},
+		}
+
+		server := initFakeServer(endpointCfg, nil, nil, statusCode, headers)
+		defer server.Close()
+
+		client, err := backend.NewClient(server.URL())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		err = client.AppLogout(session)
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+	})
+}
 
 // JSONPBLoopback passes msg through the JSON-PB marshaler and unmarshaler so
 // that msg then has the same data has another protobuf parsed from a JSONPB
@@ -131,7 +157,28 @@ func JSONPBLoopback(msg proto.Message) error {
 	return jsonpb.UnmarshalString(msgJSON, msg)
 }
 
-func RespondWithJSONPB(statusCode *int, object proto.Message, optionalHeader ...http.Header) http.HandlerFunc {
+func initFakeServer(endpointCfg *config.HTTPAPIEndpoint, request, response proto.Message, statusCode int, headers http.Header) *ghttp.Server {
+	handlers := []http.HandlerFunc{
+		ghttp.VerifyRequest(endpointCfg.Method, endpointCfg.URL),
+		ghttp.VerifyHeader(headers),
+	}
+
+	if request != nil {
+		handlers = append(handlers, VerifyJSONPBRepresenting(request))
+	}
+
+	if response != nil {
+		handlers = append(handlers, RespondWithJSONPB(statusCode, response))
+	} else {
+		handlers = append(handlers, ghttp.RespondWith(statusCode, nil))
+	}
+
+	server := ghttp.NewServer()
+	server.AppendHandlers(ghttp.CombineHandlers(handlers...))
+	return server
+}
+
+func RespondWithJSONPB(statusCode int, object proto.Message, optionalHeader ...http.Header) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		data, err := api.DefaultJSONPBMarshaler.MarshalToString(object)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -145,7 +192,7 @@ func RespondWithJSONPB(statusCode *int, object proto.Message, optionalHeader ...
 			headers["Content-Type"] = []string{"application/json"}
 		}
 		copyHeader(headers, w.Header())
-		w.WriteHeader(*statusCode)
+		w.WriteHeader(statusCode)
 		w.Write([]byte(data))
 	}
 }
