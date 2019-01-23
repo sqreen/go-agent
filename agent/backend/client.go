@@ -49,12 +49,15 @@ func NewClient(backendURL string) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) AppLogin(req *api.AppLoginRequest, token string) (*api.AppLoginResponse, error) {
+func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string) (*api.AppLoginResponse, error) {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogin)
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set(config.BackendHTTPAPIHeaderToken, token)
+	if appName != "" {
+		httpReq.Header.Set(config.BackendHTTPAPIHeaderAppName, appName)
+	}
 	res := new(api.AppLoginResponse)
 	if err := c.Do(httpReq, req, res); err != nil {
 		return nil, err
