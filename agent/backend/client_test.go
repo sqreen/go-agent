@@ -31,6 +31,7 @@ func TestClient(t *testing.T) {
 
 	t.Run("AppLogin", func(t *testing.T) {
 		token := testlib.RandString(2, 50)
+		appName := testlib.RandString(2, 50)
 
 		statusCode := http.StatusOK
 
@@ -45,7 +46,8 @@ func TestClient(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		headers := http.Header{
-			config.BackendHTTPAPIHeaderToken: []string{token},
+			config.BackendHTTPAPIHeaderToken:   []string{token},
+			config.BackendHTTPAPIHeaderAppName: []string{appName},
 		}
 
 		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
@@ -54,7 +56,7 @@ func TestClient(t *testing.T) {
 		client, err := backend.NewClient(server.URL())
 		g.Expect(err).NotTo(HaveOccurred())
 
-		res, err := client.AppLogin(request, token)
+		res, err := client.AppLogin(request, token, appName)
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -267,7 +269,7 @@ func testProxy(t *testing.T, envVar string) {
 	require.Equal(t, err, nil)
 	// Perform a request that should go through the proxy.
 	request := api.NewPopulatedAppLoginRequest(popr, false)
-	_, err = client.AppLogin(request, "my-token")
+	_, err = client.AppLogin(request, "my-token", "my-app")
 	// A request has been received:
 	//require.NotEqual(t, len(back.ReceivedRequests()), 0, "0 request received")
 	require.NotEqual(t, len(proxy.ReceivedRequests()), 0, "0 request received")
