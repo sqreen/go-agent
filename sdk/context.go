@@ -47,3 +47,23 @@ func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 	}
 	return (ctx.ctx.Track(event))
 }
+
+// Track allows to track a custom security event with the given event name.
+// Additional options can be set using the returned value's methods, such
+// WithProperties() or WithTimestamp().
+func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+	if ctx == nil {
+		return
+	}
+	ctx.ctx.TrackAuth(loginSuccess, id)
+}
+
+// Track allows to track a custom security event with the given event name.
+// Additional options can be set using the returned value's methods, such
+// WithProperties() or WithTimestamp().
+func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
+	if ctx == nil {
+		return
+	}
+	ctx.ctx.TrackSignup(id)
+}
