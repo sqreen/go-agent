@@ -38,12 +38,55 @@ func (ctx *HTTPRequestContext) Close() {
 	ctx.ctx.Close()
 }
 
-// Track allows to track a custom security event with the given event name.
-// Additional options can be set using the returned value's methods, such
+// Track allows to track a custom security-related event with the given event
+// name. Additional options can be set using the returned value's methods, such
 // WithProperties() or WithTimestamp().
+//
+//	uid := sdk.EventUserIdentifierMap{"uid": "my-uid"}
+//	props := sdk.EventPropertyMap{"key": "value"}
+//	sqreen := middleware.GetHTTPContext(ctx)
+//	sqreen.Track("my.event").WithUserIdentifier(uid).WithProperties(props)
+//
 func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
 	return (ctx.ctx.Track(event))
+}
+
+// TrackAuth allows to track a user authentication. The user id `id` is a set
+// uniquely identifying the user. `loginSuccess` must be true when the user
+// successfully logged in, false otherwise.
+//
+//	sqreen := middleware.GetHTTPContext(ctx)
+//	sqreen.TrackAuth(granted, sdk.EventUserIdentifierMap{"uid": "my-uid"})
+//
+func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+	if ctx == nil {
+		return
+	}
+	ctx.ctx.TrackAuth(loginSuccess, id)
+}
+
+// TrackAuthSuccess is equivalent to `TrackAuth(true, id)`
+func (ctx *HTTPRequestContext) TrackAuthSuccess(id EventUserIdentifierMap) {
+	ctx.TrackAuth(true, id)
+}
+
+// TrackAuthFailure is equivalent to `TrackAuth(false, id)`
+func (ctx *HTTPRequestContext) TrackAuthFailure(id EventUserIdentifierMap) {
+	ctx.TrackAuth(false, id)
+}
+
+// TrackSignup allows to track a user signup. The user id `id` is a set
+// uniquely identifying the user.
+//
+//	sqreen := middleware.GetHTTPContext(ctx)
+//	sqreen.TrackSignup(sdk.EventUserIdentifierMap{"uid": "my-uid"})
+//
+func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
+	if ctx == nil {
+		return
+	}
+	ctx.ctx.TrackSignup(id)
 }

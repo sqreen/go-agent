@@ -44,6 +44,21 @@ func TestSDK(t *testing.T) {
 			require.Equal(t, args[1].(*api.RequestRecord_Observed_SDKEvent_Options).GetUserIdentifiers().Value, idMap)
 		})
 	})
+
+	t.Run("TrackAuth", func(t *testing.T) {
+		ctx := sdk.NewHTTPRequestContext(fakeRequest{})
+		uid := testlib.RandString(2, 50)
+		idMap := sdk.EventUserIdentifierMap{"uid": uid}
+		success := true
+		ctx.TrackAuth(success, idMap)
+	})
+
+	t.Run("TrackSignup", func(t *testing.T) {
+		ctx := sdk.NewHTTPRequestContext(fakeRequest{})
+		uid := testlib.RandString(2, 50)
+		idMap := sdk.EventUserIdentifierMap{"uid": uid}
+		ctx.TrackSignup(idMap)
+	})
 }
 
 func testDisabledSDKCalls(t *testing.T, ctx *sdk.HTTPRequestContext) {
@@ -59,5 +74,10 @@ func testDisabledSDKCalls(t *testing.T, ctx *sdk.HTTPRequestContext) {
 	require.Nil(t, event)
 	event = event.WithTimestamp(time.Now())
 	require.Nil(t, event)
+	uid := sdk.EventUserIdentifierMap{"uid": "uid"}
+	ctx.TrackAuth(true, uid)
+	ctx.TrackAuthSuccess(uid)
+	ctx.TrackAuthFailure(uid)
+	ctx.TrackSignup(uid)
 	ctx.Close()
 }

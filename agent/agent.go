@@ -24,10 +24,11 @@ func start() {
 }
 
 var (
-	logger   = plog.NewLogger("sqreen/agent")
-	eventMng *eventManager
-	cancel   context.CancelFunc
-	isDone   chan struct{}
+	logger     = plog.NewLogger("sqreen/agent")
+	eventMng   *eventManager
+	metricsMng *metricsManager
+	cancel     context.CancelFunc
+	isDone     chan struct{}
 )
 
 func agent() {
@@ -82,12 +83,19 @@ func agent() {
 	// Start the event manager's loop
 	go eventMng.Loop(ctx, client, sessionID)
 
+	metricsMng = newMetricsManager(ctx)
+
 	// Start the heartbeat's loop
 	for {
 		select {
 		case <-ticker:
 			logger.Debug("heartbeat")
-			var appBeatReq api.AppBeatRequest
+
+			metrics := metricsMng.getObservations()
+			appBeatReq := api.AppBeatRequest{
+				Metrics: metrics,
+			}
+
 			_, err := client.AppBeat(&appBeatReq, sessionID)
 			if err != nil {
 				logger.Error("heartbeat failed: ", err)
@@ -136,7 +144,7 @@ func newEventManager(rulespackID string, count int, maxStaleness time.Duration) 
 	}
 }
 
-func (m *eventManager) addEvent(r *httpRequestRecord) {
+func (m *eventManager) add(r *httpRequestRecord) {
 	select {
 	case m.eventsChan <- r:
 		return
@@ -205,12 +213,12 @@ func (m *eventManager) send(client *backend.Client, sessionID string) {
 	m.req.Batch = m.req.Batch[0:0]
 }
 
-func addEvent(r *httpRequestRecord) {
+func addTrackEvent(r *httpRequestRecord) {
 	if config.Disable() || eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
-	eventMng.addEvent(r)
+	eventMng.add(r)
 }
 
 // Helper function returning true when having to exit the agent and panic-ing

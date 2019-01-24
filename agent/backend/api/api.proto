@@ -62,6 +62,10 @@ message CommandResponse {
 }
 
 message MetricResponse {
+  string name = 1;
+  google.protobuf.Timestamp start = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  google.protobuf.Timestamp finish = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  google.protobuf.Struct observation = 4 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
 }
 
 message AppBeatRequest {
