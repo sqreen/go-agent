@@ -36,9 +36,11 @@ func agent() {
 		err := recover()
 		if err != nil {
 			logger.Error("agent stopped: ", err)
-			return
+		} else {
+			logger.Info("agent successfully stopped")
 		}
-		logger.Info("agent successfully stopped")
+		// Signal we are done
+		close(isDone)
 	}()
 
 	plog.SetLevelFromString(config.LogLevel())
@@ -111,8 +113,6 @@ func agent() {
 				return
 			}
 			logger.Debug("successfully logged out")
-			// Signal we are done
-			close(isDone)
 			return
 		}
 	}
