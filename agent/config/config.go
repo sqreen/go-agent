@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+var manager = viper.New()
+
 type HTTPAPIEndpoint struct {
 	Method, URL string
 }
@@ -188,21 +190,21 @@ const (
 )
 
 func init() {
-	viper.SetEnvPrefix(configEnvPrefix)
-	viper.AutomaticEnv()
-	viper.SetConfigName(configFileBasename)
-	viper.AddConfigPath(configFilePath)
+	manager.SetEnvPrefix(configEnvPrefix)
+	manager.AutomaticEnv()
+	manager.SetConfigName(configFileBasename)
+	manager.AddConfigPath(configFilePath)
 
-	viper.SetDefault(configKeyBackendHTTPAPIBaseURL, configDefaultBackendHTTPAPIBaseURL)
-	viper.SetDefault(configKeyLogLevel, configDefaultLogLevel)
-	viper.SetDefault(configKeyAppName, "")
-	viper.SetDefault(configKeyHTTPClientIPHeader, "")
-	viper.SetDefault(configKeyBackendHTTPAPIProxy, "")
-	viper.SetDefault(configKeyDisable, "")
+	manager.SetDefault(configKeyBackendHTTPAPIBaseURL, configDefaultBackendHTTPAPIBaseURL)
+	manager.SetDefault(configKeyLogLevel, configDefaultLogLevel)
+	manager.SetDefault(configKeyAppName, "")
+	manager.SetDefault(configKeyHTTPClientIPHeader, "")
+	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
+	manager.SetDefault(configKeyDisable, "")
 
 	logger := plog.NewLogger("sqreen/agent/config")
 
-	err := viper.ReadInConfig()
+	err := manager.ReadInConfig()
 	if err != nil {
 		logger.Error("configuration file read error:", err)
 	}
@@ -210,37 +212,37 @@ func init() {
 
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
 func BackendHTTPAPIBaseURL() string {
-	return sanitizeString(viper.GetString(configKeyBackendHTTPAPIBaseURL))
+	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIBaseURL))
 }
 
 // BackendHTTPAPIToken returns the access token to the backend API.
 func BackendHTTPAPIToken() string {
-	return sanitizeString(viper.GetString(configKeyBackendHTTPAPIToken))
+	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIToken))
 }
 
 // LogLevel returns the log level.
 func LogLevel() string {
-	return sanitizeString(viper.GetString(configKeyLogLevel))
+	return sanitizeString(manager.GetString(configKeyLogLevel))
 }
 
 // AppName returns the app name.
 func AppName() string {
-	return sanitizeString(viper.GetString(configKeyAppName))
+	return sanitizeString(manager.GetString(configKeyAppName))
 }
 
 // HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
 func HTTPClientIPHeader() string {
-	return sanitizeString(viper.GetString(configKeyHTTPClientIPHeader))
+	return sanitizeString(manager.GetString(configKeyHTTPClientIPHeader))
 }
 
 // Proxy returns the proxy configuration to use for backend HTTP calls.
 func BackendHTTPAPIProxy() string {
-	return sanitizeString(viper.GetString(configKeyBackendHTTPAPIProxy))
+	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIProxy))
 }
 
 // Disable returns true when the agent should be disabled, false otherwise.
 func Disable() bool {
-	disable := sanitizeString(viper.GetString(configKeyDisable))
+	disable := sanitizeString(manager.GetString(configKeyDisable))
 	return disable != "" || BackendHTTPAPIToken() == ""
 }
 
