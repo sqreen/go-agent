@@ -62,6 +62,10 @@ message CommandResponse {
 }
 
 message MetricResponse {
+  string name = 1;
+  google.protobuf.Timestamp start = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  google.protobuf.Timestamp finish = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  google.protobuf.Struct observation = 4 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
 }
 
 message AppBeatRequest {
@@ -145,6 +149,7 @@ message RequestRecord {
     message SDKEvent {
       message Options {
         google.protobuf.Struct properties = 1 [(gogoproto.customtype) = "Struct"];
+        google.protobuf.Struct user_identifiers = 2 [(gogoproto.customtype) = "Struct"];
       }
 
       google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +84,7 @@ func TestUserConfig(t *testing.T) {
 		t.Run("Set through configuration file", func(t *testing.T) {
 			filename := newCfgFile(t, envKey+`: `+someValue)
 			defer os.Remove(filename)
-			viper.ReadInConfig()
+			manager.ReadInConfig()
 			require.Equal(t, getCfgValue(), !defaultValue)
 		})
 	})
@@ -107,7 +106,7 @@ func testStringValue(t *testing.T, name string, getCfgValue func() string, envKe
 		t.Run("Set through configuration file", func(t *testing.T) {
 			filename := newCfgFile(t, envKey+`: `+someValue)
 			defer os.Remove(filename)
-			viper.ReadInConfig()
+			manager.ReadInConfig()
 			require.Equal(t, getCfgValue(), someValue)
 		})
 	})

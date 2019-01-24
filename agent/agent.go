@@ -24,10 +24,11 @@ func start() {
 }
 
 var (
-	logger   = plog.NewLogger("sqreen/agent")
-	eventMng *eventManager
-	cancel   context.CancelFunc
-	isDone   chan struct{}
+	logger     = plog.NewLogger("sqreen/agent")
+	eventMng   *eventManager
+	metricsMng *metricsManager
+	cancel     context.CancelFunc
+	isDone     chan struct{}
 )
 
 func agent() {
@@ -35,9 +36,11 @@ func agent() {
 		err := recover()
 		if err != nil {
 			logger.Error("agent stopped: ", err)
-			return
+		} else {
+			logger.Info("agent successfully stopped")
 		}
-		logger.Info("agent successfully stopped")
+		// Signal we are done
+		close(isDone)
 	}()
 
 	plog.SetLevelFromString(config.LogLevel())
@@ -53,7 +56,9 @@ func agent() {
 		return
 	}
 
-	appLoginRes, err := appLogin(ctx, client)
+	token := config.BackendHTTPAPIToken()
+	appName := config.AppName()
+	appLoginRes, err := appLogin(ctx, client, token, appName)
 	if checkErr(err) {
 		return
 	}
@@ -80,12 +85,19 @@ func agent() {
 	// Start the event manager's loop
 	go eventMng.Loop(ctx, client, sessionID)
 
+	metricsMng = newMetricsManager(ctx)
+
 	// Start the heartbeat's loop
 	for {
 		select {
 		case <-ticker:
 			logger.Debug("heartbeat")
-			var appBeatReq api.AppBeatRequest
+
+			metrics := metricsMng.getObservations()
+			appBeatReq := api.AppBeatRequest{
+				Metrics: metrics,
+			}
+
 			_, err := client.AppBeat(&appBeatReq, sessionID)
 			if err != nil {
 				logger.Error("heartbeat failed: ", err)
@@ -101,8 +113,6 @@ func agent() {
 				return
 			}
 			logger.Debug("successfully logged out")
-			// Signal we are done
-			close(isDone)
 			return
 		}
 	}
@@ -134,7 +144,7 @@ func newEventManager(rulespackID string, count int, maxStaleness time.Duration) 
 	}
 }
 
-func (m *eventManager) addEvent(r *httpRequestRecord) {
+func (m *eventManager) add(r *httpRequestRecord) {
 	select {
 	case m.eventsChan <- r:
 		return
@@ -203,12 +213,12 @@ func (m *eventManager) send(client *backend.Client, sessionID string) {
 	m.req.Batch = m.req.Batch[0:0]
 }
 
-func addEvent(r *httpRequestRecord) {
+func addTrackEvent(r *httpRequestRecord) {
 	if config.Disable() || eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
-	eventMng.addEvent(r)
+	eventMng.add(r)
 }
 
 // Helper function returning true when having to exit the agent and panic-ing

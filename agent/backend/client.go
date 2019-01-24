@@ -8,12 +8,11 @@ import (
 	"net/http/httputil"
 	"net/url"
 
-	"github.com/sqreen/go-agent/agent/config"
-	"github.com/sqreen/go-agent/agent/plog"
-
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/sqreen/go-agent/agent/backend/api"
+	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/agent/plog"
 	"golang.org/x/net/http/httpproxy"
 )
 
@@ -26,21 +25,32 @@ type Client struct {
 }
 
 func NewClient(backendURL string) (*Client, error) {
-	proxyCfg := httpproxy.Config{
-		HTTPSProxy: config.BackendHTTPAPIProxy(),
+	var transport *http.Transport
+	if proxySettings := config.BackendHTTPAPIProxy(); proxySettings == "" {
+		// No user settings. The default transport uses standard global proxy
+		// settings *_PROXY environment variables.
+		logger.Info("using proxy settings as indicated by the environment variables HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions)")
+		transport = (http.DefaultTransport).(*http.Transport)
+	} else {
+		// Use the settings.
+		logger.Info("using configured https proxy ", proxySettings)
+		proxyCfg := httpproxy.Config{
+			HTTPSProxy: proxySettings,
+		}
+		proxyURL := proxyCfg.ProxyFunc()
+		proxy := func(req *http.Request) (*url.URL, error) {
+			return proxyURL(req.URL)
+		}
+		// Shallow copy the default transport and overwrite its proxy settings.
+		transportCopy := *(http.DefaultTransport).(*http.Transport)
+		transport = &transportCopy
+		transport.Proxy = proxy
 	}
-	proxyURL := proxyCfg.ProxyFunc()
-	proxy := func(req *http.Request) (*url.URL, error) {
-		return proxyURL(req.URL)
-	}
-
-	transport := *(http.DefaultTransport).(*http.Transport)
-	transport.Proxy = proxy
 
 	client := &Client{
 		client: &http.Client{
 			Timeout:   config.BackendHTTPAPIRequestTimeout,
-			Transport: &transport,
+			Transport: transport,
 		},
 		backendURL:  backendURL,
 		pbMarshaler: api.DefaultJSONPBMarshaler,
@@ -49,12 +59,15 @@ func NewClient(backendURL string) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) AppLogin(req *api.AppLoginRequest, token string) (*api.AppLoginResponse, error) {
+func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string) (*api.AppLoginResponse, error) {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogin)
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set(config.BackendHTTPAPIHeaderToken, token)
+	if appName != "" {
+		httpReq.Header.Set(config.BackendHTTPAPIHeaderAppName, appName)
+	}
 	res := new(api.AppLoginResponse)
 	if err := c.Do(httpReq, req, res); err != nil {
 		return nil, err
