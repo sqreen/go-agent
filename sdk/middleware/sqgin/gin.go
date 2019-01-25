@@ -1,4 +1,4 @@
-package gin
+package sqgin
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func Sqreen() gingonic.HandlerFunc {
 // context by the middleware function.
 //
 //	router.GET("/", func(c *gin.Context) {
-//		sqreen_middleware.GetHTTPContextFromGin(c).Track("my.event")
+//		sqgin.GetHTTPContextFromGin(c).Track("my.event")
 //		// ...
 //	}
 //
@@ -62,7 +62,7 @@ func GetHTTPContextFromGin(c *gingonic.Context) *sqreen_sdk.HTTPRequestContext {
 //	}
 //
 //	func aFunction(ctx context.Context) {
-//		sqreen_middleware.GetHTTPContext(ctx).Track("my.event")
+//		sqgin.GetHTTPContext(ctx).Track("my.event")
 //		// ...
 //	}
 //
