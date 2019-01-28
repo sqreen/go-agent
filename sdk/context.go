@@ -70,9 +70,9 @@ func (ctx *HTTPRequestContext) Close() {
 //	uid := sdk.EventUserIdentifierMap{"uid": "my-uid"}
 //	props := sdk.EventPropertyMap{"key": "value"}
 //	sqreen := middleware.GetHTTPContext(ctx)
-//	sqreen.Track("my.event").WithUserIdentifier(uid).WithProperties(props)
+//	sqreen.TrackEvent("my.event").WithUserIdentifier(uid).WithProperties(props)
 //
-func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestContext) TrackEvent(event string) *HTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
