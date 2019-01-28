@@ -1,14 +1,39 @@
 package sdk
 
 import (
+	"context"
+
 	"github.com/sqreen/go-agent/agent"
 )
+
+const HTTPRequestContextKey = "sqctx"
 
 // HTTPRequestContext is the context associated to a single HTTP request. It
 // collects every security event happening during the HTTP handling, until the
 // Close() method is called to signal the request is done.
 type HTTPRequestContext struct {
 	ctx *agent.HTTPRequestContext
+}
+
+// GetHTTPContext returns the sdk's context associated to the request's context
+// by the middleware function.
+//
+//	router.GET("/", func(c *gin.Context) {
+//		sqgin.GetHTTPContext(c).TrackEvent("my.event.one")
+//		aFunction(c.Request.Context())
+//	}
+//
+//	func aFunction(ctx context.Context) {
+//		sqgin.GetHTTPContext(ctx).TrackEvent("my.event.two")
+//		// ...
+//	}
+//
+func GetHTTPContext(ctx context.Context) *HTTPRequestContext {
+	sqreen := ctx.Value(HTTPRequestContextKey)
+	if sqreen == nil {
+		return nil
+	}
+	return sqreen.(*HTTPRequestContext)
 }
 
 // HTTPRequest is the request interface to access request information. Usually
