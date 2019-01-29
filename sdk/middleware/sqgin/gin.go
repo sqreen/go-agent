@@ -27,7 +27,7 @@ import (
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
 		// Create a sqreen context for this request.
-		sqreen := sdk.NewHTTPRequestContext(request{c.Copy()})
+		sqreen := sdk.NewHTTPRequestContext(c.Request)
 
 		// Store it into Go's context.
 		ctx := c.Request.Context()
@@ -42,12 +42,4 @@ func Middleware() gingonic.HandlerFunc {
 		// Close the sqreen context
 		sqreen.Close()
 	}
-}
-
-type request struct {
-	*gingonic.Context
-}
-
-func (r request) StdRequest() *http.Request {
-	return r.Context.Request
 }

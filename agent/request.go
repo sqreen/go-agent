@@ -15,19 +15,15 @@ import (
 	"github.com/sqreen/go-agent/agent/config"
 )
 
-type HTTPRequest interface {
-	StdRequest() *http.Request
-}
-
 type HTTPRequestContext struct {
 	// Copy of the request, safe to be asynchronously read, even after the request
 	// was terminated.
-	request    HTTPRequest
+	request    *http.Request
 	eventsLock sync.Mutex
 	events     []*HTTPRequestEvent
 }
 
-func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
+func NewHTTPRequestContext(req *http.Request) *HTTPRequestContext {
 	return &HTTPRequestContext{
 		request: req,
 	}
@@ -125,7 +121,7 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request.StdRequest()),
+			ip:             getClientIP(ctx.request),
 			userIdentifier: id,
 			timestamp:      time.Now(),
 		},
@@ -141,7 +137,7 @@ func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request.StdRequest()),
+			ip:             getClientIP(ctx.request),
 			userIdentifier: id,
 			timestamp:      time.Now(),
 		},
@@ -236,7 +232,7 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request.StdRequest())
+	return getClientIP(r.ctx.request)
 }
 
 func getClientIP(req *http.Request) string {
@@ -290,7 +286,7 @@ func getClientIP(req *http.Request) string {
 }
 
 func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
-	req := r.ctx.request.StdRequest()
+	req := r.ctx.request
 
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
 	for _, header := range config.TrackedHTTPHeaders {

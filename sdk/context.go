@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/sqreen/go-agent/agent"
 )
@@ -13,6 +14,16 @@ const HTTPRequestContextKey = "sqctx"
 // Close() method is called to signal the request is done.
 type HTTPRequestContext struct {
 	ctx *agent.HTTPRequestContext
+}
+
+type EventUserIdentifierMap map[string]string
+
+// NewHTTPRequestContext returns a new HTTP request context for the given HTTP
+// request.
+func NewHTTPRequestContext(req *http.Request) *HTTPRequestContext {
+	return &HTTPRequestContext{
+		ctx: agent.NewHTTPRequestContext(req),
+	}
 }
 
 // GetHTTPContext returns the sdk's context associated to the request's context
@@ -34,24 +45,6 @@ func GetHTTPContext(ctx context.Context) *HTTPRequestContext {
 		return nil
 	}
 	return sqreen.(*HTTPRequestContext)
-}
-
-// HTTPRequest is the request interface to access request information. Usually
-// implemented by the middleware to give access to the handler's HTTP request.
-type HTTPRequest = agent.HTTPRequest
-
-type HTTPRequestEvent = agent.HTTPRequestEvent
-
-type EventPropertyMap = agent.EventPropertyMap
-
-type EventUserIdentifierMap = agent.EventUserIdentifierMap
-
-// NewHTTPRequestContext returns a new HTTP request context for the given HTTP
-// request.
-func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
-	return &HTTPRequestContext{
-		ctx: agent.NewHTTPRequestContext(req),
-	}
 }
 
 // Close signals the request handling is now done. Every collected security
@@ -76,7 +69,7 @@ func (ctx *HTTPRequestContext) TrackEvent(event string) *HTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
-	return (ctx.ctx.Track(event))
+	return &HTTPRequestEvent{ctx.ctx.Track(event)}
 }
 
 // TrackAuth allows to track a user authentication. The user id `id` is a set
@@ -90,7 +83,7 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 	if ctx == nil {
 		return
 	}
-	ctx.ctx.TrackAuth(loginSuccess, id)
+	ctx.ctx.TrackAuth(loginSuccess, agent.EventUserIdentifierMap(id))
 }
 
 // TrackAuthSuccess is equivalent to `TrackAuth(true, id)`
@@ -113,5 +106,5 @@ func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
 	if ctx == nil {
 		return
 	}
-	ctx.ctx.TrackSignup(id)
+	ctx.ctx.TrackSignup(agent.EventUserIdentifierMap(id))
 }
