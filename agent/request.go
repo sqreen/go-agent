@@ -15,7 +15,7 @@ import (
 	"github.com/sqreen/go-agent/agent/config"
 )
 
-type HTTPRequestContext struct {
+type HTTPRequestRecord struct {
 	// Copy of the request, safe to be asynchronously read, even after the request
 	// was terminated.
 	request    *http.Request
@@ -23,8 +23,8 @@ type HTTPRequestContext struct {
 	events     []*HTTPRequestEvent
 }
 
-func NewHTTPRequestContext(req *http.Request) *HTTPRequestContext {
-	return &HTTPRequestContext{
+func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
+	return &HTTPRequestRecord{
 		request: req,
 	}
 }
@@ -102,7 +102,7 @@ type EventPropertyMap map[string]string
 
 type EventUserIdentifierMap map[string]string
 
-func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestRecord) Track(event string) *HTTPRequestEvent {
 	evt := &HTTPRequestEvent{
 		method:    "track",
 		event:     event,
@@ -112,7 +112,7 @@ func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 	return evt
 }
 
-func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackAuth(): user id is nil or empty")
 		return
@@ -129,7 +129,7 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifierMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackSignup(): user id is nil or empty")
 		return
@@ -145,17 +145,17 @@ func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestContext) Close() {
+func (ctx *HTTPRequestRecord) Close() {
 	addTrackEvent(newHTTPRequestRecord(ctx))
 }
 
-func (ctx *HTTPRequestContext) addTrackEvent(event *HTTPRequestEvent) {
+func (ctx *HTTPRequestRecord) addTrackEvent(event *HTTPRequestEvent) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
 }
 
-func (ctx *HTTPRequestContext) addUserEvent(event userEventFace) {
+func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
 	addUserEvent(event)
 }
 
@@ -209,11 +209,11 @@ func (e *HTTPRequestEvent) Proto() proto.Message {
 }
 
 type httpRequestRecord struct {
-	ctx         *HTTPRequestContext
+	ctx         *HTTPRequestRecord
 	rulespackID string
 }
 
-func newHTTPRequestRecord(event *HTTPRequestContext) *httpRequestRecord {
+func newHTTPRequestRecord(event *HTTPRequestRecord) *httpRequestRecord {
 	return &httpRequestRecord{
 		ctx: event,
 	}

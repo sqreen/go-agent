@@ -22,7 +22,7 @@ func TestSDK(t *testing.T) {
 	})
 
 	t.Run("Track", func(t *testing.T) {
-		ctx := NewHTTPRequestContext(newFakeRequest())
+		ctx := NewHTTPRequestRecord(newFakeRequest())
 		eventId := testlib.RandString(2, 50)
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifierMap{"uid": uid}
@@ -39,7 +39,7 @@ func TestSDK(t *testing.T) {
 	})
 
 	t.Run("TrackAuth", func(t *testing.T) {
-		ctx := NewHTTPRequestContext(newFakeRequest())
+		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifierMap{"uid": uid}
 		success := true
@@ -47,14 +47,14 @@ func TestSDK(t *testing.T) {
 	})
 
 	t.Run("TrackSignup", func(t *testing.T) {
-		ctx := NewHTTPRequestContext(newFakeRequest())
+		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifierMap{"uid": uid}
 		ctx.TrackSignup(idMap)
 	})
 }
 
-func testDisabledSDKCalls(t *testing.T, ctx *HTTPRequestContext) {
+func testDisabledSDKCalls(t *testing.T, ctx *HTTPRequestRecord) {
 	event := ctx.TrackEvent(testlib.RandString(0, 50))
 	require.Nil(t, event)
 	event = event.WithTimestamp(time.Now())

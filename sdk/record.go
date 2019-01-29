@@ -7,22 +7,22 @@ import (
 	"github.com/sqreen/go-agent/agent"
 )
 
-const HTTPRequestContextKey = "sqctx"
+const HTTPRequestRecordKey = "sqctx"
 
-// HTTPRequestContext is the context associated to a single HTTP request. It
+// HTTPRequestRecord is the context associated to a single HTTP request. It
 // collects every security event happening during the HTTP handling, until the
 // Close() method is called to signal the request is done.
-type HTTPRequestContext struct {
-	ctx *agent.HTTPRequestContext
+type HTTPRequestRecord struct {
+	ctx *agent.HTTPRequestRecord
 }
 
 type EventUserIdentifierMap map[string]string
 
-// NewHTTPRequestContext returns a new HTTP request context for the given HTTP
+// NewHTTPRequestRecord returns a new HTTP request context for the given HTTP
 // request.
-func NewHTTPRequestContext(req *http.Request) *HTTPRequestContext {
-	return &HTTPRequestContext{
-		ctx: agent.NewHTTPRequestContext(req),
+func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
+	return &HTTPRequestRecord{
+		ctx: agent.NewHTTPRequestRecord(req),
 	}
 }
 
@@ -39,17 +39,17 @@ func NewHTTPRequestContext(req *http.Request) *HTTPRequestContext {
 //		// ...
 //	}
 //
-func GetHTTPContext(ctx context.Context) *HTTPRequestContext {
-	sqreen := ctx.Value(HTTPRequestContextKey)
+func GetHTTPContext(ctx context.Context) *HTTPRequestRecord {
+	sqreen := ctx.Value(HTTPRequestRecordKey)
 	if sqreen == nil {
 		return nil
 	}
-	return sqreen.(*HTTPRequestContext)
+	return sqreen.(*HTTPRequestRecord)
 }
 
 // Close signals the request handling is now done. Every collected security
 // event can thus be considered by the agnt.
-func (ctx *HTTPRequestContext) Close() {
+func (ctx *HTTPRequestRecord) Close() {
 	if ctx == nil {
 		return
 	}
@@ -65,7 +65,7 @@ func (ctx *HTTPRequestContext) Close() {
 //	sqreen := middleware.GetHTTPContext(ctx)
 //	sqreen.TrackEvent("my.event").WithUserIdentifier(uid).WithProperties(props)
 //
-func (ctx *HTTPRequestContext) TrackEvent(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
@@ -79,7 +79,7 @@ func (ctx *HTTPRequestContext) TrackEvent(event string) *HTTPRequestEvent {
 //	sqreen := middleware.GetHTTPContext(ctx)
 //	sqreen.TrackAuth(granted, sdk.EventUserIdentifierMap{"uid": "my-uid"})
 //
-func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
 	if ctx == nil {
 		return
 	}
@@ -87,12 +87,12 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 }
 
 // TrackAuthSuccess is equivalent to `TrackAuth(true, id)`
-func (ctx *HTTPRequestContext) TrackAuthSuccess(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackAuthSuccess(id EventUserIdentifierMap) {
 	ctx.TrackAuth(true, id)
 }
 
 // TrackAuthFailure is equivalent to `TrackAuth(false, id)`
-func (ctx *HTTPRequestContext) TrackAuthFailure(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackAuthFailure(id EventUserIdentifierMap) {
 	ctx.TrackAuth(false, id)
 }
 
@@ -102,7 +102,7 @@ func (ctx *HTTPRequestContext) TrackAuthFailure(id EventUserIdentifierMap) {
 //	sqreen := middleware.GetHTTPContext(ctx)
 //	sqreen.TrackSignup(sdk.EventUserIdentifierMap{"uid": "my-uid"})
 //
-func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifierMap) {
 	if ctx == nil {
 		return
 	}

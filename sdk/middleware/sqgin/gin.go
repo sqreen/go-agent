@@ -27,15 +27,15 @@ import (
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
 		// Create a sqreen context for this request.
-		sqreen := sdk.NewHTTPRequestContext(c.Request)
+		sqreen := sdk.NewHTTPRequestRecord(c.Request)
 
 		// Store it into Go's context.
 		ctx := c.Request.Context()
-		ctx = context.WithValue(ctx, sdk.HTTPRequestContextKey, sqreen)
+		ctx = context.WithValue(ctx, sdk.HTTPRequestRecordKey, sqreen)
 		c.Request = c.Request.WithContext(ctx)
 
 		// Store it into Gin's context.
-		c.Set(sdk.HTTPRequestContextKey, sqreen)
+		c.Set(sdk.HTTPRequestRecordKey, sqreen)
 
 		c.Next()
 
