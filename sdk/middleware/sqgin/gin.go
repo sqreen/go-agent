@@ -8,23 +8,28 @@ import (
 )
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
-// requests Gin receives. It creates and stores the HTTP request record into the
-// Gin and request contexts so that it can be later retrieved from handlers
-// using sdk.FromContext() to perform sdk calls.
+// requests Gin receives. It creates and stores the HTTP request record both
+// into the Gin and request contexts so that it can be later accessed from
+// handlers using `sdk.FromContext()` to perform SDK calls.
+//
+// Note that Gin's context implements the `context.Context` interface, so
+// `sdk.FromContext()` can be used both with the Gin and request contexts.
 //
 //	router := gin.Default()
 //	router.Use(sqgin.Middleware())
 //
 //	router.GET("/", func(c *gin.Context) {
+//		// Accessing the SDK through Gin's context
 //		sdk.FromContext(c).TrackEvent("my.event.one")
-//		foo(c)
-//		// or foo(c.Request.Context())
+//		foo(c.Request)
 //	}
 //
-//	func foo(ctx context.Context) {
-//		sdk.FromContext(ctx).TrackEvent("my.event.two")
+//	func foo(req *http.Request) {
+//		// Accessing the SDK through the request context
+//		sdk.FromContext(req.Context()).TrackEvent("my.event.two")
 //		// ...
 //	}
+//
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
 		// Create a new request record for this request.

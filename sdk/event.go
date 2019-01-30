@@ -6,12 +6,28 @@ import (
 	"github.com/sqreen/go-agent/agent"
 )
 
+// HTTPRequestEvent is a SDK event. Its methods allow request handlers to add
+// options further specifying the event, such as a unique user identifier, extra
+// properties, etc.
 type HTTPRequestEvent struct {
 	impl *agent.HTTPRequestEvent
 }
 
+// EventPropertyMap is the type used to represent extra custom event properties.
+//
+//	props := sdk.EventPropertyMap{
+//		"key1": "value1",
+//		"key2": "value2",
+//	}
+//	sdk.FromContext(ctx).TrackEvent("my.event").WithProperties(props)
+//
 type EventPropertyMap map[string]string
 
+// WithTimestamp adds a custom timestamp to the event. By default, the timestamp
+// is set to `time.Now()` value at the time of the call to the event creation.
+//
+//	sdk.FromContext(ctx).TrackEvent("my.event").WithTimestamp(yourTimestamp)
+//
 func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
 	if e == nil {
 		return nil
@@ -20,6 +36,14 @@ func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
 	return e
 }
 
+// WithProperties adds custom properties to the event.
+//
+//	props := sdk.EventPropertyMap{
+//		"key1": "value1",
+//		"key2": "value2",
+//	}
+//	sdk.FromContext(ctx).TrackEvent("my.event").WithProperties(prop)
+//
 func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
 	if e == nil {
 		return nil
@@ -28,6 +52,12 @@ func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent 
 	return e
 }
 
+// WithUserIdentifier associates the given user identifier map `id` to the
+// event.
+//
+//	uid := sdk.EventUserIdentifierMap{"uid": "my-uid"}
+//	sdk.FromContext(ctx).Identify(uid)
+//
 func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifierMap) *HTTPRequestEvent {
 	if e == nil {
 		return nil

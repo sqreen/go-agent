@@ -19,7 +19,7 @@ func TestMiddleware(t *testing.T) {
 	router := gin.New()
 	// Attach our middelware
 	router.Use(sqgin.Middleware())
-	// Add a endpoint accessing the SDK handle
+	// Add an endpoint accessing the SDK handle
 	router.GET("/", func(c *gin.Context) {
 		require.NotNil(sdk.FromContext(c), "The middleware should attach its handle object to Gin's context")
 		require.NotNil(sdk.FromContext(c.Request.Context()), "The middleware should attach its handle object to the request's context")

@@ -6,10 +6,12 @@ package sdk
 // be of type *HTTPRequestRecord.
 var HTTPRequestRecordContextKey = &ContextKey{"sqreen.rr"}
 
-// ContextKey allows to insert context values with comparable keys that are not
-// strings, as documented by context.WithValue(), to avoid string collisions.
+// ContextKey allows to insert context values avoiding string collisions. Cf.
+// `context.WithValue()`.
 type ContextKey struct {
-	// This string value must be used by middelware function whose framework
-	// expects context keys of type string, such as Gin.
+	// This string value must be used by middelware functions whose framework
+	// expects context keys of type string, such as Gin. `sdk.FromContext()`
+	// expect this behaviour to fallback to string keys when getting the value
+	// from the pointer address returned null.
 	String string
 }
