@@ -24,20 +24,21 @@ func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
 	}
 }
 
-// GetHTTPContext returns the sdk's context associated to the request's context
-// by the middleware function.
+// FromContext allows to access the HTTPRequestRecord from request handlers if
+// present, and nil otherwise. The value is stored in handler contexts by the
+// middleware function for the framework and is of type *HTTPRequestRecord.
 //
 //	router.GET("/", func(c *gin.Context) {
-//		sqgin.GetHTTPContext(c).TrackEvent("my.event.one")
+//		sdk.FromContext(c).TrackEvent("my.event.one")
 //		aFunction(c.Request.Context())
 //	}
 //
 //	func aFunction(ctx context.Context) {
-//		sqgin.GetHTTPContext(ctx).TrackEvent("my.event.two")
+//		sdk.FromContext(ctx).TrackEvent("my.event.two")
 //		// ...
 //	}
 //
-func GetHTTPContext(ctx context.Context) *HTTPRequestRecord {
+func FromContext(ctx context.Context) *HTTPRequestRecord {
 	v := ctx.Value(HTTPRequestRecordContextKey)
 	if v == nil {
 		// Try with a string since frameworks such as Gin implement it with keys of
