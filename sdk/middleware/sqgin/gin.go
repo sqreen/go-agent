@@ -8,38 +8,41 @@ import (
 )
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
-// requests Gin receives. It creates and stores the sdk's context into Gin's so
-// that they can be retrieved from handlers to perform sdk calls using
-// `GetHTTPContext()`.
+// requests Gin receives. It creates and stores the HTTP request record into the
+// Gin and request contexts so that it can be later retrieved from handlers
+// using sdk.FromContext() to perform sdk calls.
 //
 //	router := gin.Default()
 //	router.Use(sqgin.Middleware())
 //
 //	router.GET("/", func(c *gin.Context) {
-//		sqgin.GetHTTPContext(c).TrackEvent("my.event.one")
-//		aFunction(c.Request.Context())
+//		sdk.FromContext(c).TrackEvent("my.event.one")
+//		foo(c)
+//		// or foo(c.Request.Context())
 //	}
 //
-//	func aFunction(ctx context.Context) {
-//		sqgin.GetHTTPContext(ctx).TrackEvent("my.event.two")
+//	func foo(ctx context.Context) {
+//		sdk.FromContext(ctx).TrackEvent("my.event.two")
 //		// ...
 //	}
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
-		// Create a sqreen context for this request.
+		// Create a new request record for this request.
 		sqreen := sdk.NewHTTPRequestRecord(c.Request)
+		defer sqreen.Close()
 
-		// Store it into Go's context.
+		// Gin redefines the request context interface, so we need to store it both
+		// in the request and Gin contexts.
+
+		// Store it into the request's context.
+		contextKey := sdk.HTTPRequestRecordContextKey.String
 		ctx := c.Request.Context()
-		ctx = context.WithValue(ctx, sdk.HTTPRequestRecordKey, sqreen)
+		ctx = context.WithValue(ctx, contextKey, sqreen)
 		c.Request = c.Request.WithContext(ctx)
 
 		// Store it into Gin's context.
-		c.Set(sdk.HTTPRequestRecordKey, sqreen)
+		c.Set(contextKey, sqreen)
 
 		c.Next()
-
-		// Close the sqreen context
-		sqreen.Close()
 	}
 }
