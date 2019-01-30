@@ -7,8 +7,6 @@ import (
 	"github.com/sqreen/go-agent/agent"
 )
 
-const HTTPRequestRecordKey = "sqctx"
-
 // HTTPRequestRecord is the context associated to a single HTTP request. It
 // collects every security event happening during the HTTP handling, until the
 // Close() method is called to signal the request is done.
@@ -40,11 +38,16 @@ func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
 //	}
 //
 func GetHTTPContext(ctx context.Context) *HTTPRequestRecord {
-	sqreen := ctx.Value(HTTPRequestRecordKey)
-	if sqreen == nil {
-		return nil
+	v := ctx.Value(HTTPRequestRecordContextKey)
+	if v == nil {
+		// Try with a string since frameworks such as Gin implement it with keys of
+		// type string.
+		v = ctx.Value(HTTPRequestRecordContextKey.String)
+		if v == nil {
+			return nil
+		}
 	}
-	return sqreen.(*HTTPRequestRecord)
+	return v.(*HTTPRequestRecord)
 }
 
 // Close signals the request handling is now done. Every collected security
