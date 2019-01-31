@@ -15,20 +15,16 @@ import (
 	"github.com/sqreen/go-agent/agent/config"
 )
 
-type HTTPRequest interface {
-	StdRequest() *http.Request
-}
-
-type HTTPRequestContext struct {
+type HTTPRequestRecord struct {
 	// Copy of the request, safe to be asynchronously read, even after the request
 	// was terminated.
-	request    HTTPRequest
+	request    *http.Request
 	eventsLock sync.Mutex
 	events     []*HTTPRequestEvent
 }
 
-func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
-	return &HTTPRequestContext{
+func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
+	return &HTTPRequestRecord{
 		request: req,
 	}
 }
@@ -106,7 +102,7 @@ type EventPropertyMap map[string]string
 
 type EventUserIdentifierMap map[string]string
 
-func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestRecord) Track(event string) *HTTPRequestEvent {
 	evt := &HTTPRequestEvent{
 		method:    "track",
 		event:     event,
@@ -116,7 +112,7 @@ func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
 	return evt
 }
 
-func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackAuth(): user id is nil or empty")
 		return
@@ -125,7 +121,7 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request.StdRequest()),
+			ip:             getClientIP(ctx.request),
 			userIdentifier: id,
 			timestamp:      time.Now(),
 		},
@@ -133,7 +129,7 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifierMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackSignup(): user id is nil or empty")
 		return
@@ -141,7 +137,7 @@ func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request.StdRequest()),
+			ip:             getClientIP(ctx.request),
 			userIdentifier: id,
 			timestamp:      time.Now(),
 		},
@@ -149,17 +145,17 @@ func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestContext) Close() {
+func (ctx *HTTPRequestRecord) Close() {
 	addTrackEvent(newHTTPRequestRecord(ctx))
 }
 
-func (ctx *HTTPRequestContext) addTrackEvent(event *HTTPRequestEvent) {
+func (ctx *HTTPRequestRecord) addTrackEvent(event *HTTPRequestEvent) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
 }
 
-func (ctx *HTTPRequestContext) addUserEvent(event userEventFace) {
+func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
 	addUserEvent(event)
 }
 
@@ -213,11 +209,11 @@ func (e *HTTPRequestEvent) Proto() proto.Message {
 }
 
 type httpRequestRecord struct {
-	ctx         *HTTPRequestContext
+	ctx         *HTTPRequestRecord
 	rulespackID string
 }
 
-func newHTTPRequestRecord(event *HTTPRequestContext) *httpRequestRecord {
+func newHTTPRequestRecord(event *HTTPRequestRecord) *httpRequestRecord {
 	return &httpRequestRecord{
 		ctx: event,
 	}
@@ -236,7 +232,7 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request.StdRequest())
+	return getClientIP(r.ctx.request)
 }
 
 func getClientIP(req *http.Request) string {
@@ -290,7 +286,7 @@ func getClientIP(req *http.Request) string {
 }
 
 func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
-	req := r.ctx.request.StdRequest()
+	req := r.ctx.request
 
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
 	for _, header := range config.TrackedHTTPHeaders {
