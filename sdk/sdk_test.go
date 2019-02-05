@@ -25,32 +25,39 @@ func TestSDK(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		eventId := testlib.RandString(2, 50)
 		uid := testlib.RandString(2, 50)
-		idMap := EventUserIdentifierMap{"uid": uid}
+		idMap := EventUserIdentifiersMap{"uid": uid}
 		event := ctx.TrackEvent(eventId)
 		require.Equal(t, event.impl.GetName(), "track")
 
 		t.Run("with user identifier", func(t *testing.T) {
-			event.WithUserIdentifier(idMap)
+			event.WithUserIdentifiers(idMap)
 			args := event.impl.GetArgs()
 			require.Equal(t, 2, len(args))
 			require.Equal(t, args[0].(string), eventId)
-			require.Equal(t, args[1].(*api.RequestRecord_Observed_SDKEvent_Options).GetUserIdentifiers().Value, agent.EventUserIdentifierMap(idMap))
+			require.Equal(t, args[1].(*api.RequestRecord_Observed_SDKEvent_Options).GetUserIdentifiers().Value, agent.EventUserIdentifiersMap(idMap))
 		})
 	})
 
 	t.Run("TrackAuth", func(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
-		idMap := EventUserIdentifierMap{"uid": uid}
+		idMap := EventUserIdentifiersMap{"uid": uid}
 		success := true
-		ctx.TrackAuth(success, idMap)
+		ctx.User(idMap).TrackAuth(success)
 	})
 
 	t.Run("TrackSignup", func(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
-		idMap := EventUserIdentifierMap{"uid": uid}
-		ctx.TrackSignup(idMap)
+		idMap := EventUserIdentifiersMap{"uid": uid}
+		ctx.User(idMap).TrackSignup()
+	})
+
+	t.Run("TrackIdentify", func(t *testing.T) {
+		ctx := NewHTTPRequestRecord(newFakeRequest())
+		uid := testlib.RandString(2, 50)
+		idMap := EventUserIdentifiersMap{"uid": uid}
+		ctx.User(idMap).TrackIdentify()
 	})
 }
 
@@ -67,10 +74,10 @@ func testDisabledSDKCalls(t *testing.T, ctx *HTTPRequestRecord) {
 	require.Nil(t, event)
 	event = event.WithTimestamp(time.Now())
 	require.Nil(t, event)
-	uid := EventUserIdentifierMap{"uid": "uid"}
-	ctx.TrackAuth(true, uid)
-	ctx.TrackAuthSuccess(uid)
-	ctx.TrackAuthFailure(uid)
-	ctx.TrackSignup(uid)
+	uid := EventUserIdentifiersMap{"uid": "uid"}
+	ctx.User(uid).TrackSignup().TrackAuth(true).TrackEvent("password.changed")
+	ctx.User(uid).TrackAuthSuccess()
+	ctx.User(uid).TrackAuthFailure()
+	ctx.User(uid).TrackSignup()
 	ctx.Close()
 }

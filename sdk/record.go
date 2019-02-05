@@ -8,18 +8,19 @@ import (
 )
 
 // HTTPRequestRecord is the SDK record associated to a HTTP request. Its methods
-// allow request handlers to signal security events, identify users, etc.
+// allow request handlers to track custom security events.
 type HTTPRequestRecord struct {
 	ctx *agent.HTTPRequestRecord
 }
 
-// EventUserIdentifierMap is the type used to represent user identifiers in
-// collected events.
+// EventUserIdentifiersMap is the type used to represent user identifiers in
+// collected events. It is a key-value map that should uniquely identify a user
+// so that future or past events get correctly correlated.
 //
-//	uid := sdk.EventUserIdentifierMap{"uid": "my-uid"}
-//	sdk.FromContext(ctx).Identify(uid)
+//	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+//	sdk.FromContext(ctx).User(uid).TrackIdentify()
 //
-type EventUserIdentifierMap map[string]string
+type EventUserIdentifiersMap map[string]string
 
 // NewHTTPRequestRecord returns a new HTTP request record for the given HTTP
 // request.
@@ -73,53 +74,34 @@ func (ctx *HTTPRequestRecord) Close() {
 // the returned value's methods, such as `WithProperties()` or
 // `WithTimestamp()`. A call to this method creates a new event.
 //
-//	uid := sdk.EventUserIdentifierMap{"uid": "my-uid"}
+//	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //	props := sdk.EventPropertyMap{"key": "value"}
 //	sqreen := sdk.FromContext(ctx)
-//	sqreen.TrackEvent("my.event").WithUserIdentifier(uid).WithProperties(props)
+//	sqreen.TrackEvent("my.event").WithUserIdentifiers(uid).WithProperties(props)
 //
 func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
-	return &HTTPRequestEvent{ctx.ctx.Track(event)}
+	return &HTTPRequestEvent{ctx.ctx.TrackEvent(event)}
 }
 
-// TrackAuth allows to track a user authentication. The given user identifier
-// value `id` is a map uniquely identifying the user. The boolean value
-// `loginSuccess` must be true when the user successfully logged in, false
-// otherwise. A call to this method creates a new event.
+// User returns a new SDK context for the given user uniquely identified by
+// `id`. Its methods allow to track security events related to this user. A call
+// to this method does not create a new event.
 //
-//	sqreen := sdk.FromContext(ctx)
-//	sqreen.TrackAuth(granted, sdk.EventUserIdentifierMap{"uid": "my-uid"})
+//	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+//	sqUser := sdk.FromContext(ctx).User(uid)
+//	sqUser.TrackAuthSuccess()
+//	props := sdk.EventPropertyMap{"key": "value"}
+//	sqUser.TrackEvent("my.event.one").WithProperties(props)
 //
-func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) User(id EventUserIdentifiersMap) *UserHTTPRequestRecord {
 	if ctx == nil {
-		return
+		return nil
 	}
-	ctx.ctx.TrackAuth(loginSuccess, agent.EventUserIdentifierMap(id))
-}
-
-// TrackAuthSuccess is equivalent to `TrackAuth(true, id)`.
-func (ctx *HTTPRequestRecord) TrackAuthSuccess(id EventUserIdentifierMap) {
-	ctx.TrackAuth(true, id)
-}
-
-// TrackAuthFailure is equivalent to `TrackAuth(false, id)`.
-func (ctx *HTTPRequestRecord) TrackAuthFailure(id EventUserIdentifierMap) {
-	ctx.TrackAuth(false, id)
-}
-
-// TrackSignup allows to track a user signup. The given user identifier value
-// `id` is a map uniquely identifying the user. A call to this method creates a
-// new event.
-//
-//	sqreen := sdk.FromContext(ctx)
-//	sqreen.TrackSignup(sdk.EventUserIdentifierMap{"uid": "my-uid"})
-//
-func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifierMap) {
-	if ctx == nil {
-		return
+	return &UserHTTPRequestRecord{
+		ctx: ctx.ctx,
+		id:  id,
 	}
-	ctx.ctx.TrackSignup(agent.EventUserIdentifierMap(id))
 }

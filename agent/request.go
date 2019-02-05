@@ -30,11 +30,11 @@ func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
 }
 
 type HTTPRequestEvent struct {
-	method         string
-	event          string
-	properties     EventPropertyMap
-	userIdentifier EventUserIdentifierMap
-	timestamp      time.Time
+	method          string
+	event           string
+	properties      EventPropertyMap
+	userIdentifiers EventUserIdentifiersMap
+	timestamp       time.Time
 }
 
 type userEventFace interface {
@@ -43,9 +43,9 @@ type userEventFace interface {
 }
 
 type userEvent struct {
-	userIdentifier EventUserIdentifierMap
-	timestamp      time.Time
-	ip             string
+	userIdentifiers EventUserIdentifiersMap
+	timestamp       time.Time
+	ip              string
 }
 
 type authUserEvent struct {
@@ -57,14 +57,14 @@ func (_ *authUserEvent) isUserEvent() {}
 
 func (e *authUserEvent) bucketID() (string, error) {
 	k := &userMetricKey{
-		id: e.userEvent.userIdentifier,
+		id: e.userEvent.userIdentifiers,
 		ip: e.userEvent.ip,
 	}
 	return k.bucketID()
 }
 
 type userMetricKey struct {
-	id EventUserIdentifierMap
+	id EventUserIdentifiersMap
 	ip string
 }
 
@@ -90,7 +90,7 @@ type signupUserEvent struct {
 
 func (e *signupUserEvent) bucketID() (string, error) {
 	k := &userMetricKey{
-		id: e.userEvent.userIdentifier,
+		id: e.userEvent.userIdentifiers,
 		ip: e.userEvent.ip,
 	}
 	return k.bucketID()
@@ -100,19 +100,29 @@ func (_ *signupUserEvent) isUserEvent() {}
 
 type EventPropertyMap map[string]string
 
-type EventUserIdentifierMap map[string]string
+type EventUserIdentifiersMap map[string]string
 
-func (ctx *HTTPRequestRecord) Track(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	evt := &HTTPRequestEvent{
 		method:    "track",
 		event:     event,
 		timestamp: time.Now(),
 	}
-	ctx.addTrackEvent(evt)
+	ctx.addEvent(evt)
 	return evt
 }
 
-func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) *HTTPRequestEvent {
+	evt := &HTTPRequestEvent{
+		method:          "identify",
+		timestamp:       time.Now(),
+		userIdentifiers: id,
+	}
+	ctx.addEvent(evt)
+	return evt
+}
+
+func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifiersMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackAuth(): user id is nil or empty")
 		return
@@ -121,15 +131,15 @@ func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifie
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request),
-			userIdentifier: id,
-			timestamp:      time.Now(),
+			ip:              getClientIP(ctx.request),
+			userIdentifiers: id,
+			timestamp:       time.Now(),
 		},
 	}
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifiersMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackSignup(): user id is nil or empty")
 		return
@@ -137,9 +147,9 @@ func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifierMap) {
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request),
-			userIdentifier: id,
-			timestamp:      time.Now(),
+			ip:              getClientIP(ctx.request),
+			userIdentifiers: id,
+			timestamp:       time.Now(),
 		},
 	}
 	ctx.addUserEvent(event)
@@ -149,7 +159,7 @@ func (ctx *HTTPRequestRecord) Close() {
 	addTrackEvent(newHTTPRequestRecord(ctx))
 }
 
-func (ctx *HTTPRequestRecord) addTrackEvent(event *HTTPRequestEvent) {
+func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
@@ -175,11 +185,11 @@ func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent 
 	return e
 }
 
-func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifierMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifiersMap) *HTTPRequestEvent {
 	if e == nil {
 		return nil
 	}
-	e.userIdentifier = id
+	e.userIdentifiers = id
 	return e
 }
 
@@ -201,7 +211,7 @@ func (e *HTTPRequestEvent) GetProperties() *api.Struct {
 }
 
 func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
-	return &api.Struct{e.userIdentifier}
+	return &api.Struct{e.userIdentifiers}
 }
 
 func (e *HTTPRequestEvent) Proto() proto.Message {
