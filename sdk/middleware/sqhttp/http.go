@@ -16,7 +16,7 @@ import (
 //		sdk.FromContext(r.Context()).TrackEvent("my.event")
 //		fmt.Fprintf(w, "OK")
 //	}
-//	http.HandleFunc("/foo", sqhttp.Middleware(http.HandlerFunc(fn)))
+//	http.Handle("/foo", sqhttp.Middleware(http.HandlerFunc(fn)))
 //
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
