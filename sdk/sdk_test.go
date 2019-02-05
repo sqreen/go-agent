@@ -43,21 +43,21 @@ func TestSDK(t *testing.T) {
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifiersMap{"uid": uid}
 		success := true
-		ctx.User(idMap).TrackAuth(success)
+		ctx.FromUser(idMap).TrackAuth(success)
 	})
 
 	t.Run("TrackSignup", func(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifiersMap{"uid": uid}
-		ctx.User(idMap).TrackSignup()
+		ctx.ForUser(idMap).TrackSignup()
 	})
 
 	t.Run("TrackIdentify", func(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifiersMap{"uid": uid}
-		ctx.User(idMap).TrackIdentify()
+		ctx.ForUser(idMap).TrackIdentify()
 	})
 }
 
@@ -75,9 +75,9 @@ func testDisabledSDKCalls(t *testing.T, ctx *HTTPRequestRecord) {
 	event = event.WithTimestamp(time.Now())
 	require.Nil(t, event)
 	uid := EventUserIdentifiersMap{"uid": "uid"}
-	ctx.User(uid).TrackSignup().TrackAuth(true).TrackEvent("password.changed")
-	ctx.User(uid).TrackAuthSuccess()
-	ctx.User(uid).TrackAuthFailure()
-	ctx.User(uid).TrackSignup()
+	ctx.ForUser(uid).TrackSignup().TrackAuth(true).TrackEvent("password.changed")
+	ctx.ForUser(uid).TrackAuthSuccess()
+	ctx.ForUser(uid).TrackAuthFailure()
+	ctx.ForUser(uid).TrackSignup()
 	ctx.Close()
 }

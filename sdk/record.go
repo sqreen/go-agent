@@ -18,7 +18,7 @@ type HTTPRequestRecord struct {
 // so that future or past events get correctly correlated.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sdk.FromContext(ctx).User(uid).TrackIdentify()
+//	sdk.FromContext(ctx).ForUser(uid).TrackIdentify()
 //
 type EventUserIdentifiersMap map[string]string
 
@@ -86,17 +86,17 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	return &HTTPRequestEvent{ctx.ctx.TrackEvent(event)}
 }
 
-// User returns a new SDK context for the given user uniquely identified by
+// ForUser returns a new SDK context for the given user uniquely identified by
 // `id`. Its methods allow to track security events related to this user. A call
 // to this method does not create a new event.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sqUser := sdk.FromContext(ctx).User(uid)
+//	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.TrackAuthSuccess()
 //	props := sdk.EventPropertyMap{"key": "value"}
 //	sqUser.TrackEvent("my.event.one").WithProperties(props)
 //
-func (ctx *HTTPRequestRecord) User(id EventUserIdentifiersMap) *UserHTTPRequestRecord {
+func (ctx *HTTPRequestRecord) ForUser(id EventUserIdentifiersMap) *UserHTTPRequestRecord {
 	if ctx == nil {
 		return nil
 	}

@@ -16,7 +16,7 @@ type UserHTTPRequestRecord struct {
 // otherwise. A call to this method creates a new event.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sqUser := sdk.FromContext(ctx).User(uid)
+//	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.TrackAuthSuccess()
 //
 func (ctx *UserHTTPRequestRecord) TrackAuth(loginSuccess bool) *UserHTTPRequestRecord {
@@ -41,7 +41,7 @@ func (ctx *UserHTTPRequestRecord) TrackAuthFailure() *UserHTTPRequestRecord {
 // new event.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sqUser := sdk.FromContext(ctx).User(uid)
+//	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.TrackSignup()
 //
 func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
@@ -57,7 +57,7 @@ func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
 // method does not create an event.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sqUser := sdk.FromContext(ctx).User(uid)
+//	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.TrackIdentify()
 //
 func (ctx *UserHTTPRequestRecord) TrackIdentify() *UserHTTPRequestRecord {
@@ -75,7 +75,7 @@ func (ctx *UserHTTPRequestRecord) TrackIdentify() *UserHTTPRequestRecord {
 // method.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sqUser := sdk.FromContext(ctx).User(uid)
+//	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.TrackEvent("my.event")
 //
 func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent {
