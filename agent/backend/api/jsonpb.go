@@ -95,3 +95,46 @@ func (e *BatchRequest_Event) MarshalJSON() ([]byte, error) {
 	buf = []byte(`{"event_type":"` + e.EventType + `",` + string(buf[1:]))
 	return buf, nil
 }
+
+func (e *RequestRecord_Observed_SDKEvent_Args) MarshalJSON() ([]byte, error) {
+	var args json.Marshaler
+	switch actual := e.GetArgs().(type) {
+	case *RequestRecord_Observed_SDKEvent_Args_Track_:
+		args = actual.Track
+	case *RequestRecord_Observed_SDKEvent_Args_Identify_:
+		args = actual.Identify
+	}
+	return args.MarshalJSON()
+}
+
+func (e *RequestRecord_Observed_SDKEvent_Args) MarshalJSONPB(_ *jsonpb.Marshaler) ([]byte, error) {
+	return e.MarshalJSON()
+}
+
+func (track *RequestRecord_Observed_SDKEvent_Args_Track) MarshalJSON() ([]byte, error) {
+	var args ListValue
+	if track != nil {
+		args = append(args, track.GetEvent())
+
+		if options := track.GetOptions(); options != nil {
+			args = append(args, options)
+		}
+	}
+	return args.MarshalJSON()
+}
+
+func (e *RequestRecord_Observed_SDKEvent_Args_Track) MarshalJSONPB(_ *jsonpb.Marshaler) ([]byte, error) {
+	return e.MarshalJSON()
+}
+
+func (identify *RequestRecord_Observed_SDKEvent_Args_Identify) MarshalJSON() ([]byte, error) {
+	var args ListValue
+	if identify != nil {
+		args = append(args, identify.GetUserIdentifiers())
+	}
+	return args.MarshalJSON()
+}
+
+func (e *RequestRecord_Observed_SDKEvent_Args_Identify) MarshalJSONPB(_ *jsonpb.Marshaler) ([]byte, error) {
+	return e.MarshalJSON()
+}

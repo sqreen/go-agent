@@ -44,26 +44,117 @@ var _ = Describe("API", func() {
 
 		Describe("Observed", func() {
 			Describe("SDK events", func() {
-				It("should marshal to an event object", func() {
-					pb := api.ListValue([]interface{}{
-						"my event",
-						&api.RequestRecord_Observed_SDKEvent_Options{
-							Properties: &api.Struct{
-								map[string]interface{}{
-									"key 1": 33,
-									"key 2": "value 2",
-									"key 3": []int{1, 2, 3},
-									"key 4": struct{ A, B int }{A: 16, B: 22},
+				var (
+					pb       *api.RequestRecord_Observed_SDKEvent_Args
+					str      string
+					err      error
+					expected string
+				)
+
+				JustBeforeEach(func() {
+					str, err = api.DefaultJSONPBMarshaler.MarshalToString(pb)
+				})
+
+				Describe("Track event", func() {
+
+					Context("with properties", func() {
+						BeforeEach(func() {
+							expected = `["my event",{"properties":{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}}]`
+							pb = &api.RequestRecord_Observed_SDKEvent_Args{
+								Args: &api.RequestRecord_Observed_SDKEvent_Args_Track_{
+									Track: &api.RequestRecord_Observed_SDKEvent_Args_Track{
+										Event: "my event",
+										Options: &api.RequestRecord_Observed_SDKEvent_Args_Track_Options{
+											Properties: &api.Struct{
+												map[string]interface{}{
+													"key 1": 33,
+													"key 2": "value 2",
+													"key 3": []int{1, 2, 3},
+													"key 4": struct{ A, B int }{A: 16, B: 22},
+												},
+											},
+										},
+									},
+								},
+							}
+						})
+
+						It("should marshal to an event object", func() {
+							Expect(err).NotTo(HaveOccurred())
+							Expect(str).To(Equal(expected))
+						})
+					})
+
+					Context("user identifiers", func() {
+						BeforeEach(func() {
+							expected = `["my event",{"user_identifiers":{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}}]`
+							pb = &api.RequestRecord_Observed_SDKEvent_Args{
+								Args: &api.RequestRecord_Observed_SDKEvent_Args_Track_{
+									Track: &api.RequestRecord_Observed_SDKEvent_Args_Track{
+										Event: "my event",
+										Options: &api.RequestRecord_Observed_SDKEvent_Args_Track_Options{
+											UserIdentifiers: &api.Struct{
+												map[string]interface{}{
+													"key 1": 33,
+													"key 2": "value 2",
+													"key 3": []int{1, 2, 3},
+													"key 4": struct{ A, B int }{A: 16, B: 22},
+												},
+											},
+										},
+									},
+								},
+							}
+						})
+
+						It("should marshal to an event object", func() {
+							Expect(err).NotTo(HaveOccurred())
+							Expect(str).To(Equal(expected))
+						})
+					})
+
+					Context("without options", func() {
+						BeforeEach(func() {
+							expected = `["my event"]`
+							pb = &api.RequestRecord_Observed_SDKEvent_Args{
+								Args: &api.RequestRecord_Observed_SDKEvent_Args_Track_{
+									Track: &api.RequestRecord_Observed_SDKEvent_Args_Track{
+										Event: "my event",
+									},
+								},
+							}
+						})
+
+						It("should marshal to an event object", func() {
+							Expect(err).NotTo(HaveOccurred())
+							Expect(str).To(Equal(expected))
+						})
+					})
+				})
+
+				Describe("Identify event", func() {
+					It("should marshal to an event object", func() {
+						pb := &api.RequestRecord_Observed_SDKEvent_Args{
+							Args: &api.RequestRecord_Observed_SDKEvent_Args_Identify_{
+								Identify: &api.RequestRecord_Observed_SDKEvent_Args_Identify{
+									UserIdentifiers: &api.Struct{
+										map[string]interface{}{
+											"key 1": 33,
+											"key 2": "value 2",
+											"key 3": []int{1, 2, 3},
+											"key 4": struct{ A, B int }{A: 16, B: 22},
+										},
+									},
 								},
 							},
-						},
+						}
+
+						str, err := api.DefaultJSONPBMarshaler.MarshalToString(pb)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(str).To(Equal(`[{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}]`))
 					})
-					str, err := api.DefaultJSONPBMarshaler.MarshalToString(pb)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(str).To(Equal(`["my event",{"properties":{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}}]`))
 				})
 			})
 		})
 	})
-
 })
