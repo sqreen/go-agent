@@ -52,22 +52,6 @@ func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
 	return ctx
 }
 
-// TrackIdentify allows to globally identify a user for the current request.
-// Every event will be automtically associated to this user. A call to this
-// method does not create an event.
-//
-//	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sqUser := sdk.FromContext(ctx).ForUser(uid)
-//	sqUser.TrackIdentify()
-//
-func (ctx *UserHTTPRequestRecord) TrackIdentify() *UserHTTPRequestRecord {
-	if ctx == nil {
-		return nil
-	}
-	ctx.ctx.TrackIdentify(agent.EventUserIdentifiersMap(ctx.id))
-	return ctx
-}
-
 // TrackEvent allows to send a custom security event related to the user. A call
 // to this method creates an event. Note that the top-level `TrackEvent()` does
 // not associate any user unless you call the method `WithUserCredentials()`. To
@@ -82,6 +66,6 @@ func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent
 	if ctx == nil {
 		return nil
 	}
-	ctx.TrackIdentify()
+	ctx.ctx.TrackIdentify(agent.EventUserIdentifiersMap(ctx.id))
 	return &UserHTTPRequestEvent{&HTTPRequestEvent{ctx.ctx.TrackEvent(event)}}
 }

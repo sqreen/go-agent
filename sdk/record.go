@@ -14,11 +14,12 @@ type HTTPRequestRecord struct {
 }
 
 // EventUserIdentifiersMap is the type used to represent user identifiers in
-// collected events. It is a key-value map that should uniquely identify a user
-// so that future or past events get correctly correlated.
+// collected events. It is a key-value map that should uniquely identify a user.
+//
+// For example:
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//	sdk.FromContext(ctx).ForUser(uid).TrackIdentify()
+//	sdk.FromContext(ctx).ForUser(uid).TrackEvent("my.event")
 //
 type EventUserIdentifiersMap map[string]string
 
@@ -97,7 +98,7 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 //	sqUser.TrackEvent("my.event.one").WithProperties(props)
 //
 func (ctx *HTTPRequestRecord) ForUser(id EventUserIdentifiersMap) *UserHTTPRequestRecord {
-	if ctx == nil {
+	if ctx == nil || len(id) == 0 {
 		return nil
 	}
 	return &UserHTTPRequestRecord{
