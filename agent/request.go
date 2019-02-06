@@ -18,9 +18,10 @@ import (
 type HTTPRequestRecord struct {
 	// Copy of the request, safe to be asynchronously read, even after the request
 	// was terminated.
-	request    *http.Request
-	eventsLock sync.Mutex
-	events     []*HTTPRequestEvent
+	request      *http.Request
+	eventsLock   sync.Mutex
+	events       []*HTTPRequestEvent
+	identifyOnce sync.Once
 }
 
 func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
@@ -102,9 +103,14 @@ type EventPropertyMap map[string]string
 
 type EventUserIdentifiersMap map[string]string
 
+const (
+	sdkMethodIdentify = "identify"
+	sdkMethodTrack    = "track"
+)
+
 func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	evt := &HTTPRequestEvent{
-		method:    "track",
+		method:    sdkMethodTrack,
 		event:     event,
 		timestamp: time.Now(),
 	}
@@ -112,14 +118,15 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	return evt
 }
 
-func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) *HTTPRequestEvent {
-	evt := &HTTPRequestEvent{
-		method:          "identify",
-		timestamp:       time.Now(),
-		userIdentifiers: id,
-	}
-	ctx.addEvent(evt)
-	return evt
+func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) {
+	ctx.identifyOnce.Do(func() {
+		evt := &HTTPRequestEvent{
+			method:          sdkMethodIdentify,
+			timestamp:       time.Now(),
+			userIdentifiers: id,
+		}
+		ctx.addEvent(evt)
+	})
 }
 
 func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifiersMap) {
@@ -201,16 +208,34 @@ func (e *HTTPRequestEvent) GetName() string {
 	return e.method
 }
 
-func (e *HTTPRequestEvent) GetArgs() api.ListValue {
-	opts := api.NewRequestRecord_Observed_SDKEvent_OptionsFromFace(e)
-	return api.ListValue([]interface{}{e.event, opts})
+func (e *HTTPRequestEvent) GetEvent() string {
+	return e.event
+}
+
+func (e *HTTPRequestEvent) GetArgs() (args api.RequestRecord_Observed_SDKEvent_Args) {
+	if e.method == sdkMethodTrack {
+		args.Args = &api.RequestRecord_Observed_SDKEvent_Args_Track_{api.NewRequestRecord_Observed_SDKEvent_Args_TrackFromFace(e)}
+	} else if e.method == sdkMethodIdentify {
+		args.Args = &api.RequestRecord_Observed_SDKEvent_Args_Identify_{api.NewRequestRecord_Observed_SDKEvent_Args_IdentifyFromFace(e)}
+	}
+	return
+}
+
+func (e *HTTPRequestEvent) GetOptions() *api.RequestRecord_Observed_SDKEvent_Args_Track_Options {
+	return api.NewRequestRecord_Observed_SDKEvent_Args_Track_OptionsFromFace(e)
 }
 
 func (e *HTTPRequestEvent) GetProperties() *api.Struct {
+	if len(e.properties) == 0 {
+		return nil
+	}
 	return &api.Struct{e.properties}
 }
 
 func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
+	if len(e.userIdentifiers) == 0 {
+		return nil
+	}
 	return &api.Struct{e.userIdentifiers}
 }
 
