@@ -59,7 +59,7 @@ func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent 
 //	sdk.FromContext(ctx).Identify(uid)
 //
 func (e *HTTPRequestEvent) WithUserIdentifiers(id EventUserIdentifiersMap) *HTTPRequestEvent {
-	if e == nil {
+	if e == nil || len(id) == 0 {
 		return nil
 	}
 	e.impl.WithUserIdentifier(agent.EventUserIdentifiersMap(id))

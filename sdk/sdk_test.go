@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sqreen/go-agent/agent"
-	"github.com/sqreen/go-agent/agent/backend/api"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +29,6 @@ func TestSDK(t *testing.T) {
 
 		t.Run("with user identifier", func(t *testing.T) {
 			event.WithUserIdentifiers(idMap)
-			args := event.impl.GetArgs()
-			require.Equal(t, 2, len(args))
-			require.Equal(t, args[0].(string), eventId)
-			require.Equal(t, args[1].(*api.RequestRecord_Observed_SDKEvent_Options).GetUserIdentifiers().Value, agent.EventUserIdentifiersMap(idMap))
 		})
 	})
 
@@ -43,7 +37,7 @@ func TestSDK(t *testing.T) {
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifiersMap{"uid": uid}
 		success := true
-		ctx.FromUser(idMap).TrackAuth(success)
+		ctx.ForUser(idMap).TrackAuth(success)
 	})
 
 	t.Run("TrackSignup", func(t *testing.T) {
@@ -53,11 +47,11 @@ func TestSDK(t *testing.T) {
 		ctx.ForUser(idMap).TrackSignup()
 	})
 
-	t.Run("TrackIdentify", func(t *testing.T) {
+	t.Run("Identify", func(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifiersMap{"uid": uid}
-		ctx.ForUser(idMap).TrackIdentify()
+		ctx.ForUser(idMap).TrackEvent("my.event")
 	})
 }
 
