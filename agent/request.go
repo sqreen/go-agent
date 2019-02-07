@@ -323,8 +323,12 @@ func getClientIP(req *http.Request) string {
 func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	req := r.ctx.request
 
+	trackedHeaders := config.TrackedHTTPHeaders
+	if extraHeader := config.HTTPClientIPHeader(); extraHeader != "" {
+		trackedHeaders = append(trackedHeaders, extraHeader)
+	}
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
-	for _, header := range config.TrackedHTTPHeaders {
+	for _, header := range trackedHeaders {
 		if value := req.Header.Get(header); value != "" {
 			headers = append(headers, api.RequestRecord_Request_Header{
 				Key:   header,
