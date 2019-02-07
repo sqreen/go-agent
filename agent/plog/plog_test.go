@@ -39,7 +39,7 @@ var _ = Describe("plog", func() {
 				}
 
 				var allDurationAvg, disabledDurationAvg uint64
-				for n := uint64(1); n <= 1000; n++ {
+				for n := uint64(1); n <= 5000; n++ {
 					logger.SetLevel(plog.Debug)
 					allDuration := b.Time("info log level", doLog)
 					Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "debug")))
