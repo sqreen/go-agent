@@ -8,6 +8,8 @@ package config
 import (
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,7 +18,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var manager = viper.New()
+var manager *viper.Viper
 
 type HTTPAPIEndpoint struct {
 	Method, URL string
@@ -170,10 +172,11 @@ var (
 const (
 	configEnvPrefix    = `sqreen`
 	configFileBasename = `sqreen`
-	configFilePath     = `.`
 )
 
 const (
+	configEnvKeyConfigFile = `config_file`
+
 	configKeyBackendHTTPAPIBaseURL = `url`
 	configKeyBackendHTTPAPIToken   = `token`
 	configKeyLogLevel              = `log_level`
@@ -190,10 +193,36 @@ const (
 )
 
 func init() {
+	New()
+}
+
+func New() {
+	logger := plog.NewLogger("sqreen/agent/config")
+
+	manager = viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()
 	manager.SetConfigName(configFileBasename)
-	manager.AddConfigPath(configFilePath)
+
+	// Configuration file path options
+	configFileEnvVar := strings.ToUpper(configEnvPrefix + "_" + configEnvKeyConfigFile)
+	if file := os.Getenv(configFileEnvVar); file != "" {
+		// File location enforced by the user
+		manager.SetConfigFile(file)
+	} else {
+		// Not enforced: add possible paths in precedence order
+
+		// 1. Current working directory path:
+		manager.AddConfigPath(`.`)
+
+		// 2. Executable path
+		exec, err := os.Executable()
+		if err != nil {
+			logger.Error("could not read the executable file path: ", err)
+		} else {
+			manager.AddConfigPath(filepath.Dir(exec))
+		}
+	}
 
 	manager.SetDefault(configKeyBackendHTTPAPIBaseURL, configDefaultBackendHTTPAPIBaseURL)
 	manager.SetDefault(configKeyLogLevel, configDefaultLogLevel)
@@ -202,11 +231,9 @@ func init() {
 	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	manager.SetDefault(configKeyDisable, "")
 
-	logger := plog.NewLogger("sqreen/agent/config")
-
 	err := manager.ReadInConfig()
 	if err != nil {
-		logger.Error("configuration file read error:", err)
+		logger.Error("could not read the configuration file: ", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -82,11 +83,48 @@ func TestUserConfig(t *testing.T) {
 		})
 
 		t.Run("Set through configuration file", func(t *testing.T) {
-			filename := newCfgFile(t, envKey+`: `+someValue)
+			filename := newCfgFile(t, ".", envKey+`: `+someValue)
 			defer os.Remove(filename)
 			manager.ReadInConfig()
 			require.Equal(t, getCfgValue(), !defaultValue)
 		})
+	})
+
+	t.Run("File location", func(t *testing.T) {
+		require := require.New(t)
+
+		execFile, err := os.Executable()
+		require.NoError(err)
+		binDir := filepath.Dir(execFile)
+		binDirToken := "exec-token"
+		binDirFile := newCfgFile(t, binDir, `token: `+binDirToken)
+		defer os.Remove(binDirFile)
+
+		New()
+		token := BackendHTTPAPIToken()
+		require.Equal(binDirToken, token)
+
+		cwdToken := "cwd-token"
+		cwdFile := newCfgFile(t, ".", `token: `+cwdToken)
+		defer os.Remove(cwdFile)
+
+		New()
+		token = BackendHTTPAPIToken()
+		require.Equal(cwdToken, token)
+
+		tmpToken := "tmp-token"
+		tmpDir := "./" + testlib.RandString(4)
+		tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
+		defer os.Remove(tmpFile)
+		os.Setenv("SQREEN_CONFIG_FILE", tmpFile)
+		New()
+		token = BackendHTTPAPIToken()
+		require.Equal(tmpToken, token)
+
+		os.Unsetenv("SQREEN_CONFIG_FILE")
+		New()
+		token = BackendHTTPAPIToken()
+		require.Equal(cwdToken, token)
 	})
 }
 
@@ -104,7 +142,7 @@ func testStringValue(t *testing.T, name string, getCfgValue func() string, envKe
 		})
 
 		t.Run("Set through configuration file", func(t *testing.T) {
-			filename := newCfgFile(t, envKey+`: `+someValue)
+			filename := newCfgFile(t, ".", envKey+`: `+someValue)
 			defer os.Remove(filename)
 			manager.ReadInConfig()
 			require.Equal(t, getCfgValue(), someValue)
@@ -112,11 +150,12 @@ func testStringValue(t *testing.T, name string, getCfgValue func() string, envKe
 	})
 }
 
-func newCfgFile(t *testing.T, content string) string {
-	cfg, err := os.Create("sqreen.yml")
-	require.Equal(t, err, nil)
+func newCfgFile(t *testing.T, path string, content string) string {
+	os.MkdirAll(path, 0700)
+	cfg, err := os.Create(path + "/sqreen.yml")
+	require.NoError(t, err)
 	defer cfg.Close()
 	_, err = cfg.WriteString(content)
-	require.Equal(t, err, nil)
+	require.NoError(t, err)
 	return cfg.Name()
 }
