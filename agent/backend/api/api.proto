@@ -7,7 +7,6 @@ import "google/protobuf/struct.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "api";
-option (gogoproto.gostring_all) = true;
 option (gogoproto.populate_all) = true;
 option (gogoproto.face_all) = true;
 option (gogoproto.goproto_getters_all) = false;
@@ -147,14 +146,44 @@ message RequestRecord {
     }
 
     message SDKEvent {
-      message Options {
-        google.protobuf.Struct properties = 1 [(gogoproto.customtype) = "Struct"];
-        google.protobuf.Struct user_identifiers = 2 [(gogoproto.customtype) = "Struct"];
+      // Helper message type to disable the face extension only on it and not in
+      // the entire SDKEvent message type. oneof + face is not supported.
+      message Args {
+        option (gogoproto.face) = false;
+
+        // Serialized into:
+        // [
+        //   "<name>",
+        //   {
+        //     "user_identifiers": <user_identifiers>,
+        //     "properties": <properties>
+        //   }
+        // ]
+        message Track {
+          message Options {
+            google.protobuf.Struct properties = 1 [(gogoproto.customtype) = "Struct"];
+            google.protobuf.Struct user_identifiers = 2 [(gogoproto.customtype) = "Struct"];
+          }
+          string event = 1; // inlined
+          Options options = 2; // inlined
+        }
+
+        // Serialized into:
+        // [ <user_identifiers> ]
+        message Identify
+        {
+          google.protobuf.Struct user_identifiers = 1 [(gogoproto.customtype) = "Struct"]; // inlined
+        }
+
+        oneof args {
+          Track    track = 1;
+          Identify identify = 2;
+        } // inlined
       }
 
       google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
       string name = 2;
-      google.protobuf.ListValue args = 3 [(gogoproto.customtype) = "ListValue", (gogoproto.nullable) = false];
+      Args args = 3 [(gogoproto.nullable) = false]; // inlined
     }
 
     message Exception {

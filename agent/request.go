@@ -15,30 +15,27 @@ import (
 	"github.com/sqreen/go-agent/agent/config"
 )
 
-type HTTPRequest interface {
-	StdRequest() *http.Request
-}
-
-type HTTPRequestContext struct {
+type HTTPRequestRecord struct {
 	// Copy of the request, safe to be asynchronously read, even after the request
 	// was terminated.
-	request    HTTPRequest
-	eventsLock sync.Mutex
-	events     []*HTTPRequestEvent
+	request      *http.Request
+	eventsLock   sync.Mutex
+	events       []*HTTPRequestEvent
+	identifyOnce sync.Once
 }
 
-func NewHTTPRequestContext(req HTTPRequest) *HTTPRequestContext {
-	return &HTTPRequestContext{
+func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
+	return &HTTPRequestRecord{
 		request: req,
 	}
 }
 
 type HTTPRequestEvent struct {
-	method         string
-	event          string
-	properties     EventPropertyMap
-	userIdentifier EventUserIdentifierMap
-	timestamp      time.Time
+	method          string
+	event           string
+	properties      EventPropertyMap
+	userIdentifiers EventUserIdentifiersMap
+	timestamp       time.Time
 }
 
 type userEventFace interface {
@@ -47,9 +44,9 @@ type userEventFace interface {
 }
 
 type userEvent struct {
-	userIdentifier EventUserIdentifierMap
-	timestamp      time.Time
-	ip             string
+	userIdentifiers EventUserIdentifiersMap
+	timestamp       time.Time
+	ip              string
 }
 
 type authUserEvent struct {
@@ -61,14 +58,14 @@ func (_ *authUserEvent) isUserEvent() {}
 
 func (e *authUserEvent) bucketID() (string, error) {
 	k := &userMetricKey{
-		id: e.userEvent.userIdentifier,
+		id: e.userEvent.userIdentifiers,
 		ip: e.userEvent.ip,
 	}
 	return k.bucketID()
 }
 
 type userMetricKey struct {
-	id EventUserIdentifierMap
+	id EventUserIdentifiersMap
 	ip string
 }
 
@@ -94,7 +91,7 @@ type signupUserEvent struct {
 
 func (e *signupUserEvent) bucketID() (string, error) {
 	k := &userMetricKey{
-		id: e.userEvent.userIdentifier,
+		id: e.userEvent.userIdentifiers,
 		ip: e.userEvent.ip,
 	}
 	return k.bucketID()
@@ -104,19 +101,35 @@ func (_ *signupUserEvent) isUserEvent() {}
 
 type EventPropertyMap map[string]string
 
-type EventUserIdentifierMap map[string]string
+type EventUserIdentifiersMap map[string]string
 
-func (ctx *HTTPRequestContext) Track(event string) *HTTPRequestEvent {
+const (
+	sdkMethodIdentify = "identify"
+	sdkMethodTrack    = "track"
+)
+
+func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	evt := &HTTPRequestEvent{
-		method:    "track",
+		method:    sdkMethodTrack,
 		event:     event,
 		timestamp: time.Now(),
 	}
-	ctx.addTrackEvent(evt)
+	ctx.addEvent(evt)
 	return evt
 }
 
-func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) {
+	ctx.identifyOnce.Do(func() {
+		evt := &HTTPRequestEvent{
+			method:          sdkMethodIdentify,
+			timestamp:       time.Now(),
+			userIdentifiers: id,
+		}
+		ctx.addEvent(evt)
+	})
+}
+
+func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifiersMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackAuth(): user id is nil or empty")
 		return
@@ -125,15 +138,15 @@ func (ctx *HTTPRequestContext) TrackAuth(loginSuccess bool, id EventUserIdentifi
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request.StdRequest()),
-			userIdentifier: id,
-			timestamp:      time.Now(),
+			ip:              getClientIP(ctx.request),
+			userIdentifiers: id,
+			timestamp:       time.Now(),
 		},
 	}
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
+func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifiersMap) {
 	if len(id) == 0 {
 		logger.Warn("TrackSignup(): user id is nil or empty")
 		return
@@ -141,25 +154,25 @@ func (ctx *HTTPRequestContext) TrackSignup(id EventUserIdentifierMap) {
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:             getClientIP(ctx.request.StdRequest()),
-			userIdentifier: id,
-			timestamp:      time.Now(),
+			ip:              getClientIP(ctx.request),
+			userIdentifiers: id,
+			timestamp:       time.Now(),
 		},
 	}
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestContext) Close() {
+func (ctx *HTTPRequestRecord) Close() {
 	addTrackEvent(newHTTPRequestRecord(ctx))
 }
 
-func (ctx *HTTPRequestContext) addTrackEvent(event *HTTPRequestEvent) {
+func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
 }
 
-func (ctx *HTTPRequestContext) addUserEvent(event userEventFace) {
+func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
 	addUserEvent(event)
 }
 
@@ -179,11 +192,11 @@ func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent 
 	return e
 }
 
-func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifierMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifiersMap) *HTTPRequestEvent {
 	if e == nil {
 		return nil
 	}
-	e.userIdentifier = id
+	e.userIdentifiers = id
 	return e
 }
 
@@ -195,17 +208,35 @@ func (e *HTTPRequestEvent) GetName() string {
 	return e.method
 }
 
-func (e *HTTPRequestEvent) GetArgs() api.ListValue {
-	opts := api.NewRequestRecord_Observed_SDKEvent_OptionsFromFace(e)
-	return api.ListValue([]interface{}{e.event, opts})
+func (e *HTTPRequestEvent) GetEvent() string {
+	return e.event
+}
+
+func (e *HTTPRequestEvent) GetArgs() (args api.RequestRecord_Observed_SDKEvent_Args) {
+	if e.method == sdkMethodTrack {
+		args.Args = &api.RequestRecord_Observed_SDKEvent_Args_Track_{api.NewRequestRecord_Observed_SDKEvent_Args_TrackFromFace(e)}
+	} else if e.method == sdkMethodIdentify {
+		args.Args = &api.RequestRecord_Observed_SDKEvent_Args_Identify_{api.NewRequestRecord_Observed_SDKEvent_Args_IdentifyFromFace(e)}
+	}
+	return
+}
+
+func (e *HTTPRequestEvent) GetOptions() *api.RequestRecord_Observed_SDKEvent_Args_Track_Options {
+	return api.NewRequestRecord_Observed_SDKEvent_Args_Track_OptionsFromFace(e)
 }
 
 func (e *HTTPRequestEvent) GetProperties() *api.Struct {
+	if len(e.properties) == 0 {
+		return nil
+	}
 	return &api.Struct{e.properties}
 }
 
 func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
-	return &api.Struct{e.userIdentifier}
+	if len(e.userIdentifiers) == 0 {
+		return nil
+	}
+	return &api.Struct{e.userIdentifiers}
 }
 
 func (e *HTTPRequestEvent) Proto() proto.Message {
@@ -213,11 +244,11 @@ func (e *HTTPRequestEvent) Proto() proto.Message {
 }
 
 type httpRequestRecord struct {
-	ctx         *HTTPRequestContext
+	ctx         *HTTPRequestRecord
 	rulespackID string
 }
 
-func newHTTPRequestRecord(event *HTTPRequestContext) *httpRequestRecord {
+func newHTTPRequestRecord(event *HTTPRequestRecord) *httpRequestRecord {
 	return &httpRequestRecord{
 		ctx: event,
 	}
@@ -236,7 +267,7 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request.StdRequest())
+	return getClientIP(r.ctx.request)
 }
 
 func getClientIP(req *http.Request) string {
@@ -290,10 +321,14 @@ func getClientIP(req *http.Request) string {
 }
 
 func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
-	req := r.ctx.request.StdRequest()
+	req := r.ctx.request
 
+	trackedHeaders := config.TrackedHTTPHeaders
+	if extraHeader := config.HTTPClientIPHeader(); extraHeader != "" {
+		trackedHeaders = append(trackedHeaders, extraHeader)
+	}
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
-	for _, header := range config.TrackedHTTPHeaders {
+	for _, header := range trackedHeaders {
 		if value := req.Header.Get(header); value != "" {
 			headers = append(headers, api.RequestRecord_Request_Header{
 				Key:   header,

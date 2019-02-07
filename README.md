@@ -2,23 +2,22 @@
 
 # [Sqreen](https://www.sqreen.com/)'s Security Agent for Go
 
-Sqreen agent monitors functions in the application (I/O, authentication,
-network, command execution, etc.) and provides dedicated security logic at
-run-time.
+Sqreen monitors your application security and helps you easily protect it from
+common vulnerabilities or advanced attacks.
 
-Sqreen protects applications against common security threats.
+- Gain visibility into your application security.
+- One-click protection from common vulnerabilities.
+- Easily enforce custom protection rules into your app.
+- Identify malicious users before they cause harm.
+- Integrate with your workflow.
 
-Here are some security events which can be blocked and reported:
-* Database injection (SQL/NoSQL).
-* Cross-site scripting attack.
-* Significant bad bot / scan activity against the application (scans which
-  require attention).
-* Peak of HTTP errors (40x, 50x) related to security activity against the
-  application.
-* Targeted (human) investigation led against your application.
-* New vulnerabilities detected in a third-party modules used by the application.
-* Authentication activity inside the application to detect and block account
-  takeover attacks.
+![Dashboard](https://d33wubrfki0l68.cloudfront.net/0fe441513f505601d03b25249deddd8fd1eb2a49/e2da6/img/new/illustrations/dashboard-mockup.png)
+
+Sqreen also protects applications against common security threats such as
+database injections, cross-site scripting attacks, scans, or authentication
+activity inside the application to detect and block account takeover attacks. It
+monitors functions in the application (I/O, authentication, network, command
+execution, etc.) and provides dedicated security logic at run-time.
 
 For more details, visit [sqreen.com](https://www.sqreen.com/)
 
@@ -30,21 +29,43 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
     $ go get github.com/sqreen/go-agent/...
     ```
 
-1. Import package `agent` in your `main` package of your app:
+1. Import the package `agent` in your `main` package of your app:
 
     ```go
     import _ "github.com/sqreen/go-agent/agent"
     ```
+
 1. [Signup to Sqreen](https://my.sqreen.io/signup) to get a token for your app,
-   and store it in the agent's configuration file:
+   and store it in the agent's configuration file `sqreen.yaml`:
 
     ```sh
-    $ cat sqreen.yaml
-    token: "your token"
+    token: your token
+    app_name: Your App Name
     ```
-    
-   This file needs to be stored in the same directory as your app's executable
-   file, as the agent will look for it in the current working directory.
+
+   This file can be stored in your current working directory when starting the
+   executable, the same directory as your app's executable file, or in any other
+   path by defining the configuration file location into the environment
+   variable `SQREEN_CONFIG_FILE`.
+
+1. Set up Sqreen's middleware functions according to the web framework you use:
+   - [sqhttp](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp) for the standard net/http package.
+   - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin)
+   - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho)
+   - Coming soon: [Iris](https://github.com/sqreen/go-agent/pull/22),
+     [gRPC](https://github.com/sqreen/go-agent/pull/23) (please upvote if
+     interested ;)).
+   
+   If your framework is not in the list, it is usually possible to use the
+   standard `net/http` middleware. If not, please open an issue in this
+   repository to start a discussion about it.
+
+1. Optionally, use the [SDK](https://godoc.org/github.com/sqreen/go-agent/sdk)
+   to send security [events related to
+   users](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.ForUser)
+   (eg. signing-in) or completely [custom security-related
+   events](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.TrackEvent)
+   you would like to track (eg. password changes).
 
 # Licensing
 
