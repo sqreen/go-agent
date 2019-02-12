@@ -1,3 +1,3 @@
 package agent
 
-const version = "0.1.0-alpha.5"
+const version = "0.1.0-beta.1"
