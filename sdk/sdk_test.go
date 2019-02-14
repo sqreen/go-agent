@@ -47,11 +47,18 @@ func TestSDK(t *testing.T) {
 		ctx.ForUser(idMap).TrackSignup()
 	})
 
-	t.Run("Identify", func(t *testing.T) {
+	t.Run("TrackEvent", func(t *testing.T) {
 		ctx := NewHTTPRequestRecord(newFakeRequest())
 		uid := testlib.RandString(2, 50)
 		idMap := EventUserIdentifiersMap{"uid": uid}
 		ctx.ForUser(idMap).TrackEvent("my.event")
+	})
+
+	t.Run("Identify", func(t *testing.T) {
+		ctx := NewHTTPRequestRecord(newFakeRequest())
+		uid := testlib.RandString(2, 50)
+		idMap := EventUserIdentifiersMap{"uid": uid}
+		ctx.ForUser(idMap).Identify()
 	})
 }
 
@@ -73,5 +80,6 @@ func testDisabledSDKCalls(t *testing.T, ctx *HTTPRequestRecord) {
 	ctx.ForUser(uid).TrackAuthSuccess()
 	ctx.ForUser(uid).TrackAuthFailure()
 	ctx.ForUser(uid).TrackSignup()
+	ctx.ForUser(uid).Identify()
 	ctx.Close()
 }

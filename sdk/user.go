@@ -53,9 +53,10 @@ func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
 }
 
 // TrackEvent allows to send a custom security event related to the user. A call
-// to this method creates an event. Note that the top-level `TrackEvent()` does
-// not associate any user unless you call the method `WithUserCredentials()`. To
-// avoid confusion, the object returned does not provide `WithUserCredentials()`
+// to this method creates an event. Note that this method automatically
+// associates the user to the request, compared to the top-level `TrackEvent()`
+// that does not, unless using its `WithUserCredentials()` method. To avoid
+// confusion, the object returned does not provide `WithUserCredentials()`
 // method.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
@@ -68,4 +69,20 @@ func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent
 	}
 	ctx.ctx.TrackIdentify(agent.EventUserIdentifiersMap(ctx.id))
 	return &UserHTTPRequestEvent{&HTTPRequestEvent{ctx.ctx.TrackEvent(event)}}
+}
+
+// Identify associates the user to current request so that Sqreen can apply
+// security countermeasures targeting specific users when necessary. A call to
+// this method does not create an event.
+//
+//	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+//	sqUser := sdk.FromContext(ctx).ForUser(uid)
+//	sqUser.Identify()
+//
+func (ctx *UserHTTPRequestRecord) Identify() *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
+	ctx.ctx.TrackIdentify(agent.EventUserIdentifiersMap(ctx.id))
+	return ctx
 }
