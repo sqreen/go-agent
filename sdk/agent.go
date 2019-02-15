@@ -14,6 +14,10 @@ var agent types.Agent = disabledAgent{}
 // SetAgent allows the agent to set its SDK entrypoints. It is automatically set
 // by the agent when it intializes itself.
 func SetAgent(a types.Agent) {
+	if a == nil {
+		agent = disabledAgent{}
+		return
+	}
 	agent = a
 }
 

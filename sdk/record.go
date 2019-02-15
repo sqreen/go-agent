@@ -64,6 +64,9 @@ func FromContext(ctx context.Context) *HTTPRequestRecord {
 
 // Close the request record to signal the HTTP request handling is now done.
 func (ctx *HTTPRequestRecord) Close() {
+	if ctx == nil {
+		return
+	}
 	ctx.record.Close()
 }
 
@@ -78,6 +81,9 @@ func (ctx *HTTPRequestRecord) Close() {
 //	sqreen.TrackEvent("my.event").WithUserIdentifiers(uid).WithProperties(props)
 //
 func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
+	if ctx == nil {
+		return nil
+	}
 	return &HTTPRequestEvent{ctx.record.NewCustomEvent(event)}
 }
 
@@ -92,6 +98,9 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 //	sqUser.TrackEvent("my.event.one").WithProperties(props)
 //
 func (ctx *HTTPRequestRecord) ForUser(id EventUserIdentifiersMap) *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	return &UserHTTPRequestRecord{
 		record: ctx.record,
 		id:     id,

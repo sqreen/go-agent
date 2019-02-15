@@ -20,17 +20,26 @@ type UserHTTPRequestRecord struct {
 //	sqUser.TrackAuthSuccess()
 //
 func (ctx *UserHTTPRequestRecord) TrackAuth(loginSuccess bool) *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	ctx.record.NewUserAuth(ctx.id, loginSuccess)
 	return ctx
 }
 
 // TrackAuthSuccess is equivalent to `TrackAuth(true)`.
 func (ctx *UserHTTPRequestRecord) TrackAuthSuccess() *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	return ctx.TrackAuth(true)
 }
 
 // TrackAuthFailure is equivalent to `TrackAuth(false)`.
 func (ctx *UserHTTPRequestRecord) TrackAuthFailure() *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	return ctx.TrackAuth(false)
 }
 
@@ -42,6 +51,9 @@ func (ctx *UserHTTPRequestRecord) TrackAuthFailure() *UserHTTPRequestRecord {
 //	sqUser.TrackSignup()
 //
 func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	ctx.record.NewUserSignup(ctx.id)
 	return ctx
 }
@@ -58,6 +70,9 @@ func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
 //	sqUser.TrackEvent("my.event")
 //
 func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent {
+	if ctx == nil {
+		return nil
+	}
 	ctx.record.Identify(ctx.id)
 	return &UserHTTPRequestEvent{HTTPRequestEvent{ctx.record.NewCustomEvent(event)}}
 }

@@ -29,6 +29,9 @@ type HTTPRequestEvent struct {
 //	sdk.FromContext(ctx).TrackEvent("my.event").WithTimestamp(yourTimestamp)
 //
 func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.impl.WithTimestamp(t)
 	return e
 }
@@ -42,6 +45,9 @@ func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
 //	sdk.FromContext(ctx).TrackEvent("my.event").WithProperties(prop)
 //
 func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.impl.WithProperties(p)
 	return e
 }
@@ -53,6 +59,9 @@ func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent 
 //	sdk.FromContext(ctx).Identify(uid)
 //
 func (e *HTTPRequestEvent) WithUserIdentifiers(id EventUserIdentifiersMap) *HTTPRequestEvent {
+	if e == nil {
+		return nil
+	}
 	e.impl.WithUserIdentifiers(id)
 	return e
 }
