@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -13,17 +14,6 @@ import (
 	"github.com/sqreen/go-agent/agent/types"
 )
 
-func init() {
-	start()
-}
-
-func start() {
-	if config.Disable() {
-		return
-	}
-	go agent()
-}
-
 var (
 	logger     = plog.NewLogger("sqreen/agent")
 	eventMng   *eventManager
@@ -31,6 +21,24 @@ var (
 	cancel     context.CancelFunc
 	isDone     chan struct{}
 )
+
+type Agent struct {
+}
+
+func New() *Agent {
+	return &Agent{}
+}
+
+func (a *Agent) Start() {
+	if config.Disable() {
+		return
+	}
+	go agent()
+}
+
+func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
+	return NewHTTPRequestRecord(req)
+}
 
 func agent() {
 	defer func() {
@@ -119,7 +127,7 @@ func agent() {
 	}
 }
 
-func GracefulStop() {
+func (_ *Agent) GracefulStop() {
 	if config.Disable() {
 		return
 	}
