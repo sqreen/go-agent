@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 
 	"github.com/spf13/viper"
 )

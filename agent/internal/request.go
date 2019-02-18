@@ -1,4 +1,4 @@
-package agent
+package internal
 
 import (
 	"encoding/hex"
@@ -11,8 +11,9 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/types"
 )
 
 type HTTPRequestRecord struct {

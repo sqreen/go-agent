@@ -1,4 +1,4 @@
-package agent
+package internal
 
 import (
 	"context"
@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/app"
-	"github.com/sqreen/go-agent/agent/backend"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/agent/internal/app"
+	"github.com/sqreen/go-agent/agent/internal/backend"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
 )
 
 var (

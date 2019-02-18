@@ -1,4 +1,4 @@
-package agent
+package internal
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/backend"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/backend"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/types"
 )
 
 func init() {
