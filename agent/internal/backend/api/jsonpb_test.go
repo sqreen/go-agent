@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/sqreen/go-agent/agent/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
 )
 
 var _ = Describe("API", func() {

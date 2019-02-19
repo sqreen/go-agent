@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
 type Dependency struct {

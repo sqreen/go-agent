@@ -4,13 +4,13 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sqreen/go-agent/agent"
+	"github.com/sqreen/go-agent/agent/types"
 )
 
 // HTTPRequestRecord is the SDK record associated to a HTTP request. Its methods
 // allow request handlers to track custom security events.
 type HTTPRequestRecord struct {
-	ctx *agent.HTTPRequestRecord
+	record types.RequestRecord
 }
 
 // EventUserIdentifiersMap is the type used to represent user identifiers in
@@ -27,7 +27,7 @@ type EventUserIdentifiersMap map[string]string
 // request.
 func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
 	return &HTTPRequestRecord{
-		ctx: agent.NewHTTPRequestRecord(req),
+		record: agent.NewRequestRecord(req),
 	}
 }
 
@@ -67,7 +67,7 @@ func (ctx *HTTPRequestRecord) Close() {
 	if ctx == nil {
 		return
 	}
-	ctx.ctx.Close()
+	ctx.record.Close()
 }
 
 // TrackEvent allows to track a custom security-related event having the given
@@ -84,7 +84,7 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
-	return &HTTPRequestEvent{ctx.ctx.TrackEvent(event)}
+	return &HTTPRequestEvent{ctx.record.NewCustomEvent(event)}
 }
 
 // ForUser returns a new SDK context for the given user uniquely identified by
@@ -98,11 +98,11 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 //	sqUser.TrackEvent("my.event.one").WithProperties(props)
 //
 func (ctx *HTTPRequestRecord) ForUser(id EventUserIdentifiersMap) *UserHTTPRequestRecord {
-	if ctx == nil || len(id) == 0 {
+	if ctx == nil {
 		return nil
 	}
 	return &UserHTTPRequestRecord{
-		ctx: ctx.ctx,
-		id:  id,
+		record: ctx.record,
+		id:     id,
 	}
 }

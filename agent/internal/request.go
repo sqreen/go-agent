@@ -1,4 +1,4 @@
-package agent
+package internal
 
 import (
 	"encoding/hex"
@@ -11,8 +11,9 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/types"
 )
 
 type HTTPRequestRecord struct {
@@ -108,7 +109,7 @@ const (
 	sdkMethodTrack    = "track"
 )
 
-func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestRecord) NewCustomEvent(event string) types.CustomEvent {
 	evt := &HTTPRequestEvent{
 		method:    sdkMethodTrack,
 		event:     event,
@@ -118,7 +119,7 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	return evt
 }
 
-func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) {
+func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 	ctx.identifyOnce.Do(func() {
 		evt := &HTTPRequestEvent{
 			method:          sdkMethodIdentify,
@@ -129,7 +130,7 @@ func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) {
 	})
 }
 
-func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifiersMap) {
+func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
 	if len(id) == 0 {
 		logger.Warn("TrackAuth(): user id is nil or empty")
 		return
@@ -146,7 +147,7 @@ func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifie
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifiersMap) {
+func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 	if len(id) == 0 {
 		logger.Warn("TrackSignup(): user id is nil or empty")
 		return
@@ -176,28 +177,25 @@ func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
 	addUserEvent(event)
 }
 
-func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithTimestamp(t time.Time) {
 	if e == nil {
-		return nil
+		return
 	}
 	e.timestamp = t
-	return e
 }
 
-func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithProperties(p map[string]string) {
 	if e == nil {
-		return nil
+		return
 	}
 	e.properties = p
-	return e
 }
 
-func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifiersMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithUserIdentifiers(id map[string]string) {
 	if e == nil {
-		return nil
+		return
 	}
 	e.userIdentifiers = id
-	return e
 }
 
 func (e *HTTPRequestEvent) GetTime() time.Time {

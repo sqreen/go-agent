@@ -13,9 +13,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
-	"github.com/sqreen/go-agent/agent/backend"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
+	"github.com/sqreen/go-agent/agent/internal/backend"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
