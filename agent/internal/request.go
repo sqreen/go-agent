@@ -23,11 +23,13 @@ type HTTPRequestRecord struct {
 	eventsLock   sync.Mutex
 	events       []*HTTPRequestEvent
 	identifyOnce sync.Once
+	agent        *Agent
 }
 
-func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
+func (a *Agent) newHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
 	return &HTTPRequestRecord{
 		request: req,
+		agent:   a,
 	}
 }
 
@@ -132,14 +134,14 @@ func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
 	if len(id) == 0 {
-		logger.Warn("TrackAuth(): user id is nil or empty")
+		ctx.agent.logger.Warn("TrackAuth(): user id is nil or empty")
 		return
 	}
 
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:              getClientIP(ctx.request),
+			ip:              getClientIP(ctx.request, ctx.agent.config),
 			userIdentifiers: id,
 			timestamp:       time.Now(),
 		},
@@ -149,13 +151,13 @@ func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess boo
 
 func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 	if len(id) == 0 {
-		logger.Warn("TrackSignup(): user id is nil or empty")
+		ctx.agent.logger.Warn("TrackSignup(): user id is nil or empty")
 		return
 	}
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:              getClientIP(ctx.request),
+			ip:              getClientIP(ctx.request, ctx.agent.config),
 			userIdentifiers: id,
 			timestamp:       time.Now(),
 		},
@@ -164,7 +166,7 @@ func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 }
 
 func (ctx *HTTPRequestRecord) Close() {
-	addTrackEvent(newHTTPRequestRecord(ctx))
+	ctx.agent.addTrackEvent(newHTTPRequestRecord(ctx))
 }
 
 func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
@@ -174,7 +176,7 @@ func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
 }
 
 func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
-	addUserEvent(event)
+	ctx.agent.addUserEvent(event)
 }
 
 func (e *HTTPRequestEvent) WithTimestamp(t time.Time) {
@@ -265,10 +267,10 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request)
+	return getClientIP(r.ctx.request, r.ctx.agent.config)
 }
 
-func getClientIP(req *http.Request) string {
+func getClientIP(req *http.Request, cfg *config.Config) string {
 	var privateIP net.IP
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
@@ -289,7 +291,7 @@ func getClientIP(req *http.Request) string {
 		return nil
 	}
 
-	if prioritizedHeader := config.HTTPClientIPHeader(); prioritizedHeader != "" {
+	if prioritizedHeader := cfg.HTTPClientIPHeader(); prioritizedHeader != "" {
 		if value := req.Header.Get(prioritizedHeader); value != "" {
 			if ip := check(value); ip != nil {
 				return ip.String()
@@ -322,7 +324,7 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	req := r.ctx.request
 
 	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := config.HTTPClientIPHeader(); extraHeader != "" {
+	if extraHeader := r.ctx.agent.config.HTTPClientIPHeader(); extraHeader != "" {
 		trackedHeaders = append(trackedHeaders, extraHeader)
 	}
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
@@ -349,7 +351,7 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	if requestId == "" {
 		uuid, err := uuid.NewRandom()
 		if err != nil {
-			logger.Error("could not generate a request id ", err)
+			r.ctx.agent.logger.Error("could not generate a request id ", err)
 			requestId = ""
 		}
 		requestId = hex.EncodeToString(uuid[:])

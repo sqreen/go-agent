@@ -18,7 +18,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-var manager *viper.Viper
+type Config struct {
+	*viper.Viper
+}
 
 type HTTPAPIEndpoint struct {
 	Method, URL string
@@ -192,14 +194,10 @@ const (
 	configDefaultLogLevel              = `warn`
 )
 
-func init() {
-	New()
-}
+func New(logger *plog.Logger) *Config {
+	logger = plog.NewLogger("agent/config", logger)
 
-func New() {
-	logger := plog.NewLogger("sqreen/agent/config")
-
-	manager = viper.New()
+	manager := viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()
 	manager.SetConfigName(configFileBasename)
@@ -235,42 +233,44 @@ func New() {
 	if err != nil {
 		logger.Error("could not read the configuration file: ", err)
 	}
+
+	return &Config{manager}
 }
 
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
-func BackendHTTPAPIBaseURL() string {
-	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIBaseURL))
+func (c *Config) BackendHTTPAPIBaseURL() string {
+	return sanitizeString(c.GetString(configKeyBackendHTTPAPIBaseURL))
 }
 
 // BackendHTTPAPIToken returns the access token to the backend API.
-func BackendHTTPAPIToken() string {
-	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIToken))
+func (c *Config) BackendHTTPAPIToken() string {
+	return sanitizeString(c.GetString(configKeyBackendHTTPAPIToken))
 }
 
 // LogLevel returns the log level.
-func LogLevel() string {
-	return sanitizeString(manager.GetString(configKeyLogLevel))
+func (c *Config) LogLevel() string {
+	return sanitizeString(c.GetString(configKeyLogLevel))
 }
 
 // AppName returns the app name.
-func AppName() string {
-	return sanitizeString(manager.GetString(configKeyAppName))
+func (c *Config) AppName() string {
+	return sanitizeString(c.GetString(configKeyAppName))
 }
 
 // HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
-func HTTPClientIPHeader() string {
-	return sanitizeString(manager.GetString(configKeyHTTPClientIPHeader))
+func (c *Config) HTTPClientIPHeader() string {
+	return sanitizeString(c.GetString(configKeyHTTPClientIPHeader))
 }
 
 // Proxy returns the proxy configuration to use for backend HTTP calls.
-func BackendHTTPAPIProxy() string {
-	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIProxy))
+func (c *Config) BackendHTTPAPIProxy() string {
+	return sanitizeString(c.GetString(configKeyBackendHTTPAPIProxy))
 }
 
 // Disable returns true when the agent should be disabled, false otherwise.
-func Disable() bool {
-	disable := sanitizeString(manager.GetString(configKeyDisable))
-	return disable != "" || BackendHTTPAPIToken() == ""
+func (c *Config) Disable() bool {
+	disable := sanitizeString(c.GetString(configKeyDisable))
+	return disable != "" || c.BackendHTTPAPIToken() == ""
 }
 
 func sanitizeString(s string) string {
