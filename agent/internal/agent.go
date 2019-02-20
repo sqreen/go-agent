@@ -13,6 +13,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/sdk"
 )
 
 type Agent struct {
@@ -55,8 +56,8 @@ func (a *Agent) Start() {
 
 func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
 	return a.newHTTPRequestRecord(req)
-
 }
+
 func (a *Agent) start() {
 	defer func() {
 		err := recover()
@@ -144,6 +145,20 @@ func (a *Agent) start() {
 			return
 		}
 	}
+}
+
+func (a *Agent) InstrumentationEnable() error {
+	sdk.SetAgent(a)
+	a.logger.Info("instrumentation enabled")
+	return nil
+}
+
+// InstrumentationDisable disables the agent instrumentation, which includes for
+// now the SDK.
+func (a *Agent) InstrumentationDisable() error {
+	sdk.SetAgent(nil)
+	a.logger.Info("instrumentation disabled")
+	return nil
 }
 
 func (a *Agent) GracefulStop() {
