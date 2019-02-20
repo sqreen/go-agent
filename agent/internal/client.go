@@ -10,6 +10,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
 var (
@@ -19,12 +20,12 @@ var (
 
 // Login to the backend. When the API request fails, retry for ever and after
 // sleeping some time.
-func appLogin(ctx context.Context, client *backend.Client, token string, appName string) (*api.AppLoginResponse, error) {
+func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, token string, appName string, appInfo *app.Info) (*api.AppLoginResponse, error) {
 	if err := validateToken(token, appName); err != nil {
 		return nil, err
 	}
 
-	procInfo := app.GetProcessInfo()
+	procInfo := appInfo.GetProcessInfo()
 
 	appLoginReq := api.AppLoginRequest{
 		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace(procInfo),
@@ -32,7 +33,7 @@ func appLogin(ctx context.Context, client *backend.Client, token string, appName
 		AgentType:       "golang",
 		AgentVersion:    version,
 		OsType:          app.GoBuildTarget(),
-		Hostname:        app.Hostname(),
+		Hostname:        appInfo.Hostname(),
 		RuntimeVersion:  app.GoVersion(),
 	}
 
@@ -51,6 +52,7 @@ func appLogin(ctx context.Context, client *backend.Client, token string, appName
 			if err != nil {
 				logger.Error(err)
 				appLoginRes = nil
+				logger.Debugf("retrying the request in %s (number of failures: %d)", backoff.duration, backoff.fails)
 				backoff.sleep()
 			}
 		}
@@ -77,7 +79,6 @@ func (b *backoff) next() {
 
 func (b *backoff) sleep() {
 	b.next()
-	logger.Debugf("retrying the request in %s (number of failures: %d)", b.duration, b.fails)
 	time.Sleep(b.duration)
 }
 

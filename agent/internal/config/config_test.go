@@ -6,11 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUserConfig(t *testing.T) {
+	logger := plog.NewLogger("test", nil)
+	cfg := New(logger)
+
 	stringValueTests := []struct {
 		Name         string
 		GetCfgValue  func() string
@@ -20,53 +24,53 @@ func TestUserConfig(t *testing.T) {
 	}{
 		{
 			Name:         "Backend HTTP API Base URL",
-			GetCfgValue:  BackendHTTPAPIBaseURL,
+			GetCfgValue:  cfg.BackendHTTPAPIBaseURL,
 			ConfigKey:    configKeyBackendHTTPAPIBaseURL,
 			DefaultValue: configDefaultBackendHTTPAPIBaseURL,
 			SomeValue:    "https://" + testlib.RandString(2, 50) + ":80806/is/cool",
 		},
 		{
 			Name:        "Backend HTTP API Token",
-			GetCfgValue: BackendHTTPAPIToken,
+			GetCfgValue: cfg.BackendHTTPAPIToken,
 			ConfigKey:   configKeyBackendHTTPAPIToken,
 			SomeValue:   testlib.RandString(2, 30),
 		},
 		{
 			Name:         "Log Level",
-			GetCfgValue:  LogLevel,
+			GetCfgValue:  cfg.LogLevel,
 			ConfigKey:    configKeyLogLevel,
 			DefaultValue: configDefaultLogLevel,
 			SomeValue:    testlib.RandString(2, 30),
 		},
 		{
 			Name:        "App Name",
-			GetCfgValue: AppName,
+			GetCfgValue: cfg.AppName,
 			ConfigKey:   configKeyAppName,
 			SomeValue:   testlib.RandString(2, 30),
 		},
 		{
 			Name:        "IP Header",
-			GetCfgValue: HTTPClientIPHeader,
+			GetCfgValue: cfg.HTTPClientIPHeader,
 			ConfigKey:   configKeyHTTPClientIPHeader,
 			SomeValue:   testlib.RandString(2, 30),
 		},
 		{
 			Name:        "Backend HTTP API Proxy",
-			GetCfgValue: BackendHTTPAPIProxy,
+			GetCfgValue: cfg.BackendHTTPAPIProxy,
 			ConfigKey:   configKeyBackendHTTPAPIProxy,
 			SomeValue:   testlib.RandString(2, 30),
 		},
 	}
 
 	for _, tc := range stringValueTests {
-		testStringValue(t, tc.Name, tc.GetCfgValue, tc.ConfigKey, tc.DefaultValue, tc.SomeValue)
+		testStringValue(t, cfg, tc.Name, tc.GetCfgValue, tc.ConfigKey, tc.DefaultValue, tc.SomeValue)
 	}
 
 	t.Run("Disable", func(t *testing.T) {
 		os.Setenv("SQREEN_TOKEN", testlib.RandString(2, 30))
 		defer os.Unsetenv("SQREEN_TOKEN")
 
-		getCfgValue := Disable
+		getCfgValue := cfg.Disable
 		defaultValue := false
 		envKey := configKeyDisable
 		someValue := testlib.RandString(2, 30)
@@ -85,7 +89,7 @@ func TestUserConfig(t *testing.T) {
 		t.Run("Set through configuration file", func(t *testing.T) {
 			filename := newCfgFile(t, ".", envKey+`: `+someValue)
 			defer os.Remove(filename)
-			manager.ReadInConfig()
+			cfg.ReadInConfig()
 			require.Equal(t, getCfgValue(), !defaultValue)
 		})
 	})
@@ -100,16 +104,16 @@ func TestUserConfig(t *testing.T) {
 		binDirFile := newCfgFile(t, binDir, `token: `+binDirToken)
 		defer os.Remove(binDirFile)
 
-		New()
-		token := BackendHTTPAPIToken()
+		cfg := New(logger)
+		token := cfg.BackendHTTPAPIToken()
 		require.Equal(binDirToken, token)
 
 		cwdToken := "cwd-token"
 		cwdFile := newCfgFile(t, ".", `token: `+cwdToken)
 		defer os.Remove(cwdFile)
 
-		New()
-		token = BackendHTTPAPIToken()
+		cfg = New(logger)
+		token = cfg.BackendHTTPAPIToken()
 		require.Equal(cwdToken, token)
 
 		tmpToken := "tmp-token"
@@ -117,18 +121,18 @@ func TestUserConfig(t *testing.T) {
 		tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
 		defer os.Remove(tmpFile)
 		os.Setenv("SQREEN_CONFIG_FILE", tmpFile)
-		New()
-		token = BackendHTTPAPIToken()
+		cfg = New(logger)
+		token = cfg.BackendHTTPAPIToken()
 		require.Equal(tmpToken, token)
 
 		os.Unsetenv("SQREEN_CONFIG_FILE")
-		New()
-		token = BackendHTTPAPIToken()
+		cfg = New(logger)
+		token = cfg.BackendHTTPAPIToken()
 		require.Equal(cwdToken, token)
 	})
 }
 
-func testStringValue(t *testing.T, name string, getCfgValue func() string, envKey, defaultValue, someValue string) {
+func testStringValue(t *testing.T, cfg *Config, name string, getCfgValue func() string, envKey, defaultValue, someValue string) {
 	t.Run(name, func(t *testing.T) {
 		t.Run("Default value", func(t *testing.T) {
 			require.Equal(t, getCfgValue(), defaultValue)
@@ -144,7 +148,7 @@ func testStringValue(t *testing.T, name string, getCfgValue func() string, envKe
 		t.Run("Set through configuration file", func(t *testing.T) {
 			filename := newCfgFile(t, ".", envKey+`: `+someValue)
 			defer os.Remove(filename)
-			manager.ReadInConfig()
+			cfg.ReadInConfig()
 			require.Equal(t, getCfgValue(), someValue)
 		})
 	})

@@ -8,19 +8,21 @@ import (
 	"time"
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
-	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
 type metricsManager struct {
 	ctx       context.Context
+	logger    *plog.Logger
 	metrics   sync.Map
 	readyLock sync.Mutex
 	ready     []api.MetricResponse
 }
 
-func newMetricsManager(ctx context.Context) *metricsManager {
+func newMetricsManager(ctx context.Context, logger *plog.Logger) *metricsManager {
 	return &metricsManager{
-		ctx: ctx,
+		ctx:    ctx,
+		logger: logger,
 	}
 }
 
@@ -31,6 +33,7 @@ type metricsStore struct {
 	once     sync.Once
 	swapLock sync.RWMutex
 	expired  bool
+	logger   *plog.Logger
 }
 
 type metricEntry interface {
@@ -40,10 +43,11 @@ type metricEntry interface {
 
 func (m *metricsManager) get(name string) *metricsStore {
 	store := &metricsStore{
+		logger: m.logger,
 		period: time.Minute,
 		done: func(start, finish time.Time, observations sync.Map) {
 			m.metrics.Delete(name)
-			logger.Debug("metrics ", name, " ready")
+			m.logger.Debug("metrics ", name, " ready")
 			m.addObservations(name, start, finish, observations)
 		},
 	}
@@ -52,7 +56,7 @@ func (m *metricsManager) get(name string) *metricsStore {
 	store = actual.(*metricsStore)
 	store.once.Do(func() {
 		go func() {
-			logger.Debug("bookkeeping metrics ", name, " with period ", store.period)
+			m.logger.Debug("bookkeeping metrics ", name, " with period ", store.period)
 			store.monitor(m.ctx, time.Now())
 		}()
 	})
@@ -65,13 +69,13 @@ func (m *metricsManager) addObservations(name string, start, finish time.Time, o
 	observations.Range(func(k, v interface{}) bool {
 		key, ok := k.(string)
 		if !ok {
-			logger.Panic(errors.New("unexpected metric key type"))
+			m.logger.Panic(errors.New("unexpected metric key type"))
 			return true
 		}
 
 		value, ok := v.(*uint64)
 		if !ok {
-			logger.Panic(errors.New("unexpected metric value type"))
+			m.logger.Panic(errors.New("unexpected metric value type"))
 			return true
 		}
 
@@ -112,15 +116,15 @@ func (s *metricsStore) add(e metricEntry) {
 	var n uint64 = 1
 	key, err := e.bucketID()
 	if err != nil {
-		logger.Error("could not compute the bucket id of the metric key:", err)
+		s.logger.Error("could not compute the bucket id of the metric key:", err)
 		return
 	}
 	actual, loaded := s.entries.LoadOrStore(key, &n)
 	if loaded {
 		newVal := atomic.AddUint64(actual.(*uint64), 1)
-		logger.Debug("metric store ", key, " set to ", newVal)
+		s.logger.Debug("metric store ", key, " set to ", newVal)
 	} else {
-		logger.Debug("metric store ", key, " set to ", n)
+		s.logger.Debug("metric store ", key, " set to ", n)
 	}
 }
 
@@ -141,8 +145,8 @@ func (s *metricsStore) monitor(ctx context.Context, start time.Time) {
 	s.done(start, finish, entries)
 }
 
-func addUserEvent(event userEventFace) {
-	if config.Disable() || metricsMng == nil {
+func (a *Agent) addUserEvent(event userEventFace) {
+	if a.config.Disable() || a.metricsMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
@@ -151,12 +155,12 @@ func addUserEvent(event userEventFace) {
 	switch actual := event.(type) {
 	case *authUserEvent:
 		if actual.loginSuccess {
-			store = metricsMng.get("sdk-login-success")
+			store = a.metricsMng.get("sdk-login-success")
 		} else {
-			store = metricsMng.get("sdk-login-fail")
+			store = a.metricsMng.get("sdk-login-fail")
 		}
 	case *signupUserEvent:
-		store = metricsMng.get("sdk-signup")
+		store = a.metricsMng.get("sdk-signup")
 	}
 
 	store.add(event)

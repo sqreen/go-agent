@@ -10,5 +10,7 @@ var agent *internal.Agent
 func init() {
 	agent = internal.New()
 	sdk.SetAgent(agent)
-	agent.Start()
+	if agent != nil {
+		agent.Start()
+	}
 }

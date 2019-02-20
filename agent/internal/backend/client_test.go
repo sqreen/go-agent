@@ -16,13 +16,16 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	seed = time.Now().UnixNano()
-	popr = math_rand.New(math_rand.NewSource(seed))
+	logger = plog.NewLogger("test", nil)
+	cfg    = config.New(logger)
+	seed   = time.Now().UnixNano()
+	popr   = math_rand.New(math_rand.NewSource(seed))
 )
 
 func TestClient(t *testing.T) {
@@ -53,7 +56,7 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL())
+		client, err := backend.NewClient(server.URL(), cfg, logger)
 		g.Expect(err).NotTo(HaveOccurred())
 
 		res, err := client.AppLogin(request, token, appName)
@@ -85,7 +88,7 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL())
+		client, err := backend.NewClient(server.URL(), cfg, logger)
 		g.Expect(err).NotTo(HaveOccurred())
 
 		res, err := client.AppBeat(request, session)
@@ -114,7 +117,7 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, request, nil, statusCode, headers)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL())
+		client, err := backend.NewClient(server.URL(), cfg, logger)
 		g.Expect(err).NotTo(HaveOccurred())
 
 		err = client.Batch(request, session)
@@ -137,7 +140,7 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, nil, nil, statusCode, headers)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL())
+		client, err := backend.NewClient(server.URL(), cfg, logger)
 		g.Expect(err).NotTo(HaveOccurred())
 
 		err = client.AppLogout(session)
@@ -265,7 +268,7 @@ func testProxy(t *testing.T, envVar string) {
 	require.Equal(t, os.Getenv(envVar), proxy.URL())
 
 	// The new client should take the proxy into account.
-	client, err := backend.NewClient(config.BackendHTTPAPIBaseURL())
+	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
 	require.Equal(t, err, nil)
 	// Perform a request that should go through the proxy.
 	request := api.NewPopulatedAppLoginRequest(popr, false)

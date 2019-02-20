@@ -113,7 +113,8 @@ type OutputSetter interface {
 
 // NewLogger returns a Logger instance wrapping one logger instance per level.
 // They can thus be individually enabled or disabled.
-func NewLogger(namespace string) *Logger {
+func NewLogger(namespace string, parent *Logger) *Logger {
+	namespace = canonicalNamespace(namespace, parent)
 	logger := &Logger{
 		PanicLogger: disabledLogger{},
 		ErrorLogger: disabledLogger{},
@@ -124,6 +125,16 @@ func NewLogger(namespace string) *Logger {
 	}
 	loggers[namespace] = logger
 	return logger
+}
+
+func canonicalNamespace(namespace string, parent *Logger) string {
+	var fullNS string
+	if parent == nil {
+		fullNS = "sqreen/" + namespace
+	} else {
+		fullNS = parent.namespace + "/" + namespace
+	}
+	return fullNS
 }
 
 // SetOutput sets the output of all loggers created so far.

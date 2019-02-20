@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sqreen/go-agent/agent/internal/app"
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
@@ -14,61 +15,72 @@ import (
 	"github.com/sqreen/go-agent/agent/types"
 )
 
-var (
-	logger     = plog.NewLogger("sqreen/agent")
+type Agent struct {
+	logger     *plog.Logger
 	eventMng   *eventManager
 	metricsMng *metricsManager
+	ctx        context.Context
 	cancel     context.CancelFunc
 	isDone     chan struct{}
-)
-
-type Agent struct {
+	config     *config.Config
+	appInfo    *app.Info
 }
 
 func New() *Agent {
-	return &Agent{}
+	logger := plog.NewLogger("agent", nil)
+
+	cfg := config.New(logger)
+
+	if cfg.Disable() {
+		return nil
+	}
+
+	// Agent graceful stopping using context cancelation.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &Agent{
+		logger:     logger,
+		isDone:     make(chan struct{}),
+		metricsMng: newMetricsManager(ctx, logger),
+		ctx:        ctx,
+		cancel:     cancel,
+		config:     cfg,
+		appInfo:    app.NewInfo(logger),
+	}
 }
 
 func (a *Agent) Start() {
-	if config.Disable() {
-		return
-	}
-	go agent()
+	go a.start()
 }
 
 func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
-	return NewHTTPRequestRecord(req)
-}
+	return a.newHTTPRequestRecord(req)
 
-func agent() {
+}
+func (a *Agent) start() {
 	defer func() {
 		err := recover()
 		if err != nil {
-			logger.Error("agent stopped: ", err)
+			a.logger.Error("agent stopped: ", err)
 		} else {
-			logger.Info("agent successfully stopped")
+			a.logger.Info("agent successfully stopped")
 		}
 		// Signal we are done
-		close(isDone)
+		close(a.isDone)
 	}()
 
-	plog.SetLevelFromString(config.LogLevel())
+	plog.SetLevelFromString(a.config.LogLevel())
 	plog.SetOutput(os.Stderr)
 
-	// Agent stopping using context cancelation externally called through the SDK.
-	var ctx context.Context
-	ctx, cancel = context.WithCancel(context.Background())
-	isDone = make(chan struct{})
-
-	client, err := backend.NewClient(config.BackendHTTPAPIBaseURL())
-	if checkErr(err) {
+	client, err := backend.NewClient(a.config.BackendHTTPAPIBaseURL(), a.config, a.logger)
+	if checkErr(err, a.logger) {
 		return
 	}
 
-	token := config.BackendHTTPAPIToken()
-	appName := config.AppName()
-	appLoginRes, err := appLogin(ctx, client, token, appName)
-	if checkErr(err) {
+	token := a.config.BackendHTTPAPIToken()
+	appName := a.config.AppName()
+	appLoginRes, err := appLogin(a.ctx, a.logger, client, token, appName, a.appInfo)
+	if checkErr(err, a.logger) {
 		return
 	}
 
@@ -77,7 +89,7 @@ func agent() {
 		heartbeat = config.BackendHTTPAPIDefaultHeartbeatDelay
 	}
 
-	logger.Info("up and running - heartbeat set to ", heartbeat)
+	a.logger.Info("up and running - heartbeat set to ", heartbeat)
 	ticker := time.Tick(heartbeat)
 	sessionID := appLoginRes.SessionId
 	rulespackId := appLoginRes.PackId
@@ -90,52 +102,51 @@ func agent() {
 		maxStaleness = config.EventBatchMaxStaleness
 	}
 
-	eventMng = newEventManager(rulespackId, batchSize, maxStaleness)
 	// Start the event manager's loop
-	go eventMng.Loop(ctx, client, sessionID)
-
-	metricsMng = newMetricsManager(ctx)
+	a.eventMng = newEventManager(a, rulespackId, batchSize, maxStaleness)
+	go a.eventMng.Loop(a.ctx, client, sessionID)
 
 	// Start the heartbeat's loop
 	for {
 		select {
 		case <-ticker:
-			logger.Debug("heartbeat")
+			a.logger.Debug("heartbeat")
 
-			metrics := metricsMng.getObservations()
+			metrics := a.metricsMng.getObservations()
 			appBeatReq := api.AppBeatRequest{
 				Metrics: metrics,
 			}
 
 			_, err := client.AppBeat(&appBeatReq, sessionID)
 			if err != nil {
-				logger.Error("heartbeat failed: ", err)
+				a.logger.Error("heartbeat failed: ", err)
 				continue
 			}
 
-		case <-ctx.Done():
+		case <-a.ctx.Done():
 			// The context was canceled because of a interrupt signal, logout and
 			// return.
 			err := client.AppLogout(sessionID)
 			if err != nil {
-				logger.Error("logout failed: ", err)
+				a.logger.Error("logout failed: ", err)
 				return
 			}
-			logger.Debug("successfully logged out")
+			a.logger.Debug("successfully logged out")
 			return
 		}
 	}
 }
 
-func (_ *Agent) GracefulStop() {
-	if config.Disable() {
+func (a *Agent) GracefulStop() {
+	if a.config.Disable() {
 		return
 	}
-	cancel()
-	<-isDone
+	a.cancel()
+	<-a.isDone
 }
 
 type eventManager struct {
+	agent        *Agent
 	req          api.BatchRequest
 	rulespackID  string
 	count        int
@@ -144,8 +155,9 @@ type eventManager struct {
 	maxStaleness time.Duration
 }
 
-func newEventManager(rulespackID string, count int, maxStaleness time.Duration) *eventManager {
+func newEventManager(agent *Agent, rulespackID string, count int, maxStaleness time.Duration) *eventManager {
 	return &eventManager{
+		agent:        agent,
 		eventsChan:   make(chan (*httpRequestRecord), count),
 		count:        count,
 		rulespackID:  rulespackID,
@@ -159,7 +171,7 @@ func (m *eventManager) add(r *httpRequestRecord) {
 		return
 	default:
 		// The channel buffer is full - drop this new event
-		logger.Debug("event channel is full, dropping the event")
+		m.agent.logger.Debug("event channel is full, dropping the event")
 	}
 }
 
@@ -170,7 +182,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client, session
 		case <-ctx.Done():
 			return
 		case event := <-m.eventsChan:
-			logger.Debug("new event")
+			m.agent.logger.Debug("new event")
 			event.SetRulespackId(m.rulespackID)
 			m.reqLock.Lock()
 			m.req.Batch = append(m.req.Batch, api.BatchRequest_Event{
@@ -183,19 +195,19 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client, session
 				// First event of this batch.
 				// Given the amount of external events, it is easier to create a
 				// goroutine to select{} one of them.
-				logger.Debug("batching event data for ", m.maxStaleness)
+				m.agent.logger.Debug("batching event data for ", m.maxStaleness)
 				isFull = make(chan struct{})
 				isSent = make(chan struct{}, 1)
 				go func() {
 					select {
 					case <-ctx.Done():
 					case <-time.After(m.maxStaleness):
-						logger.Debug("event batch data staleness reached")
+						m.agent.logger.Debug("event batch data staleness reached")
 					case <-isFull:
-						logger.Debug("event batch is full")
+						m.agent.logger.Debug("event batch is full")
 					}
 					m.send(client, sessionID)
-					logger.Debug("event batch sent")
+					m.agent.logger.Debug("event batch sent")
 					close(isSent)
 				}()
 			} else if batchLen >= m.count {
@@ -216,23 +228,23 @@ func (m *eventManager) send(client *backend.Client, sessionID string) {
 	defer m.reqLock.Unlock()
 	// Send the batch.
 	if err := client.Batch(&m.req, sessionID); err != nil {
-		logger.Error("could not send an event batch: ", err)
+		m.agent.logger.Error("could not send an event batch: ", err)
 		// drop it
 	}
 	m.req.Batch = m.req.Batch[0:0]
 }
 
-func addTrackEvent(r *httpRequestRecord) {
-	if config.Disable() || eventMng == nil {
+func (a *Agent) addTrackEvent(r *httpRequestRecord) {
+	if a.config.Disable() || a.eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
-	eventMng.add(r)
+	a.eventMng.add(r)
 }
 
 // Helper function returning true when having to exit the agent and panic-ing
 // when the error is something else than context cancelation.
-func checkErr(err error) (exit bool) {
+func checkErr(err error, logger *plog.Logger) (exit bool) {
 	if err != nil {
 		if err != context.Canceled {
 			logger.Panic(err)

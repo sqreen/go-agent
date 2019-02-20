@@ -16,17 +16,16 @@ import (
 	"golang.org/x/net/http/httpproxy"
 )
 
-var logger = plog.NewLogger("agent/backend")
-
 type Client struct {
 	client      *http.Client
 	backendURL  string
 	pbMarshaler jsonpb.Marshaler
+	logger      *plog.Logger
 }
 
-func NewClient(backendURL string) (*Client, error) {
+func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Client, error) {
 	var transport *http.Transport
-	if proxySettings := config.BackendHTTPAPIProxy(); proxySettings == "" {
+	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy
 		// settings *_PROXY environment variables.
 		logger.Info("using proxy settings as indicated by the environment variables HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions)")
@@ -54,6 +53,7 @@ func NewClient(backendURL string) (*Client, error) {
 		},
 		backendURL:  backendURL,
 		pbMarshaler: api.DefaultJSONPBMarshaler,
+		logger:      plog.NewLogger("client", logger),
 	}
 
 	return client, nil
@@ -125,7 +125,7 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	req.ContentLength = int64(buf.Len())
 
 	dumpReq, _ := httputil.DumpRequestOut(req, true)
-	logger.Debugf("sending request\n%s", dumpReq)
+	c.logger.Debugf("sending request\n%s", dumpReq)
 
 	res, err := c.client.Do(req)
 	if err != nil {
@@ -133,7 +133,7 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	}
 
 	dumpRes, _ := httputil.DumpResponse(res, true)
-	logger.Debugf("received response\n%s", dumpRes)
+	c.logger.Debugf("received response\n%s", dumpRes)
 
 	// As documented (https://golang.org/pkg/net/http/#Response), connections are
 	// reused iif the response body was fully drained. The following chunk thus

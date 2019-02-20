@@ -19,7 +19,7 @@ var _ = Describe("plog", func() {
 		)
 
 		JustBeforeEach(func() {
-			logger = plog.NewLogger("ns")
+			logger = plog.NewLogger("ns", nil)
 		})
 
 		Context("setting its output", func() {
