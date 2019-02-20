@@ -84,6 +84,11 @@ func (a *Agent) start() {
 		return
 	}
 
+	// Create the command manager to process backend commands
+	commandMng := NewCommandManager(a, a.logger)
+	// Process commands that may have been received on login.
+	commandResults := commandMng.Do(appLoginRes.Commands)
+
 	heartbeat := time.Duration(appLoginRes.Features.HeartbeatDelay) * time.Second
 	if heartbeat == 0 {
 		heartbeat = config.BackendHTTPAPIDefaultHeartbeatDelay
@@ -114,14 +119,18 @@ func (a *Agent) start() {
 
 			metrics := a.metricsMng.getObservations()
 			appBeatReq := api.AppBeatRequest{
-				Metrics: metrics,
+				Metrics:        metrics,
+				CommandResults: commandResults,
 			}
 
-			_, err := client.AppBeat(&appBeatReq, sessionID)
+			appBeatRes, err := client.AppBeat(&appBeatReq, sessionID)
 			if err != nil {
 				a.logger.Error("heartbeat failed: ", err)
 				continue
 			}
+
+			// Perform commands that may be requested.
+			commandResults = commandMng.Do(appBeatRes.Commands)
 
 		case <-a.ctx.Done():
 			// The context was canceled because of a interrupt signal, logout and
