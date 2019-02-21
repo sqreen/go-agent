@@ -6,6 +6,7 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/mock"
@@ -29,13 +30,14 @@ func TestCommandManager(t *testing.T) {
 	})
 
 	t.Run("unknown command", func(t *testing.T) {
+		uuid := testlib.RandString(1, 126)
 		results := mng.Do([]api.CommandRequest{
 			{
-				Uuid: testlib.RandString(1, 50),
+				Uuid: uuid,
 				Name: testlib.RandString(1, 50),
 			},
 		})
-		require.Nil(t, results)
+		require.False(t, results[uuid].Status)
 		agent.AssertExpectations(t)
 	})
 
@@ -125,10 +127,17 @@ func TestCommandManager(t *testing.T) {
 
 		// Also include wrong commands
 		for n := 0; n <= int(testlib.RandUint32(1)); n++ {
+			uuid := testlib.RandString(1, 126)
+
 			commands = append(commands, api.CommandRequest{
-				Uuid: testlib.RandString(1, 50),
+				Uuid: uuid,
 				Name: testlib.RandString(1, 50),
 			})
+
+			expectedResults[uuid] = api.CommandResult{
+				Status: false,
+				Output: config.ErrorMessage_UnsupportedCommand,
+			}
 		}
 
 		results := mng.Do(commands)

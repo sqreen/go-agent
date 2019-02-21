@@ -22,6 +22,11 @@ type Config struct {
 	*viper.Viper
 }
 
+// Error messages.
+const (
+	ErrorMessage_UnsupportedCommand = "command is not supported"
+)
+
 type HTTPAPIEndpoint struct {
 	Method, URL string
 }

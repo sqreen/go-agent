@@ -2,6 +2,7 @@ package internal
 
 import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
@@ -43,11 +44,16 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 	results := make(map[string]api.CommandResult, len(commands))
 	for _, cmd := range commands {
 		handler, exists := m.handlers[cmd.Name]
-		if !exists {
-			m.logger.Warnf("ignoring unsupported command `%s`", cmd.Name)
-			continue
+		var result api.CommandResult
+		if exists {
+			result = handler()
+		} else {
+			result = api.CommandResult{
+				Status: false,
+				Output: config.ErrorMessage_UnsupportedCommand,
+			}
 		}
-		results[cmd.Uuid] = handler()
+		results[cmd.Uuid] = result
 	}
 
 	if len(results) == 0 {
