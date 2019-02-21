@@ -1,16 +1,11 @@
 package backend_test
 
 import (
-	"io/ioutil"
-	math_rand "math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"testing"
-	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
+	fuzz "github.com/google/gofuzz"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 	"github.com/sqreen/go-agent/agent/internal/backend"
@@ -24,8 +19,7 @@ import (
 var (
 	logger = plog.NewLogger("test", nil)
 	cfg    = config.New(logger)
-	seed   = time.Now().UnixNano()
-	popr   = math_rand.New(math_rand.NewSource(seed))
+	fuzzer = fuzz.New()
 )
 
 func TestClient(t *testing.T) {
@@ -40,13 +34,8 @@ func TestClient(t *testing.T) {
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogin
 
-		response := api.NewPopulatedAppLoginResponse(popr, false)
-		err := JSONPBLoopback(response)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		request := api.NewPopulatedAppLoginRequest(popr, false)
-		err = JSONPBLoopback(request)
-		g.Expect(err).ToNot(HaveOccurred())
+		response := NewRandomAppLoginResponse()
+		request := NewRandomAppLoginRequest()
 
 		headers := http.Header{
 			config.BackendHTTPAPIHeaderToken:   []string{token},
@@ -73,13 +62,8 @@ func TestClient(t *testing.T) {
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
 
-		response := api.NewPopulatedAppBeatResponse(popr, false)
-		err := JSONPBLoopback(response)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		request := api.NewPopulatedAppBeatRequest(popr, false)
-		err = JSONPBLoopback(request)
-		g.Expect(err).ToNot(HaveOccurred())
+		response := NewRandomAppBeatResponse()
+		request := NewRandomAppBeatRequest()
 
 		headers := http.Header{
 			config.BackendHTTPAPIHeaderSession: []string{session},
@@ -106,9 +90,7 @@ func TestClient(t *testing.T) {
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
 
-		request := api.NewPopulatedBatchRequest(popr, false)
-		err := JSONPBLoopback(request)
-		g.Expect(err).ToNot(HaveOccurred())
+		request := NewRandomBatchRequest()
 
 		headers := http.Header{
 			config.BackendHTTPAPIHeaderSession: []string{session},
@@ -150,30 +132,18 @@ func TestClient(t *testing.T) {
 	})
 }
 
-// JSONPBLoopback passes msg through the JSON-PB marshaler and unmarshaler so
-// that msg then has the same data has another protobuf parsed from a JSONPB
-// source. Used by loopback tests of API calls.
-func JSONPBLoopback(msg proto.Message) error {
-	msgJSON, err := api.DefaultJSONPBMarshaler.MarshalToString(msg)
-	if err != nil {
-		return err
-	}
-	msg.Reset()
-	return jsonpb.UnmarshalString(msgJSON, msg)
-}
-
-func initFakeServer(endpointCfg *config.HTTPAPIEndpoint, request, response proto.Message, statusCode int, headers http.Header) *ghttp.Server {
+func initFakeServer(endpointCfg *config.HTTPAPIEndpoint, request, response interface{}, statusCode int, headers http.Header) *ghttp.Server {
 	handlers := []http.HandlerFunc{
 		ghttp.VerifyRequest(endpointCfg.Method, endpointCfg.URL),
 		ghttp.VerifyHeader(headers),
 	}
 
 	if request != nil {
-		handlers = append(handlers, VerifyJSONPBRepresenting(request))
+		handlers = append(handlers, ghttp.VerifyJSONRepresenting(request))
 	}
 
 	if response != nil {
-		handlers = append(handlers, RespondWithJSONPB(statusCode, response))
+		handlers = append(handlers, ghttp.RespondWithJSONEncoded(statusCode, response))
 	} else {
 		handlers = append(handlers, ghttp.RespondWith(statusCode, nil))
 	}
@@ -181,47 +151,6 @@ func initFakeServer(endpointCfg *config.HTTPAPIEndpoint, request, response proto
 	server := ghttp.NewServer()
 	server.AppendHandlers(ghttp.CombineHandlers(handlers...))
 	return server
-}
-
-func RespondWithJSONPB(statusCode int, object proto.Message, optionalHeader ...http.Header) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		data, err := api.DefaultJSONPBMarshaler.MarshalToString(object)
-		Expect(err).ShouldNot(HaveOccurred())
-		var headers http.Header
-		if len(optionalHeader) == 1 {
-			headers = optionalHeader[0]
-		} else {
-			headers = make(http.Header)
-		}
-		if _, found := headers["Content-Type"]; !found {
-			headers["Content-Type"] = []string{"application/json"}
-		}
-		copyHeader(headers, w.Header())
-		w.WriteHeader(statusCode)
-		w.Write([]byte(data))
-	}
-}
-
-func VerifyJSONPBRepresenting(expected proto.Message) http.HandlerFunc {
-	return ghttp.CombineHandlers(
-		ghttp.VerifyContentType("application/json"),
-		func(w http.ResponseWriter, req *http.Request) {
-			body, err := ioutil.ReadAll(req.Body)
-			Expect(err).ShouldNot(HaveOccurred())
-			req.Body.Close()
-
-			expectedType := reflect.TypeOf(expected)
-			actualValuePtr := reflect.New(expectedType.Elem())
-
-			actual, ok := actualValuePtr.Interface().(proto.Message)
-			Expect(ok).Should(BeTrue(), "Message value is not a proto.Message")
-
-			err = jsonpb.UnmarshalString(string(body), actual)
-			Expect(err).ShouldNot(HaveOccurred(), "Failed to unmarshal protobuf")
-
-			Expect(actual).Should(Equal(expected), "ProtoBuf Mismatch")
-		},
-	)
 }
 
 func copyHeader(src http.Header, dst http.Header) {
@@ -271,9 +200,39 @@ func testProxy(t *testing.T, envVar string) {
 	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
 	require.Equal(t, err, nil)
 	// Perform a request that should go through the proxy.
-	request := api.NewPopulatedAppLoginRequest(popr, false)
+	request := NewRandomAppLoginRequest()
 	_, err = client.AppLogin(request, "my-token", "my-app")
 	// A request has been received:
 	//require.NotEqual(t, len(back.ReceivedRequests()), 0, "0 request received")
 	require.NotEqual(t, len(proxy.ReceivedRequests()), 0, "0 request received")
+}
+
+func NewRandomAppLoginResponse() *api.AppLoginResponse {
+	pb := new(api.AppLoginResponse)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
+func NewRandomAppLoginRequest() *api.AppLoginRequest {
+	pb := new(api.AppLoginRequest)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
+func NewRandomAppBeatResponse() *api.AppBeatResponse {
+	pb := new(api.AppBeatResponse)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
+func NewRandomAppBeatRequest() *api.AppBeatRequest {
+	pb := new(api.AppBeatRequest)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
+func NewRandomBatchRequest() *api.BatchRequest {
+	pb := new(api.BatchRequest)
+	fuzzer.Fuzz(pb)
+	return pb
 }

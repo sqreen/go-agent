@@ -31,7 +31,7 @@ dev-container := .cache/docker/dev/run
 dev-image := .cache/docker/dev/build
 needs-dev-container := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(dev-container))
 needs-dev-image := $(if $(shell $(lib/docker/is_in_container) && echo y),,$(dev-image))
-needs-protobufs := $(protobufs)
+needs-protobufs :=
 needs-vendors := .cache/go/vendor
 
 #-----------------------------------------------------------------------------

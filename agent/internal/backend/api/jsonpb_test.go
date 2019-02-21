@@ -1,6 +1,8 @@
 package api_test
 
 import (
+	"encoding/json"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -21,9 +23,9 @@ var _ = Describe("API", func() {
 					},
 				},
 			}
-			str, err := api.DefaultJSONPBMarshaler.MarshalToString(pb)
+			buf, err := json.Marshal(pb)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(str).To(Equal(`{"batch":[{"event_type":"request_record","A":16,"B":22}]}`))
+			Expect(string(buf)).To(Equal(`{"batch":[{"event_type":"request_record","A":16,"B":22}]}`))
 		})
 	})
 
@@ -35,9 +37,9 @@ var _ = Describe("API", func() {
 						Key:   "my key",
 						Value: "my value",
 					}
-					str, err := api.DefaultJSONPBMarshaler.MarshalToString(pb)
+					buf, err := json.Marshal(pb)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(str).To(Equal(`["my key", "my value"]`))
+					Expect(string(buf)).To(Equal(`["my key","my value"]`))
 				})
 			})
 		})
@@ -52,7 +54,9 @@ var _ = Describe("API", func() {
 				)
 
 				JustBeforeEach(func() {
-					str, err = api.DefaultJSONPBMarshaler.MarshalToString(pb)
+					var buf []byte
+					buf, err = json.Marshal(pb)
+					str = string(buf)
 				})
 
 				Describe("Track event", func() {
@@ -149,9 +153,9 @@ var _ = Describe("API", func() {
 							},
 						}
 
-						str, err := api.DefaultJSONPBMarshaler.MarshalToString(pb)
+						buf, err := json.Marshal(pb)
 						Expect(err).NotTo(HaveOccurred())
-						Expect(str).To(Equal(`[{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}]`))
+						Expect(string(buf)).To(Equal(`[{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}]`))
 					})
 				})
 			})
