@@ -13,6 +13,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/sdk"
 )
 
 type Agent struct {
@@ -55,8 +56,8 @@ func (a *Agent) Start() {
 
 func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
 	return a.newHTTPRequestRecord(req)
-
 }
+
 func (a *Agent) start() {
 	defer func() {
 		err := recover()
@@ -83,6 +84,11 @@ func (a *Agent) start() {
 	if checkErr(err, a.logger) {
 		return
 	}
+
+	// Create the command manager to process backend commands
+	commandMng := NewCommandManager(a, a.logger)
+	// Process commands that may have been received on login.
+	commandResults := commandMng.Do(appLoginRes.Commands)
 
 	heartbeat := time.Duration(appLoginRes.Features.HeartbeatDelay) * time.Second
 	if heartbeat == 0 {
@@ -114,14 +120,18 @@ func (a *Agent) start() {
 
 			metrics := a.metricsMng.getObservations()
 			appBeatReq := api.AppBeatRequest{
-				Metrics: metrics,
+				Metrics:        metrics,
+				CommandResults: commandResults,
 			}
 
-			_, err := client.AppBeat(&appBeatReq, sessionID)
+			appBeatRes, err := client.AppBeat(&appBeatReq, sessionID)
 			if err != nil {
 				a.logger.Error("heartbeat failed: ", err)
 				continue
 			}
+
+			// Perform commands that may be requested.
+			commandResults = commandMng.Do(appBeatRes.Commands)
 
 		case <-a.ctx.Done():
 			// The context was canceled because of a interrupt signal, logout and
@@ -135,6 +145,20 @@ func (a *Agent) start() {
 			return
 		}
 	}
+}
+
+func (a *Agent) InstrumentationEnable() error {
+	sdk.SetAgent(a)
+	a.logger.Info("instrumentation enabled")
+	return nil
+}
+
+// InstrumentationDisable disables the agent instrumentation, which includes for
+// now the SDK.
+func (a *Agent) InstrumentationDisable() error {
+	sdk.SetAgent(nil)
+	a.logger.Info("instrumentation disabled")
+	return nil
 }
 
 func (a *Agent) GracefulStop() {
