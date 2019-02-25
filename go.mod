@@ -5,6 +5,7 @@ require (
 	github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7 // indirect
 	github.com/gin-gonic/gin v1.3.0
 	github.com/gogo/protobuf v1.2.0
+	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/google/uuid v1.1.0
 	github.com/json-iterator/go v1.1.5 // indirect
 	github.com/labstack/echo v3.3.10+incompatible

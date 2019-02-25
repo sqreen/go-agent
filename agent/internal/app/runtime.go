@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
@@ -81,10 +79,6 @@ func (p *ProcessInfo) GetUid() uint32 {
 
 func (p *ProcessInfo) GetGid() uint32 {
 	return p.gid
-}
-
-func (p *ProcessInfo) Proto() proto.Message {
-	return api.NewAppLoginRequest_VariousInfosFromFace(p)
 }
 
 func GoVersion() string {

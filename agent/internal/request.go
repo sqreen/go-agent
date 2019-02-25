@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
@@ -239,10 +238,6 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 	return &api.Struct{e.userIdentifiers}
 }
 
-func (e *HTTPRequestEvent) Proto() proto.Message {
-	return api.NewRequestRecord_Observed_SDKEventFromFace(e)
-}
-
 type httpRequestRecord struct {
 	ctx         *HTTPRequestRecord
 	rulespackID string
@@ -387,10 +382,6 @@ func (r *httpRequestRecord) GetObserved() api.RequestRecord_Observed {
 	return api.RequestRecord_Observed{
 		Sdk: events,
 	}
-}
-
-func (r *httpRequestRecord) Proto() proto.Message {
-	return api.NewRequestRecordFromFace(r)
 }
 
 func isGlobal(ip net.IP) bool {
