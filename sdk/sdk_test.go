@@ -8,18 +8,17 @@ import (
 
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/tools/testlib"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
 type SDKTestSuite struct {
 	suite.Suite
-	agent *agentMockup
+	agent *testlib.AgentMockup
 }
 
 func (suite *SDKTestSuite) SetupTest() {
-	suite.agent = &agentMockup{}
+	suite.agent = &testlib.AgentMockup{}
 	sdk.SetAgent(suite.agent)
 }
 
@@ -246,88 +245,4 @@ func TestSDK(t *testing.T) {
 func newTestRequest() *http.Request {
 	req, _ := http.NewRequest("GET", "https://sqreen.com", nil)
 	return req
-}
-
-type agentMockup struct {
-	mock.Mock
-}
-
-func (a *agentMockup) GracefulStop() {
-	a.Called()
-}
-
-func (a *agentMockup) ExpectGracefulStop() *mock.Call {
-	return a.On("GracefulStop")
-}
-
-func (a *agentMockup) NewRequestRecord(req *http.Request) types.RequestRecord {
-	a.Called(req)
-	return a
-}
-
-func (a *agentMockup) ExpectNewRequestRecord(req *http.Request) *mock.Call {
-	return a.On("NewRequestRecord", req)
-}
-
-func (a *agentMockup) Close() {
-	a.Called()
-}
-
-func (a *agentMockup) NewCustomEvent(event string) types.CustomEvent {
-	// Return itself as long as it can both implement RequestRecord and Event
-	// interfaces without conflicting thanks to distinct method signatures.
-	a.Called(event)
-	return a
-}
-
-func (a *agentMockup) ExpectTrackEvent(event string) *mock.Call {
-	return a.On("NewCustomEvent", event)
-}
-
-func (a *agentMockup) NewUserAuth(id map[string]string, success bool) {
-	a.Called(id, success)
-}
-
-func (a *agentMockup) ExpectTrackAuth(id map[string]string, success bool) *mock.Call {
-	return a.On("NewUserAuth", id, success)
-}
-
-func (a *agentMockup) NewUserSignup(id map[string]string) {
-	a.Called(id)
-}
-
-func (a *agentMockup) ExpectTrackSignup(id map[string]string) *mock.Call {
-	return a.On("NewUserSignup", id)
-}
-
-func (a *agentMockup) Identify(id map[string]string) {
-	a.Called(id)
-}
-
-func (a *agentMockup) ExpectIdentify(id map[string]string) *mock.Call {
-	return a.On("Identify", id)
-}
-
-func (a *agentMockup) WithTimestamp(t time.Time) {
-	a.Called(t)
-}
-
-func (a *agentMockup) ExpectWithTimestamp(t time.Time) *mock.Call {
-	return a.On("WithTimestamp", t)
-}
-
-func (a *agentMockup) WithProperties(props map[string]string) {
-	a.Called(props)
-}
-
-func (a *agentMockup) ExpectWithProperties(props map[string]string) *mock.Call {
-	return a.On("WithProperties", props)
-}
-
-func (a *agentMockup) WithUserIdentifiers(id map[string]string) {
-	a.Called(id)
-}
-
-func (a *agentMockup) ExpectWithUserIdentifiers(id map[string]string) *mock.Call {
-	return a.On("WithUserIdentifiers", id)
 }
