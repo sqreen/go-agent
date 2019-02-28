@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/mock"

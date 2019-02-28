@@ -1,13 +1,11 @@
 package sdk
 
-import "github.com/sqreen/go-agent/agent/types"
-
 // UserHTTPRequestRecord is the SDK record associated to a HTTP request for a
 // given user. Its methods allow request handlers to signal security events
 // related to the given user. It allows to send security events related to a
 // single user.
 type UserHTTPRequestRecord struct {
-	record types.RequestRecord
+	record RequestRecord
 	id     EventUserIdentifiersMap
 }
 

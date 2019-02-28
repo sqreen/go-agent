@@ -2,8 +2,6 @@ package sdk
 
 import (
 	"time"
-
-	"github.com/sqreen/go-agent/agent/types"
 )
 
 // EventPropertyMap is the type used to represent extra custom event properties.
@@ -20,7 +18,7 @@ type EventPropertyMap map[string]string
 // options further specifying the event, such as a unique user identifier, extra
 // properties, etc.
 type HTTPRequestEvent struct {
-	impl types.CustomEvent
+	impl CustomEvent
 }
 
 // WithTimestamp adds a custom timestamp to the event. By default, the timestamp

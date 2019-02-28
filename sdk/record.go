@@ -3,14 +3,12 @@ package sdk
 import (
 	"context"
 	"net/http"
-
-	"github.com/sqreen/go-agent/agent/types"
 )
 
 // HTTPRequestRecord is the SDK record associated to a HTTP request. Its methods
 // allow request handlers to track custom security events.
 type HTTPRequestRecord struct {
-	record types.RequestRecord
+	record RequestRecord
 }
 
 // EventUserIdentifiersMap is the type used to represent user identifiers in
