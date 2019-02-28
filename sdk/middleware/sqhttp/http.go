@@ -20,6 +20,11 @@ import (
 //
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if action := sdk.SecurityAction(r); action != nil {
+			action.Apply(w)
+			return
+		}
+
 		// Create a new request record for this request.
 		sqreen := sdk.NewHTTPRequestRecord(r)
 		defer sqreen.Close()

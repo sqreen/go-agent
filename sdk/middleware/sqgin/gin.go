@@ -32,8 +32,16 @@ import (
 //
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
+		req := c.Request
+
+		if action := sdk.SecurityAction(req); action != nil {
+			action.Apply(c.Writer)
+			c.Abort()
+			return
+		}
+
 		// Create a new request record for this request.
-		sqreen := sdk.NewHTTPRequestRecord(c.Request)
+		sqreen := sdk.NewHTTPRequestRecord(req)
 		defer sqreen.Close()
 
 		// Gin redefines the request context interface, so we need to store it both

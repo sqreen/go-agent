@@ -86,3 +86,10 @@ func (_ disabledAgent) WithProperties(_ map[string]string) {
 
 func (_ disabledAgent) WithUserIdentifiers(_ map[string]string) {
 }
+
+func (a disabledAgent) SecurityAction(*http.Request) Action {
+	return a
+}
+
+func (disabledAgent) Apply(http.ResponseWriter) {
+}
