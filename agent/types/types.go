@@ -11,6 +11,7 @@ import (
 
 type Agent interface {
 	NewRequestRecord(req *http.Request) RequestRecord
+	SecurityAction(req *http.Request) Action
 	GracefulStop()
 }
 
@@ -31,4 +32,8 @@ type CustomEvent interface {
 	WithTimestamp(t time.Time)
 	WithProperties(props map[string]string)
 	WithUserIdentifiers(id map[string]string)
+}
+
+type Action interface {
+	Apply(w http.ResponseWriter)
 }

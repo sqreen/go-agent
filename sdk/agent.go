@@ -21,6 +21,10 @@ func SetAgent(a types.Agent) {
 	agent = a
 }
 
+func SecurityAction(req *http.Request) types.Action {
+	return agent.SecurityAction(req)
+}
+
 func GracefulStop() {
 	agent.GracefulStop()
 }
@@ -62,4 +66,11 @@ func (_ disabledAgent) WithProperties(_ map[string]string) {
 }
 
 func (_ disabledAgent) WithUserIdentifiers(_ map[string]string) {
+}
+
+func (a disabledAgent) SecurityAction(*http.Request) types.Action {
+	return a
+}
+
+func (disabledAgent) Apply(http.ResponseWriter) {
 }
