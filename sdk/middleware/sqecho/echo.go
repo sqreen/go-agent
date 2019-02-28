@@ -34,8 +34,14 @@ import (
 func Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Create a new request record for this request.
 			req := c.Request()
+
+			if action := sdk.SecurityAction(req); action != nil {
+				action.Apply(c.Response())
+				return nil
+			}
+
+			// Create a new request record for this request.
 			sqreen := sdk.NewHTTPRequestRecord(req)
 			defer sqreen.Close()
 
