@@ -2,204 +2,227 @@ package sdk_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
-type SDKTestSuite struct {
-	suite.Suite
-	agent *testlib.AgentMockup
+func TestFromContext(t *testing.T) {
+	record := &sdk.HTTPRequestRecord{}
+
+	t.Run("unset value", func(t *testing.T) {
+		ctx := context.Background()
+		got := sdk.FromContext(ctx)
+		require.Nil(t, got)
+	})
+
+	t.Run("from a pointer key", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), sdk.HTTPRequestRecordContextKey, record)
+		got := sdk.FromContext(ctx)
+		require.NotNil(t, got)
+	})
+
+	t.Run("from a string key", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), sdk.HTTPRequestRecordContextKey.String, record)
+		got := sdk.FromContext(ctx)
+		require.NotNil(t, got)
+	})
 }
 
-func (suite *SDKTestSuite) SetupTest() {
-	suite.agent = &testlib.AgentMockup{}
-	sdk.SetAgent(suite.agent)
-}
-
-func (suite *SDKTestSuite) TearDownTest() {
-	suite.agent.AssertExpectations(suite.T())
-}
-
-func (suite *SDKTestSuite) TestFromContext() {
-	require := require.New(suite.T())
-
-	req := newTestRequest()
-	suite.agent.ExpectNewRequestRecord(req).Once()
-
-	sqreen := sdk.NewHTTPRequestRecord(req)
-	require.NotNil(sqreen)
-
-	ctx := context.WithValue(context.Background(), sdk.HTTPRequestRecordContextKey, sqreen)
-
-	got := sdk.FromContext(ctx)
-	require.Equal(got, sqreen)
-}
-
-func (suite *SDKTestSuite) TestGracefulStop() {
-	suite.agent.ExpectGracefulStop().Once()
+func TestGracefulStop(t *testing.T) {
+	agent := &testlib.AgentMockup{}
+	sdk.SetAgent(agent)
+	defer agent.AssertExpectations(t)
+	agent.ExpectGracefulStop().Once()
 	sdk.GracefulStop()
 }
 
-func (suite *SDKTestSuite) TestSecurityAction() {
+func TestTrackEvent(t *testing.T) {
+	agent := &testlib.AgentMockup{}
+	defer agent.AssertExpectations(t)
+	sdk.SetAgent(agent)
+	record := &testlib.HTTPRequestRecordMockup{}
+	defer record.AssertExpectations(t)
 	req := newTestRequest()
-	action := &testlib.SecurityActionMockup{}
-	suite.agent.ExpectSecurityAction(req).Once().Return(action)
-	got := sdk.SecurityAction(req)
-	require.Equal(suite.T(), got, action)
-}
+	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
 
-func (suite *SDKTestSuite) TestTrackEvent() {
-	require := require.New(suite.T())
+	sqReq := sdk.NewHTTPRequest(req)
+	require.NotNil(t, sqReq)
+	req = sqReq.Request()
+	require.NotNil(t, req)
 
-	req := newTestRequest()
-	suite.agent.ExpectNewRequestRecord(req).Once()
+	sqreen := sdk.FromContext(req.Context())
+	require.NotNil(t, sqreen)
 
-	sqreen := sdk.NewHTTPRequestRecord(req)
-	require.NotNil(sqreen)
+	defer sqReq.Close()
+	record.ExpectClose()
 
 	eventID := testlib.RandString(2, 50)
-	suite.agent.ExpectTrackEvent(eventID).Once()
+	record.ExpectTrackEvent(eventID).Return(record).Once()
+
 	sqEvent := sqreen.TrackEvent(eventID)
-	require.NotNil(sqEvent)
+	require.NotNil(t, sqEvent)
 
-	suite.Run("with user identifiers", func() {
+	t.Run("with user identifiers", func(t *testing.T) {
 		userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-		suite.agent.ExpectWithUserIdentifiers(userID).Once()
+		record.ExpectWithUserIdentifiers(userID).Once()
 		sqEvent = sqEvent.WithUserIdentifiers(userID)
-		require.NotNil(sqEvent)
+		require.NotNil(t, sqEvent)
 
-		suite.Run("chain with properties", func() {
+		t.Run("chain with properties", func(t *testing.T) {
 			props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-			suite.agent.ExpectWithProperties(props).Once()
+			record.ExpectWithProperties(props).Once()
 			sqEvent = sqEvent.WithProperties(props)
-			require.NotNil(sqEvent)
+			require.NotNil(t, sqEvent)
 		})
 
-		suite.Run("chain with timestamp", func() {
-			t := time.Now()
-			suite.agent.ExpectWithTimestamp(t).Once()
-			sqEvent = sqEvent.WithTimestamp(t)
-			require.NotNil(sqEvent)
+		t.Run("chain with timestamp", func(t *testing.T) {
+			timestamp := time.Now()
+			record.ExpectWithTimestamp(timestamp).Once()
+			sqEvent = sqEvent.WithTimestamp(timestamp)
+			require.NotNil(t, sqEvent)
 		})
 	})
 
-	suite.Run("with properties", func() {
+	t.Run("with properties", func(t *testing.T) {
+		require := require.New(t)
 		props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-		suite.agent.ExpectWithProperties(props).Once()
+		record.ExpectWithProperties(props).Once()
 		sqEvent = sqEvent.WithProperties(props)
 		require.NotNil(sqEvent)
 
-		suite.Run("chain with user identifiers", func() {
+		t.Run("chain with user identifiers", func(t *testing.T) {
 			userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-			suite.agent.ExpectWithUserIdentifiers(userID).Once()
+			record.ExpectWithUserIdentifiers(userID).Once()
 			sqEvent = sqEvent.WithUserIdentifiers(userID)
-			require.NotNil(sqEvent)
+			require.NotNil(t, sqEvent)
 		})
 
-		suite.Run("chain with timestamp", func() {
-			t := time.Now()
-			suite.agent.ExpectWithTimestamp(t).Once()
-			sqEvent = sqEvent.WithTimestamp(t)
-			require.NotNil(sqEvent)
+		t.Run("chain with timestamp", func(t *testing.T) {
+			timestamp := time.Now()
+			record.ExpectWithTimestamp(timestamp).Once()
+			sqEvent = sqEvent.WithTimestamp(timestamp)
+			require.NotNil(t, sqEvent)
 		})
 	})
 
-	suite.Run("with timestamp", func() {
-		t := time.Now()
-		suite.agent.ExpectWithTimestamp(t).Once()
-		sqEvent = sqEvent.WithTimestamp(t)
+	t.Run("with timestamp", func(t *testing.T) {
+		require := require.New(t)
+		timestamp := time.Now()
+		record.ExpectWithTimestamp(timestamp).Once()
+		sqEvent = sqEvent.WithTimestamp(timestamp)
 		require.NotNil(sqEvent)
 
-		suite.Run("chain with user identifiers", func() {
+		t.Run("chain with user identifiers", func(t *testing.T) {
 			userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-			suite.agent.ExpectWithUserIdentifiers(userID).Once()
+			record.ExpectWithUserIdentifiers(userID).Once()
 			sqEvent = sqEvent.WithUserIdentifiers(userID)
 			require.NotNil(sqEvent)
 		})
 
-		suite.Run("chain with properties", func() {
+		t.Run("chain with properties", func(t *testing.T) {
 			props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-			suite.agent.ExpectWithProperties(props).Once()
+			record.ExpectWithProperties(props).Once()
 			sqEvent = sqEvent.WithProperties(props)
 			require.NotNil(sqEvent)
 		})
 	})
-
 }
 
-func (suite *SDKTestSuite) TestForUser() {
-	require := require.New(suite.T())
-
+func TestForUser(t *testing.T) {
+	agent := &testlib.AgentMockup{}
+	defer agent.AssertExpectations(t)
+	sdk.SetAgent(agent)
+	record := &testlib.HTTPRequestRecordMockup{}
+	defer record.AssertExpectations(t)
 	req := newTestRequest()
-	suite.agent.ExpectNewRequestRecord(req)
-	sqreen := sdk.NewHTTPRequestRecord(req)
-	require.NotNil(sqreen)
+	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
+
+	sqReq := sdk.NewHTTPRequest(req)
+	require.NotNil(t, sqReq)
+	req = sqReq.Request()
+	require.NotNil(t, req)
+
+	sqreen := sdk.FromContext(req.Context())
+	require.NotNil(t, sqreen)
+
+	defer sqReq.Close()
+	record.ExpectClose()
 
 	userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
 
 	sqUser := sqreen.ForUser(userID)
-	require.NotNil(sqUser)
+	require.NotNil(t, sqUser)
 
-	suite.Run("TrackAuth", func() {
-		suite.agent.ExpectTrackAuth(userID, true).Once()
+	t.Run("TrackAuth", func(t *testing.T) {
+		record.ExpectTrackAuth(userID, true).Once()
 		sqUser = sqUser.TrackAuth(true)
-		require.NotNil(sqUser)
+		require.NotNil(t, sqUser)
 
-		suite.agent.ExpectTrackAuth(userID, false).Once()
+		record.ExpectTrackAuth(userID, true).Once()
+		sqUser = sqUser.TrackAuthSuccess()
+		require.NotNil(t, sqUser)
+
+		record.ExpectTrackAuth(userID, false).Once()
 		sqUser = sqUser.TrackAuth(false)
-		require.NotNil(sqUser)
+		require.NotNil(t, sqUser)
+
+		record.ExpectTrackAuth(userID, false).Once()
+		sqUser = sqUser.TrackAuthFailure()
+		require.NotNil(t, sqUser)
 	})
 
-	suite.Run("TrackSignup", func() {
-		suite.agent.ExpectTrackSignup(userID).Once()
+	t.Run("TrackSignup", func(t *testing.T) {
+		record.ExpectTrackSignup(userID).Once()
 		sqUser = sqUser.TrackSignup()
-		require.NotNil(sqUser)
+		require.NotNil(t, sqUser)
 	})
 
-	suite.Run("Identfy", func() {
-		suite.agent.ExpectIdentify(userID).Once()
+	t.Run("Identfy", func(t *testing.T) {
+		record.ExpectIdentify(userID).Once()
 		sqUser = sqUser.Identify()
-		require.NotNil(sqUser)
+		require.NotNil(t, sqUser)
 	})
 
-	suite.Run("TrackEvent", func() {
+	t.Run("TrackEvent", func(t *testing.T) {
 		eventID := testlib.RandString(2, 50)
-		suite.agent.ExpectTrackEvent(eventID).Once()
-		suite.agent.ExpectIdentify(userID).Once()
+		record.ExpectTrackEvent(eventID).Once()
+		record.ExpectIdentify(userID).Once()
 		sqEvent := sqUser.TrackEvent(eventID)
-		require.NotNil(sqEvent)
+		require.NotNil(t, sqEvent)
 
-		suite.Run("with properties", func() {
+		t.Run("with properties", func(t *testing.T) {
 			props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-			suite.agent.ExpectWithProperties(props).Once()
+			record.ExpectWithProperties(props).Once()
 			sqEvent = sqEvent.WithProperties(props)
-			require.NotNil(sqEvent)
+			require.NotNil(t, sqEvent)
 
-			suite.Run("chain with timestamp", func() {
-				t := time.Now()
-				suite.agent.ExpectWithTimestamp(t).Once()
-				sqEvent = sqEvent.WithTimestamp(t)
-				require.NotNil(sqEvent)
+			t.Run("chain with timestamp", func(t *testing.T) {
+				timestamp := time.Now()
+				record.ExpectWithTimestamp(timestamp).Once()
+				sqEvent = sqEvent.WithTimestamp(timestamp)
+				require.NotNil(t, sqEvent)
 			})
 		})
 
-		suite.Run("with timestamp", func() {
-			t := time.Now()
-			suite.agent.ExpectWithTimestamp(t).Once()
-			sqEvent = sqEvent.WithTimestamp(t)
-			require.NotNil(sqEvent)
+		t.Run("with timestamp", func(t *testing.T) {
+			timestamp := time.Now()
+			record.ExpectWithTimestamp(timestamp).Once()
+			sqEvent = sqEvent.WithTimestamp(timestamp)
+			require.NotNil(t, sqEvent)
 
-			suite.Run("chain with properties", func() {
+			t.Run("chain with properties", func(t *testing.T) {
 				props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
-				suite.agent.ExpectWithProperties(props).Once()
+				record.ExpectWithProperties(props).Once()
 				sqEvent = sqEvent.WithProperties(props)
-				require.NotNil(sqEvent)
+				require.NotNil(t, sqEvent)
 			})
 		})
 	})
@@ -211,7 +234,6 @@ func TestDisabled(t *testing.T) {
 
 	useTheSDK := func(sqreen *sdk.HTTPRequestRecord) func() {
 		return func() {
-			sdk.SecurityAction(nil)
 			event := sqreen.TrackEvent(testlib.RandString(0, 50))
 			event = event.WithTimestamp(time.Now())
 			userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 30): testlib.RandString(2, 30)}
@@ -239,12 +261,18 @@ func TestDisabled(t *testing.T) {
 	sqreen := sdk.FromContext(context.Background())
 	require.NotPanics(useTheSDK(sqreen))
 
-	// When creating the request record ourselves.
-	sqreen = sdk.NewHTTPRequestRecord(newTestRequest())
-	require.NotPanics(useTheSDK(sqreen))
-
-	// When not even following the SDK requirements.
+	// When not even following the proper SDK usage (middlewares, etc.).
 	require.NotPanics(useTheSDK(nil))
+
+	// When getting the SDK context out of the request wrapper.
+	req := sdk.NewHTTPRequest(newTestRequest())
+	record := req.Record()
+	require.NotPanics(useTheSDK(record))
+
+	// Other methods
+	req.SecurityAction()
+	req.Close()
+	sdk.GracefulStop()
 }
 
 func TestSDK(t *testing.T) {
@@ -252,6 +280,6 @@ func TestSDK(t *testing.T) {
 }
 
 func newTestRequest() *http.Request {
-	req, _ := http.NewRequest("GET", "https://sqreen.com", nil)
+	req := httptest.NewRequest("GET", "https://sqreen.com", nil)
 	return req
 }
