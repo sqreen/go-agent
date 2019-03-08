@@ -1,7 +1,6 @@
 package sqhttp
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sqreen/go-agent/sdk"
@@ -20,15 +19,19 @@ import (
 //
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Create a new request record for this request.
-		sqreen := sdk.NewHTTPRequestRecord(r)
-		defer sqreen.Close()
+		// Create a new sqreen request wrapper.
+		req := sdk.NewHTTPRequest(r)
+		defer req.Close()
+		// Use the newly created request compliant with `sdk.FromContext()`.
+		r = req.Request()
 
-		// Store it into the request's context.
-		ctx := r.Context()
-		contextKey := sdk.HTTPRequestRecordContextKey.String
-		ctx = context.WithValue(ctx, contextKey, sqreen)
-		r = r.WithContext(ctx)
+		// Check if a security action is required.
+		if handler := req.SecurityAction(); handler != nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		// Call next handler.
 		next.ServeHTTP(w, r)
 	})
 }

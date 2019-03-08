@@ -1,8 +1,6 @@
 package sqgin
 
 import (
-	"context"
-
 	gingonic "github.com/gin-gonic/gin"
 	"github.com/sqreen/go-agent/sdk"
 )
@@ -32,22 +30,32 @@ import (
 //
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
-		// Create a new request record for this request.
-		sqreen := sdk.NewHTTPRequestRecord(c.Request)
-		defer sqreen.Close()
+		// Get current request.
+		r := c.Request
+		// Create a new sqreen request wrapper.
+		req := sdk.NewHTTPRequest(r)
+		defer req.Close()
+		// Use the newly created request compliant with `sdk.FromContext()`.
+		r = req.Request()
+		// Also replace Gin's request pointer with it.
+		c.Request = r
 
-		// Gin redefines the request context interface, so we need to store it both
-		// in the request and Gin contexts.
+		// Check if a security action is required
+		if handler := req.SecurityAction(); handler != nil {
+			handler.ServeHTTP(c.Writer, r)
+			c.Abort()
+			return
+		}
 
-		// Store it into the request's context.
+		// Gin implements the `context.Context` interface but with string keys, so
+		// we need to also store the request record in Gin's context using a string
+		// key (previous call to `sdk.NewHTTPRequest()` stored it with a non-string
+		// key, as documented by `context.WithValue()`
+		// (https://godoc.org/context#WithValue)).
 		contextKey := sdk.HTTPRequestRecordContextKey.String
-		ctx := c.Request.Context()
-		ctx = context.WithValue(ctx, contextKey, sqreen)
-		c.Request = c.Request.WithContext(ctx)
+		c.Set(contextKey, req.Record())
 
-		// Store it into Gin's context.
-		c.Set(contextKey, sqreen)
-
+		// Call next handler.
 		c.Next()
 	}
 }
