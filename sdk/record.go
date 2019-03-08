@@ -2,7 +2,6 @@ package sdk
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/sqreen/go-agent/agent/types"
 )
@@ -22,14 +21,6 @@ type HTTPRequestRecord struct {
 //	sdk.FromContext(ctx).ForUser(uid).TrackEvent("my.event")
 //
 type EventUserIdentifiersMap map[string]string
-
-// NewHTTPRequestRecord returns a new HTTP request record for the given HTTP
-// request.
-func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
-	return &HTTPRequestRecord{
-		record: agent.NewRequestRecord(req),
-	}
-}
 
 // FromContext allows to access the HTTPRequestRecord from request handlers if
 // present, and nil otherwise. The value is stored in handler contexts by the

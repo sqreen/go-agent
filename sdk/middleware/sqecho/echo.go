@@ -1,8 +1,6 @@
 package sqecho
 
 import (
-	"context"
-
 	"github.com/labstack/echo"
 	"github.com/sqreen/go-agent/sdk"
 )
@@ -34,29 +32,28 @@ import (
 func Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			req := c.Request()
+			// Get current request.
+			r := c.Request()
+			// Create a new sqreen request wrapper.
+			req := sdk.NewHTTPRequest(r)
+			defer req.Close()
+			// Use the newly created request compliant with `sdk.FromContext()`.
+			r = req.Request()
+			// Also replace Echo's request pointer with it.
+			c.SetRequest(r)
 
-			if action := sdk.SecurityAction(req); action != nil {
-				action.Apply(c.Response())
+			// Check if a security action is required
+			if handler := req.SecurityAction(); handler != nil {
+				handler.ServeHTTP(c.Response(), req.Request())
 				return nil
 			}
 
-			// Create a new request record for this request.
-			sqreen := sdk.NewHTTPRequestRecord(req)
-			defer sqreen.Close()
-
-			// Echo defines its own context interface, so we need to store it both in
-			// the request and Echo contexts.
-
-			// Store it into the request's context.
+			// Echo defines its own context interface, so we need to store it in
+			// Echo's context. Echo expects string keys.
 			contextKey := sdk.HTTPRequestRecordContextKey.String
-			ctx := req.Context()
-			ctx = context.WithValue(ctx, contextKey, sqreen)
-			c.SetRequest(req.WithContext(ctx))
+			c.Set(contextKey, req.Record())
 
-			// Store it into Echo's context.
-			c.Set(contextKey, sqreen)
-
+			// Call next handler.
 			return next(c)
 		}
 	}

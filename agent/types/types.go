@@ -10,8 +10,18 @@ import (
 )
 
 type Agent interface {
+	// NewRequestRecord returns a new request record for the given request. It
+	// should be stored into the request context to be retrieved using
+	// `sdk.FromContext()`.
 	NewRequestRecord(req *http.Request) RequestRecord
-	SecurityAction(req *http.Request) Action
+
+	// SecurityAction returns a non-nil HTTP handler when a security action is
+	// required for the given request. The returned handler should be used to
+	// handle the request before aborting it. Because of a security rule (eg.
+	// blocking an IP address). The request handler should therefore abort the
+	// request.
+	SecurityAction(r *http.Request) http.Handler
+
 	GracefulStop()
 }
 
