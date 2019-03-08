@@ -13,15 +13,33 @@ import (
 )
 
 func TestMiddleware(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/", nil)
-
-	agent := testlib.NewAgentForMiddlewareTests(req)
-	sdk.SetAgent(agent)
-
-	t.Run("without security action", func(t *testing.T) {
+	t.Run("without middleware", func(t *testing.T) {
+		agent := &testlib.AgentMockup{}
 		defer agent.AssertExpectations(t)
+		sdk.SetAgent(agent)
 
-		require := require.New(t)
+		req, _ := http.NewRequest("GET", "/", nil)
+		body := testlib.RandString(1, 100)
+		// Create a Gin router
+		router := gin.New()
+		// Add an endpoint accessing the SDK handle
+		router.GET("/", func(c *gin.Context) {
+			require.Nil(t, sdk.FromContext(c))
+			require.Nil(t, sdk.FromContext(c.Request.Context()))
+			c.String(http.StatusOK, body)
+		})
+		// Perform the request and record the output
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		// Check the request was performed as expected
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, body, rec.Body.String())
+	})
+
+	t.Run("without agent", func(t *testing.T) {
+		sdk.SetAgent(nil)
+
+		req, _ := http.NewRequest("GET", "/", nil)
 		body := testlib.RandString(1, 100)
 		// Create a Gin router
 		router := gin.New()
@@ -29,45 +47,67 @@ func TestMiddleware(t *testing.T) {
 		router.Use(sqgin.Middleware())
 		// Add an endpoint accessing the SDK handle
 		router.GET("/", func(c *gin.Context) {
-			require.NotNil(sdk.FromContext(c), "The middleware should attach its handle object to Gin's context")
-			require.NotNil(sdk.FromContext(c.Request.Context()), "The middleware should attach its handle object to the request's context")
+			require.Nil(t, sdk.FromContext(c))
+			require.Nil(t, sdk.FromContext(c.Request.Context()))
 			c.String(http.StatusOK, body)
 		})
 		// Perform the request and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		// Check the request was performed as expected
-		require.Equal(http.StatusOK, rec.Code)
-		require.Equal(body, rec.Body.String())
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, body, rec.Body.String())
+	})
+
+	t.Run("without security action", func(t *testing.T) {
+		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityAction()
+		sdk.SetAgent(agent)
+		defer agent.AssertExpectations(t)
+		defer record.AssertExpectations(t)
+
+		req, _ := http.NewRequest("GET", "/", nil)
+		body := testlib.RandString(1, 100)
+		// Create a Gin router
+		router := gin.New()
+		// Attach our middelware
+		router.Use(sqgin.Middleware())
+		// Add an endpoint accessing the SDK handle
+		router.GET("/", func(c *gin.Context) {
+			require.NotNil(t, sdk.FromContext(c), "The middleware should attach its handle object to Gin's context")
+			require.NotNil(t, sdk.FromContext(c.Request.Context()), "The middleware should attach its handle object to the request's context")
+			c.String(http.StatusOK, body)
+		})
+		// Perform the request and record the output
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		// Check the request was performed as expected
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, body, rec.Body.String())
 	})
 
 	t.Run("with security action", func(t *testing.T) {
-		agent.ResetExpectations()
-		defer agent.AssertExpectations(t)
-
+		req, _ := http.NewRequest("GET", "/", nil)
 		status := http.StatusBadRequest
-		action := testlib.NewSecurityActionBlockWithStatus(status)
-		defer action.AssertExpectations(t)
+		agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityAction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+		}))
+		sdk.SetAgent(agent)
+		defer agent.AssertExpectations(t)
+		defer record.AssertExpectations(t)
 
-		agent.ExpectSecurityAction(req).Return(action).Once()
-
-		require := require.New(t)
-		body := testlib.RandString(1, 100)
 		// Create a Gin router
 		router := gin.New()
 		// Attach our middelware
 		router.Use(sqgin.Middleware())
 		// Add an endpoint accessing the SDK handle
 		router.GET("/", func(c *gin.Context) {
-			require.NotNil(sdk.FromContext(c), "The middleware should attach its handle object to Gin's context")
-			require.NotNil(sdk.FromContext(c.Request.Context()), "The middleware should attach its handle object to the request's context")
-			c.String(http.StatusOK, body)
+			panic("must not be called")
 		})
 		// Perform the request and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		// Check the request was performed as expected
-		require.Equal(rec.Code, status)
-		require.Equal(rec.Body.String(), "")
+		require.Equal(t, rec.Code, status)
+		require.Equal(t, rec.Body.String(), "")
 	})
 }
