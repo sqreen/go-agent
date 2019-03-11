@@ -25,6 +25,7 @@ type Agent struct {
 	isDone     chan struct{}
 	config     *config.Config
 	appInfo    *app.Info
+	client     *backend.Client
 }
 
 func New() *Agent {
@@ -41,6 +42,12 @@ func New() *Agent {
 	// Agent graceful stopping using context cancelation.
 	ctx, cancel := context.WithCancel(context.Background())
 
+	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
+	if err != nil {
+		logger.Error(err)
+		return nil
+	}
+
 	return &Agent{
 		logger:     logger,
 		isDone:     make(chan struct{}),
@@ -49,6 +56,7 @@ func New() *Agent {
 		cancel:     cancel,
 		config:     cfg,
 		appInfo:    app.NewInfo(logger),
+		client:     client,
 	}
 }
 
@@ -72,14 +80,9 @@ func (a *Agent) start() {
 		close(a.isDone)
 	}()
 
-	client, err := backend.NewClient(a.config.BackendHTTPAPIBaseURL(), a.config, a.logger)
-	if checkErr(err, a.logger) {
-		return
-	}
-
 	token := a.config.BackendHTTPAPIToken()
 	appName := a.config.AppName()
-	appLoginRes, err := appLogin(a.ctx, a.logger, client, token, appName, a.appInfo)
+	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo)
 	if checkErr(err, a.logger) {
 		return
 	}
@@ -96,7 +99,7 @@ func (a *Agent) start() {
 
 	a.logger.Info("up and running - heartbeat set to ", heartbeat)
 	ticker := time.Tick(heartbeat)
-	sessionID := appLoginRes.SessionId
+
 	rulespackId := appLoginRes.PackId
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
@@ -109,7 +112,7 @@ func (a *Agent) start() {
 
 	// Start the event manager's loop
 	a.eventMng = newEventManager(a, rulespackId, batchSize, maxStaleness)
-	go a.eventMng.Loop(a.ctx, client, sessionID)
+	go a.eventMng.Loop(a.ctx, a.client)
 
 	// Start the heartbeat's loop
 	for {
@@ -123,7 +126,7 @@ func (a *Agent) start() {
 				CommandResults: commandResults,
 			}
 
-			appBeatRes, err := client.AppBeat(&appBeatReq, sessionID)
+			appBeatRes, err := a.client.AppBeat(&appBeatReq)
 			if err != nil {
 				a.logger.Error("heartbeat failed: ", err)
 				continue
@@ -135,7 +138,7 @@ func (a *Agent) start() {
 		case <-a.ctx.Done():
 			// The context was canceled because of a interrupt signal, logout and
 			// return.
-			err := client.AppLogout(sessionID)
+			err := a.client.AppLogout()
 			if err != nil {
 				a.logger.Error("logout failed: ", err)
 				return
@@ -198,7 +201,7 @@ func (m *eventManager) add(r *httpRequestRecord) {
 	}
 }
 
-func (m *eventManager) Loop(ctx context.Context, client *backend.Client, sessionID string) {
+func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	var isFull, isSent chan struct{}
 	for {
 		select {
@@ -229,7 +232,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client, session
 					case <-isFull:
 						m.agent.logger.Debug("event batch is full")
 					}
-					m.send(client, sessionID)
+					m.send(client)
 					m.agent.logger.Debug("event batch sent")
 					close(isSent)
 				}()
@@ -246,11 +249,11 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client, session
 	}
 }
 
-func (m *eventManager) send(client *backend.Client, sessionID string) {
+func (m *eventManager) send(client *backend.Client) {
 	m.reqLock.Lock()
 	defer m.reqLock.Unlock()
 	// Send the batch.
-	if err := client.Batch(&m.req, sessionID); err != nil {
+	if err := client.Batch(&m.req); err != nil {
 		m.agent.logger.Error("could not send an event batch: ", err)
 		// drop it
 	}

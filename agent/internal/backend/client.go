@@ -19,9 +19,12 @@ type Client struct {
 	client     *http.Client
 	backendURL string
 	logger     *plog.Logger
+	session    string
 }
 
 func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Client, error) {
+	logger = plog.NewLogger("client", logger)
+
 	var transport *http.Transport
 	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy
@@ -50,7 +53,7 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Cli
 			Transport: transport,
 		},
 		backendURL: backendURL,
-		logger:     plog.NewLogger("client", logger),
+		logger:     logger,
 	}
 
 	return client, nil
@@ -69,15 +72,18 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 	if err := c.Do(httpReq, req, res); err != nil {
 		return nil, err
 	}
+
+	c.session = res.SessionId
+
 	return res, nil
 }
 
-func (c *Client) AppBeat(req *api.AppBeatRequest, session string) (*api.AppBeatResponse, error) {
+func (c *Client) AppBeat(req *api.AppBeatRequest) (*api.AppBeatResponse, error) {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppBeat)
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
 	res := new(api.AppBeatResponse)
 	if err := c.Do(httpReq, req, res); err != nil {
 		return nil, err
@@ -85,24 +91,24 @@ func (c *Client) AppBeat(req *api.AppBeatRequest, session string) (*api.AppBeatR
 	return res, nil
 }
 
-func (c *Client) AppLogout(session string) error {
+func (c *Client) AppLogout() error {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogout)
 	if err != nil {
 		return err
 	}
-	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
 	if err := c.Do(httpReq); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *Client) Batch(req *api.BatchRequest, session string) error {
+func (c *Client) Batch(req *api.BatchRequest) error {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.Batch)
 	if err != nil {
 		return err
 	}
-	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, session)
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
 	if err := c.Do(httpReq, req); err != nil {
 		return err
 	}
