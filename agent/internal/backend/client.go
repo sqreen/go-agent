@@ -109,6 +109,19 @@ func (c *Client) Batch(req *api.BatchRequest, session string) error {
 	return nil
 }
 
+func (c *Client) ActionsPack() (*api.ActionsPackResponse, error) {
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.ActionsPack)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
+	res := new(api.ActionsPackResponse)
+	if err := c.Do(httpReq, nil, res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // Do performs the request whose body is pbs[0] pointer, while the expected
 // response is pbs[1] pointer. They are optional, and must be used according to
 // the cases request case.
@@ -116,7 +129,7 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	var buf bytes.Buffer
 	pbMarshaler := json.NewEncoder(&buf)
 
-	if len(pbs) >= 1 {
+	if len(pbs) >= 1 && pbs[0] != nil {
 		err := pbMarshaler.Encode(pbs[0])
 		if err != nil {
 			return err
@@ -152,7 +165,7 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 		return NewStatusError(res.StatusCode)
 	}
 
-	if len(pbs) >= 2 {
+	if len(pbs) >= 2 && pbs[1] != nil {
 		pbUnmarshaler := json.NewDecoder(res.Body)
 		err = pbUnmarshaler.Decode(pbs[1])
 		if err != nil && err != io.EOF {
