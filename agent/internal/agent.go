@@ -258,7 +258,7 @@ func (m *eventManager) send(client *backend.Client, sessionID string) {
 	m.req.Batch = m.req.Batch[0:0]
 }
 
-func (a *Agent) addTrackEvent(r *httpRequestRecord) {
+func (a *Agent) addRecord(r *httpRequestRecord) {
 	if a.config.Disable() || a.eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
