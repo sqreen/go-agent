@@ -4,76 +4,75 @@ import (
 	"time"
 	//	_ "github.com/gogo/protobuf/gogoproto"
 	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
-	fuzz "github.com/google/gofuzz"
 	//	_ "github.com/gogo/protobuf/types"
 )
 
 type AppLoginRequest struct {
-	BundleSignature  string                       `protobuf:"bytes,1,opt,name=bundle_signature,json=bundleSignature,proto3" json:"bundle_signature,omitempty"`
+	BundleSignature  string                       `protobuf:"bytes,1,opt,name=bundle_signature,json=bundleSignature,proto3" json:"bundle_signature"`
 	VariousInfos     AppLoginRequest_VariousInfos `protobuf:"bytes,2,opt,name=various_infos,json=variousInfos,proto3" json:"various_infos"`
-	AgentType        string                       `protobuf:"bytes,3,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
-	AgentVersion     string                       `protobuf:"bytes,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
-	OsType           string                       `protobuf:"bytes,5,opt,name=os_type,json=osType,proto3" json:"os_type,omitempty"`
-	Hostname         string                       `protobuf:"bytes,6,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	RuntimeType      string                       `protobuf:"bytes,7,opt,name=runtime_type,json=runtimeType,proto3" json:"runtime_type,omitempty"`
-	RuntimeVersion   string                       `protobuf:"bytes,8,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version,omitempty"`
-	FrameworkType    string                       `protobuf:"bytes,9,opt,name=framework_type,json=frameworkType,proto3" json:"framework_type,omitempty"`
-	FrameworkVersion string                       `protobuf:"bytes,10,opt,name=framework_version,json=frameworkVersion,proto3" json:"framework_version,omitempty"`
-	Environment      string                       `protobuf:"bytes,11,opt,name=environment,proto3" json:"environment,omitempty"`
+	AgentType        string                       `protobuf:"bytes,3,opt,name=agent_type,json=agentType,proto3" json:"agent_type"`
+	AgentVersion     string                       `protobuf:"bytes,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version"`
+	OsType           string                       `protobuf:"bytes,5,opt,name=os_type,json=osType,proto3" json:"os_type"`
+	Hostname         string                       `protobuf:"bytes,6,opt,name=hostname,proto3" json:"hostname"`
+	RuntimeType      string                       `protobuf:"bytes,7,opt,name=runtime_type,json=runtimeType,proto3" json:"runtime_type"`
+	RuntimeVersion   string                       `protobuf:"bytes,8,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version"`
+	FrameworkType    string                       `protobuf:"bytes,9,opt,name=framework_type,json=frameworkType,proto3" json:"framework_type"`
+	FrameworkVersion string                       `protobuf:"bytes,10,opt,name=framework_version,json=frameworkVersion,proto3" json:"framework_version"`
+	Environment      string                       `protobuf:"bytes,11,opt,name=environment,proto3" json:"environment"`
 }
 
 type AppLoginRequest_VariousInfos struct {
 	Time time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-	Pid  uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid,omitempty"`
-	Ppid uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid,omitempty"`
-	Euid uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid,omitempty"`
-	Egid uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid,omitempty"`
-	Uid  uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid,omitempty"`
-	Gid  uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid,omitempty"`
-	Name string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name,omitempty"`
+	Pid  uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid"`
+	Ppid uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid"`
+	Euid uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid"`
+	Egid uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid"`
+	Uid  uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid"`
+	Gid  uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
+	Name string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
 }
 
 type AppLoginResponse struct {
-	SessionId string                   `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Status    bool                     `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
+	SessionId string                   `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id"`
+	Status    bool                     `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
 	Commands  []CommandRequest         `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands"`
 	Features  AppLoginResponse_Feature `protobuf:"bytes,4,opt,name=features,proto3" json:"features"`
-	PackId    string                   `protobuf:"bytes,5,opt,name=pack_id,json=packId,proto3" json:"pack_id,omitempty"`
+	PackId    string                   `protobuf:"bytes,5,opt,name=pack_id,json=packId,proto3" json:"pack_id"`
 	Rules     []Rule                   `protobuf:"bytes,6,rep,name=rules,proto3" json:"rules"`
 }
 
 type AppLoginResponse_Feature struct {
-	BatchSize      uint32 `protobuf:"varint,1,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	MaxStaleness   uint32 `protobuf:"varint,2,opt,name=max_staleness,json=maxStaleness,proto3" json:"max_staleness,omitempty"`
-	HeartbeatDelay uint32 `protobuf:"varint,3,opt,name=heartbeat_delay,json=heartbeatDelay,proto3" json:"heartbeat_delay,omitempty"`
+	BatchSize      uint32 `protobuf:"varint,1,opt,name=batch_size,json=batchSize,proto3" json:"batch_size"`
+	MaxStaleness   uint32 `protobuf:"varint,2,opt,name=max_staleness,json=maxStaleness,proto3" json:"max_staleness"`
+	HeartbeatDelay uint32 `protobuf:"varint,3,opt,name=heartbeat_delay,json=heartbeatDelay,proto3" json:"heartbeat_delay"`
 }
 
 type CommandRequest struct {
-	Name   string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Params []string `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty"`
-	Uuid   string   `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Name   string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
+	Params []string `protobuf:"bytes,2,rep,name=params,proto3" json:"params"`
+	Uuid   string   `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid"`
 }
 
 type CommandResult struct {
-	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
-	Status bool   `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
+	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output"`
+	Status bool   `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
 }
 
 type MetricResponse struct {
-	Name        string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name        string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
 	Start       time.Time `protobuf:"bytes,2,opt,name=start,proto3,stdtime" json:"start"`
 	Finish      time.Time `protobuf:"bytes,3,opt,name=finish,proto3,stdtime" json:"finish"`
 	Observation Struct    `protobuf:"bytes,4,opt,name=observation,proto3,customtype=Struct" json:"observation"`
 }
 
 type AppBeatRequest struct {
-	CommandResults map[string]CommandResult `protobuf:"bytes,1,rep,name=command_results,json=commandResults,proto3" json:"command_results" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	CommandResults map[string]CommandResult `protobuf:"bytes,1,rep,name=command_results,json=commandResults,proto3" json:"command_results,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Metrics        []MetricResponse         `protobuf:"bytes,2,rep,name=metrics,proto3" json:"metrics"`
 }
 
 type AppBeatResponse struct {
 	Commands []CommandRequest `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands"`
-	Status   bool             `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
+	Status   bool             `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
 }
 
 type BatchRequest struct {
@@ -81,7 +80,7 @@ type BatchRequest struct {
 }
 
 type BatchRequest_Event struct {
-	EventType string `protobuf:"bytes,1,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	EventType string `protobuf:"bytes,1,opt,name=event_type,json=eventType,proto3" json:"event_type"`
 	Event     Struct `protobuf:"bytes,2,opt,name=event,proto3,customtype=Struct" json:"event"`
 }
 
@@ -89,19 +88,19 @@ type Rule struct {
 }
 
 type Dependency struct {
-	Name     string             `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version  string             `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Homepage string             `protobuf:"bytes,3,opt,name=homepage,proto3" json:"homepage,omitempty"`
-	Source   *Dependency_Source `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	Name     string             `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
+	Version  string             `protobuf:"bytes,2,opt,name=version,proto3" json:"version"`
+	Homepage string             `protobuf:"bytes,3,opt,name=homepage,proto3" json:"homepage"`
+	Source   *Dependency_Source `protobuf:"bytes,4,opt,name=source,proto3" json:"source"`
 }
 
 type Dependency_Source struct {
-	Name    string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Remotes []string `protobuf:"bytes,2,rep,name=remotes,proto3" json:"remotes,omitempty"`
+	Name    string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
+	Remotes []string `protobuf:"bytes,2,rep,name=remotes,proto3" json:"remotes"`
 }
 
 type RequestRecord struct {
-	Version     string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Version     string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version"`
 	RulespackId string                 `protobuf:"bytes,2,opt,name=rulespack_id,json=rulespackId,proto3" json:"rulespack_id"`
 	ClientIp    string                 `protobuf:"bytes,3,opt,name=client_ip,json=clientIp,proto3" json:"client_ip"`
 	Request     RequestRecord_Request  `protobuf:"bytes,4,opt,name=request,proto3" json:"request"`
@@ -110,33 +109,33 @@ type RequestRecord struct {
 }
 
 type RequestRecord_Request struct {
-	Rid        string                         `protobuf:"bytes,1,opt,name=rid,proto3" json:"rid,omitempty"`
+	Rid        string                         `protobuf:"bytes,1,opt,name=rid,proto3" json:"rid"`
 	Headers    []RequestRecord_Request_Header `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers"`
-	Verb       string                         `protobuf:"bytes,3,opt,name=verb,proto3" json:"verb,omitempty"`
-	Path       string                         `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
-	RawPath    string                         `protobuf:"bytes,5,opt,name=raw_path,json=rawPath,proto3" json:"raw_path,omitempty"`
-	Host       string                         `protobuf:"bytes,6,opt,name=host,proto3" json:"host,omitempty"`
-	Port       string                         `protobuf:"bytes,7,opt,name=port,proto3" json:"port,omitempty"`
-	RemoteIp   string                         `protobuf:"bytes,8,opt,name=remote_ip,json=remoteIp,proto3" json:"remote_ip,omitempty"`
-	RemotePort string                         `protobuf:"bytes,9,opt,name=remote_port,json=remotePort,proto3" json:"remote_port,omitempty"`
-	Scheme     string                         `protobuf:"bytes,10,opt,name=scheme,proto3" json:"scheme,omitempty"`
-	UserAgent  string                         `protobuf:"bytes,11,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
-	Referer    string                         `protobuf:"bytes,12,opt,name=referer,proto3" json:"referer,omitempty"`
+	Verb       string                         `protobuf:"bytes,3,opt,name=verb,proto3" json:"verb"`
+	Path       string                         `protobuf:"bytes,4,opt,name=path,proto3" json:"path"`
+	RawPath    string                         `protobuf:"bytes,5,opt,name=raw_path,json=rawPath,proto3" json:"raw_path"`
+	Host       string                         `protobuf:"bytes,6,opt,name=host,proto3" json:"host"`
+	Port       string                         `protobuf:"bytes,7,opt,name=port,proto3" json:"port"`
+	RemoteIp   string                         `protobuf:"bytes,8,opt,name=remote_ip,json=remoteIp,proto3" json:"remote_ip"`
+	RemotePort string                         `protobuf:"bytes,9,opt,name=remote_port,json=remotePort,proto3" json:"remote_port"`
+	Scheme     string                         `protobuf:"bytes,10,opt,name=scheme,proto3" json:"scheme"`
+	UserAgent  string                         `protobuf:"bytes,11,opt,name=user_agent,json=userAgent,proto3" json:"user_agent"`
+	Referer    string                         `protobuf:"bytes,12,opt,name=referer,proto3" json:"referer"`
 	Params     RequestRecord_Request_Params   `protobuf:"bytes,13,opt,name=params,proto3" json:"params"`
 }
 
 type RequestRecord_Request_Header struct {
-	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key"`
+	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value"`
 }
 
 type RequestRecord_Request_Params struct {
 }
 
 type RequestRecord_Response struct {
-	Status        uint32 `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	ContentLength uint32 `protobuf:"varint,2,opt,name=content_length,json=contentLength,proto3" json:"content_length,omitempty"`
-	ContentType   string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	Status        uint32 `protobuf:"varint,1,opt,name=status,proto3" json:"status"`
+	ContentLength uint32 `protobuf:"varint,2,opt,name=content_length,json=contentLength,proto3" json:"content_length"`
+	ContentType   string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type"`
 }
 
 type RequestRecord_Observed struct {
@@ -148,17 +147,17 @@ type RequestRecord_Observed struct {
 }
 
 type RequestRecord_Observed_Attack struct {
-	RuleName  string    `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
-	Test      bool      `protobuf:"varint,2,opt,name=test,proto3" json:"test,omitempty"`
-	Infos     string    `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos,omitempty"`
-	Backtrace []string  `protobuf:"bytes,4,rep,name=backtrace,proto3" json:"backtrace,omitempty"`
+	RuleName  string    `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
+	Test      bool      `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
+	Infos     string    `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
+	Backtrace []string  `protobuf:"bytes,4,rep,name=backtrace,proto3" json:"backtrace"`
 	Time      time.Time `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
-	Block     bool      `protobuf:"varint,6,opt,name=block,proto3" json:"block,omitempty"`
+	Block     bool      `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
 }
 
 type RequestRecord_Observed_SDKEvent struct {
 	Time time.Time                            `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-	Name string                               `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Name string                               `protobuf:"bytes,2,opt,name=name,proto3" json:"name"`
 	Args RequestRecord_Observed_SDKEvent_Args `protobuf:"bytes,3,opt,name=args,proto3" json:"args"`
 }
 
@@ -182,14 +181,8 @@ type RequestRecord_Observed_SDKEvent_Args_Identify_ struct {
 	Identify *RequestRecord_Observed_SDKEvent_Args_Identify `protobuf:"bytes,2,opt,name=identify,proto3,oneof"`
 }
 
-func (*RequestRecord_Observed_SDKEvent_Args_Track_) isRequestRecord_Observed_SDKEvent_Args_Args() {}
-func (pb *RequestRecord_Observed_SDKEvent_Args_Track_) Fuzz(c fuzz.Continue) {
-	c.Fuzz(pb)
-}
+func (*RequestRecord_Observed_SDKEvent_Args_Track_) isRequestRecord_Observed_SDKEvent_Args_Args()    {}
 func (*RequestRecord_Observed_SDKEvent_Args_Identify_) isRequestRecord_Observed_SDKEvent_Args_Args() {}
-func (pb *RequestRecord_Observed_SDKEvent_Args_Identify_) Fuzz(c fuzz.Continue) {
-	c.Fuzz(pb)
-}
 
 func (m *RequestRecord_Observed_SDKEvent_Args) GetArgs() isRequestRecord_Observed_SDKEvent_Args_Args {
 	if m != nil {
@@ -221,8 +214,8 @@ func (m *RequestRecord_Observed_SDKEvent_Args) GetIdentify() *RequestRecord_Obse
 //   }
 // ]
 type RequestRecord_Observed_SDKEvent_Args_Track struct {
-	Event   string                                              `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	Options *RequestRecord_Observed_SDKEvent_Args_Track_Options `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
+	Event   string                                              `protobuf:"bytes,1,opt,name=event,proto3" json:"event"`
+	Options *RequestRecord_Observed_SDKEvent_Args_Track_Options `protobuf:"bytes,2,opt,name=options,proto3" json:"options"`
 }
 
 type RequestRecord_Observed_SDKEvent_Args_Track_Options struct {
@@ -233,31 +226,31 @@ type RequestRecord_Observed_SDKEvent_Args_Track_Options struct {
 // Serialized into:
 // [ <user_identifiers> ]
 type RequestRecord_Observed_SDKEvent_Args_Identify struct {
-	UserIdentifiers *Struct `protobuf:"bytes,1,opt,name=user_identifiers,json=userIdentifiers,proto3,customtype=Struct" json:"user_identifiers,omitempty"`
+	UserIdentifiers *Struct `protobuf:"bytes,1,opt,name=user_identifiers,json=userIdentifiers,proto3,customtype=Struct" json:"user_identifiers"`
 }
 
 type RequestRecord_Observed_Exception struct {
-	Message   string    `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Klass     string    `protobuf:"bytes,2,opt,name=klass,proto3" json:"klass,omitempty"`
-	RuleName  string    `protobuf:"bytes,3,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
-	Test      bool      `protobuf:"varint,4,opt,name=test,proto3" json:"test,omitempty"`
-	Infos     string    `protobuf:"bytes,5,opt,name=infos,proto3" json:"infos,omitempty"`
-	Backtrace []string  `protobuf:"bytes,6,rep,name=backtrace,proto3" json:"backtrace,omitempty"`
+	Message   string    `protobuf:"bytes,1,opt,name=message,proto3" json:"message"`
+	Klass     string    `protobuf:"bytes,2,opt,name=klass,proto3" json:"klass"`
+	RuleName  string    `protobuf:"bytes,3,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
+	Test      bool      `protobuf:"varint,4,opt,name=test,proto3" json:"test"`
+	Infos     string    `protobuf:"bytes,5,opt,name=infos,proto3" json:"infos"`
+	Backtrace []string  `protobuf:"bytes,6,rep,name=backtrace,proto3" json:"backtrace"`
 	Time      time.Time `protobuf:"bytes,7,opt,name=time,proto3,stdtime" json:"time"`
 }
 
 type RequestRecord_Observed_Observation struct {
-	Category string    `protobuf:"bytes,1,opt,name=category,proto3" json:"category,omitempty"`
-	Key      string    `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value    string    `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Category string    `protobuf:"bytes,1,opt,name=category,proto3" json:"category"`
+	Key      string    `protobuf:"bytes,2,opt,name=key,proto3" json:"key"`
+	Value    string    `protobuf:"bytes,3,opt,name=value,proto3" json:"value"`
 	Time     time.Time `protobuf:"bytes,4,opt,name=time,proto3,stdtime" json:"time"`
 }
 
 type RequestRecord_Observed_DataPoint struct {
-	RulespackId string    `protobuf:"bytes,1,opt,name=rulespack_id,json=rulespackId,proto3" json:"rulespack_id,omitempty"`
-	RuleName    string    `protobuf:"bytes,2,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	RulespackId string    `protobuf:"bytes,1,opt,name=rulespack_id,json=rulespackId,proto3" json:"rulespack_id"`
+	RuleName    string    `protobuf:"bytes,2,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
 	Time        time.Time `protobuf:"bytes,3,opt,name=time,proto3,stdtime" json:"time"`
-	Infos       string    `protobuf:"bytes,4,opt,name=infos,proto3" json:"infos,omitempty"`
+	Infos       string    `protobuf:"bytes,4,opt,name=infos,proto3" json:"infos"`
 }
 
 type AppLoginRequestFace interface {
