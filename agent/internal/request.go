@@ -352,7 +352,12 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 		requestId = hex.EncodeToString(uuid[:])
 	}
 
-	// FIXME: create it from an interface for compile-time errors.
+	var referer string
+	if !r.ctx.agent.config.StripHTTPReferer() {
+		referer = req.Referer()
+	}
+
+	// FIXME: create it from an interface for compile-time error-checking.
 	return api.RequestRecord_Request{
 		Rid:        requestId,
 		Headers:    headers,
@@ -365,7 +370,7 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 		RemotePort: remotePort,
 		Scheme:     scheme,
 		UserAgent:  req.UserAgent(),
-		Referer:    req.Referer(),
+		Referer:    referer,
 	}
 }
 
