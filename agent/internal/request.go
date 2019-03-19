@@ -23,6 +23,7 @@ type HTTPRequestRecord struct {
 	events       []*HTTPRequestEvent
 	identifyOnce sync.Once
 	agent        *Agent
+	shouldSend   bool
 }
 
 func (a *Agent) newHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
@@ -127,7 +128,7 @@ func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 			timestamp:       time.Now(),
 			userIdentifiers: id,
 		}
-		ctx.addEvent(evt)
+		ctx.addSilentEvent(evt)
 	})
 }
 
@@ -165,13 +166,26 @@ func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 }
 
 func (ctx *HTTPRequestRecord) Close() {
-	ctx.agent.addTrackEvent(newHTTPRequestRecord(ctx))
+	if !ctx.shouldSend {
+		return
+	}
+
+	ctx.agent.addRecord(newHTTPRequestRecord(ctx))
+}
+
+func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
+	ctx.addEvent_(event, true)
 }
 
 func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
+	ctx.addEvent_(event, false)
+}
+
+func (ctx *HTTPRequestRecord) addEvent_(event *HTTPRequestEvent, silent bool) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
+	ctx.shouldSend = !silent
 }
 
 func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
