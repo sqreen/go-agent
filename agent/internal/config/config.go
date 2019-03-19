@@ -191,6 +191,7 @@ const (
 	configKeyHTTPClientIPHeader    = `ip_header`
 	configKeyBackendHTTPAPIProxy   = `proxy`
 	configKeyDisable               = `disable`
+	configKeyStripHTTPReferer      = `strip_http_referer`
 )
 
 // User configuration's default values.
@@ -233,6 +234,7 @@ func New(logger *plog.Logger) *Config {
 	manager.SetDefault(configKeyHTTPClientIPHeader, "")
 	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	manager.SetDefault(configKeyDisable, "")
+	manager.SetDefault(configKeyStripHTTPReferer, "")
 
 	err := manager.ReadInConfig()
 	if err != nil {
@@ -276,6 +278,13 @@ func (c *Config) BackendHTTPAPIProxy() string {
 func (c *Config) Disable() bool {
 	disable := sanitizeString(c.GetString(configKeyDisable))
 	return disable != "" || c.BackendHTTPAPIToken() == ""
+}
+
+// Disable returns true when the agent should be strip the `Referer` HTTP
+// header, false otherwise.
+func (c *Config) StripHTTPReferer() bool {
+	strip := sanitizeString(c.GetString(configKeyStripHTTPReferer))
+	return strip != ""
 }
 
 func sanitizeString(s string) string {

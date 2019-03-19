@@ -61,11 +61,34 @@ func TestUserConfig(t *testing.T) {
 			SomeValue:   testlib.RandString(2, 30),
 		},
 	}
-
 	for _, tc := range stringValueTests {
 		testStringValue(t, cfg, tc.Name, tc.GetCfgValue, tc.ConfigKey, tc.DefaultValue, tc.SomeValue)
 	}
 
+	// The reflect package could be used instead
+	boolValueTests := []struct {
+		Name          string
+		GetCfgValue   func() bool
+		ConfigKey     string
+		DefaultValue  bool
+		CfgValue      string
+		ExpectedValue bool
+	}{
+		{
+			Name:          "Strip the Referer HTTP Header",
+			GetCfgValue:   cfg.StripHTTPReferer,
+			ConfigKey:     configKeyStripHTTPReferer,
+			DefaultValue:  false,
+			CfgValue:      testlib.RandString(1, 30),
+			ExpectedValue: true,
+		},
+	}
+	for _, tc := range boolValueTests {
+		testBoolValue(t, cfg, tc.Name, tc.GetCfgValue, tc.ConfigKey, tc.DefaultValue, tc.CfgValue, tc.ExpectedValue)
+	}
+
+	// The disable which is a special config case which also depends on the sqreen
+	// token value.
 	t.Run("Disable", func(t *testing.T) {
 		os.Setenv("SQREEN_TOKEN", testlib.RandString(2, 30))
 		defer os.Unsetenv("SQREEN_TOKEN")
@@ -150,6 +173,28 @@ func testStringValue(t *testing.T, cfg *Config, name string, getCfgValue func() 
 			defer os.Remove(filename)
 			cfg.ReadInConfig()
 			require.Equal(t, getCfgValue(), someValue)
+		})
+	})
+}
+
+func testBoolValue(t *testing.T, cfg *Config, name string, getCfgValue func() bool, envKey string, defaultValue bool, cfgValue string, expectedValue bool) {
+	t.Run(name, func(t *testing.T) {
+		t.Run("Default value", func(t *testing.T) {
+			require.Equal(t, getCfgValue(), defaultValue)
+		})
+
+		t.Run("Set through environment variable", func(t *testing.T) {
+			envVar := strings.ToUpper(configEnvPrefix) + "_" + strings.ToUpper(envKey)
+			os.Setenv(envVar, cfgValue)
+			defer os.Unsetenv(envVar)
+			require.Equal(t, getCfgValue(), expectedValue)
+		})
+
+		t.Run("Set through configuration file", func(t *testing.T) {
+			filename := newCfgFile(t, ".", envKey+`: `+cfgValue)
+			defer os.Remove(filename)
+			cfg.ReadInConfig()
+			require.Equal(t, getCfgValue(), expectedValue)
 		})
 	})
 }
