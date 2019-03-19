@@ -31,6 +31,8 @@ func New() *Agent {
 	logger := plog.NewLogger("agent", nil)
 
 	cfg := config.New(logger)
+	plog.SetLevelFromString(cfg.LogLevel())
+	plog.SetOutput(os.Stderr)
 
 	if cfg.Disable() {
 		return nil
@@ -69,9 +71,6 @@ func (a *Agent) start() {
 		// Signal we are done
 		close(a.isDone)
 	}()
-
-	plog.SetLevelFromString(a.config.LogLevel())
-	plog.SetOutput(os.Stderr)
 
 	client, err := backend.NewClient(a.config.BackendHTTPAPIBaseURL(), a.config, a.logger)
 	if checkErr(err, a.logger) {
