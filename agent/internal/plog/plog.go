@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 )
 
 // LogLevel represents the log level. Higher levels include lowers.
@@ -114,7 +115,6 @@ type OutputSetter interface {
 // NewLogger returns a Logger instance wrapping one logger instance per level.
 // They can thus be individually enabled or disabled.
 func NewLogger(namespace string, parent *Logger) *Logger {
-	namespace = canonicalNamespace(namespace, parent)
 	logger := &Logger{
 		PanicLogger: disabledLogger{},
 		ErrorLogger: disabledLogger{},
@@ -123,18 +123,19 @@ func NewLogger(namespace string, parent *Logger) *Logger {
 		DebugLogger: disabledLogger{},
 		namespace:   namespace,
 	}
+
+	if parent == nil {
+		namespace = "sqreen/" + namespace
+	} else {
+		namespace = parent.namespace + "/" + namespace
+		logger.SetLevel(parent.getLevel())
+		logger.SetOutput(parent.output)
+	}
+
+	lock.Lock()
+	defer lock.Unlock()
 	loggers[namespace] = logger
 	return logger
-}
-
-func canonicalNamespace(namespace string, parent *Logger) string {
-	var fullNS string
-	if parent == nil {
-		fullNS = "sqreen/" + namespace
-	} else {
-		fullNS = parent.namespace + "/" + namespace
-	}
-	return fullNS
 }
 
 // SetOutput sets the output of all loggers created so far.
@@ -215,6 +216,32 @@ func (l *Logger) SetLevelFromString(level string) {
 
 // SetLevel changes the level of the logger to `level`, possibly disabling it
 // when `Disabled` is passed.
+func (l *Logger) getLevel() LogLevel {
+	if _, disabled := l.DebugLogger.(disabledLogger); !disabled {
+		return Debug
+	}
+
+	if _, disabled := l.InfoLogger.(disabledLogger); !disabled {
+		return Info
+	}
+
+	if _, disabled := l.WarnLogger.(disabledLogger); !disabled {
+		return Warn
+	}
+
+	if _, disabled := l.ErrorLogger.(disabledLogger); !disabled {
+		return Error
+	}
+
+	if _, disabled := l.PanicLogger.(disabledLogger); !disabled {
+		return Panic
+	}
+
+	return Disabled
+}
+
+// SetLevel changes the level of the logger to `level`, possibly disabling it
+// when `Disabled` is passed.
 func (l *Logger) SetLevel(level LogLevel) {
 	switch level {
 	case Disabled:
@@ -267,6 +294,7 @@ const flags = log.LUTC | log.Ldate | log.Lmicroseconds
 
 // Map of loggers.
 var loggers = make(map[string]*Logger)
+var lock sync.Mutex
 
 // Enabled logger instance.
 type logger struct {
