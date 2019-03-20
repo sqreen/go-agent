@@ -187,14 +187,15 @@ const (
 const (
 	configEnvKeyConfigFile = `config_file`
 
-	configKeyBackendHTTPAPIBaseURL = `url`
-	configKeyBackendHTTPAPIToken   = `token`
-	configKeyLogLevel              = `log_level`
-	configKeyAppName               = `app_name`
-	configKeyHTTPClientIPHeader    = `ip_header`
-	configKeyBackendHTTPAPIProxy   = `proxy`
-	configKeyDisable               = `disable`
-	configKeyStripHTTPReferer      = `strip_http_referer`
+	configKeyBackendHTTPAPIBaseURL    = `url`
+	configKeyBackendHTTPAPIToken      = `token`
+	configKeyLogLevel                 = `log_level`
+	configKeyAppName                  = `app_name`
+	configKeyHTTPClientIPHeader       = `ip_header`
+	configKeyHTTPClientIPHeaderFormat = `ip_header_format`
+	configKeyBackendHTTPAPIProxy      = `proxy`
+	configKeyDisable                  = `disable`
+	configKeyStripHTTPReferer         = `strip_http_referer`
 )
 
 // User configuration's default values.
@@ -235,6 +236,7 @@ func New(logger *plog.Logger) *Config {
 	manager.SetDefault(configKeyLogLevel, configDefaultLogLevel)
 	manager.SetDefault(configKeyAppName, "")
 	manager.SetDefault(configKeyHTTPClientIPHeader, "")
+	manager.SetDefault(configKeyHTTPClientIPHeaderFormat, "")
 	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	manager.SetDefault(configKeyDisable, "")
 	manager.SetDefault(configKeyStripHTTPReferer, "")
@@ -267,9 +269,14 @@ func (c *Config) AppName() string {
 	return sanitizeString(c.GetString(configKeyAppName))
 }
 
-// HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
+// HTTPClientIPHeader returns the header to first lookup to find the client ip of a HTTP request.
 func (c *Config) HTTPClientIPHeader() string {
 	return sanitizeString(c.GetString(configKeyHTTPClientIPHeader))
+}
+
+// HTTPClientIPHeaderFormat returns the header format of the `ip_header` value.
+func (c *Config) HTTPClientIPHeaderFormat() string {
+	return sanitizeString(c.GetString(configKeyHTTPClientIPHeaderFormat))
 }
 
 // Proxy returns the proxy configuration to use for backend HTTP calls.

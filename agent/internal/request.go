@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/types"
@@ -307,8 +309,21 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 
 	if prioritizedHeader := cfg.HTTPClientIPHeader(); prioritizedHeader != "" {
 		if value := req.Header.Get(prioritizedHeader); value != "" {
-			if ip := check(value); ip != nil {
-				return ip.String()
+			if fmt := cfg.HTTPClientIPHeaderFormat(); fmt != "" {
+				parsed, err := parseClientIPHeaderHeaderValue(fmt, value)
+				if err == nil {
+					// Parsing ok, keep its returned value.
+					value = parsed
+				} else {
+					// An error occured while parsing the header value, so ignore it.
+					value = ""
+				}
+			}
+
+			if value != "" {
+				if ip := check(value); ip != nil {
+					return ip.String()
+				}
 			}
 		}
 	}
@@ -332,6 +347,29 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 		return remoteIP
 	}
 	return privateIP.String()
+}
+
+func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
+	sep := strings.IndexRune(value, ':')
+	if sep == -1 {
+		return "", errors.Errorf("unexpected IP address value `%s`", value)
+	}
+
+	clientIPHexStr := value[:sep]
+	// Optimize for the best case: there will be an IP address, so allocate size
+	// for at least an IPv4 address.
+	clientIPBuf := make([]byte, 0, net.IPv4len)
+	_, err := fmt.Sscanf(clientIPHexStr, "%x", &clientIPBuf)
+	if err != nil {
+		return "", errors.Wrap(err, "could not parse the IP address value")
+	}
+
+	switch len(clientIPBuf) {
+	case net.IPv4len, net.IPv6len:
+		return net.IP(clientIPBuf).String(), nil
+	default:
+		return "", errors.Errorf("unexpected IP address value `%s`", clientIPBuf)
+	}
 }
 
 func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
