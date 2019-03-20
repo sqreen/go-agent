@@ -279,7 +279,12 @@ func (r *httpRequestRecord) GetClientIp() string {
 	return getClientIP(r.ctx.request, r.ctx.agent.config)
 }
 
-func getClientIP(req *http.Request, cfg *config.Config) string {
+type getClientIPConfigFace interface {
+	HTTPClientIPHeader() string
+	HTTPClientIPHeaderFormat() string
+}
+
+func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 	var privateIP net.IP
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
@@ -404,14 +409,25 @@ func (r *httpRequestRecord) GetObserved() api.RequestRecord_Observed {
 }
 
 func isGlobal(ip net.IP) bool {
-	if len(ip) == 4 && config.IPv4PublicNetwork.Contains(ip) {
+	if ipv4 := ip.To4(); ipv4 != nil && config.IPv4PublicNetwork.Contains(ipv4) {
 		return false
 	}
 	return !isPrivate(ip)
 }
 
 func isPrivate(ip net.IP) bool {
-	for _, network := range config.IPPrivateNetworks {
+	var privateNetworks []*net.IPNet
+	// We cannot rely on `len(ip)` to know what type of IP address this is.
+	// `net.ParseIP()` or `net.IPv4()` can return internal 16-byte representations
+	// of an IP address even if it is an IPv4. So the trick is to use `ip.To4()`
+	// which returns nil if the address in not an IPv4 address.
+	if ipv4 := ip.To4(); ipv4 != nil {
+		privateNetworks = config.IPv4PrivateNetworks
+	} else {
+		privateNetworks = config.IPv6PrivateNetworks
+	}
+
+	for _, network := range privateNetworks {
 		if network.Contains(ip) {
 			return true
 		}
