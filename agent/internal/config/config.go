@@ -146,7 +146,7 @@ func ipnet(s string) *net.IPNet {
 
 // IP networks allowing to compute whether to
 var (
-	IPPrivateNetworks = []*net.IPNet{
+	IPv4PrivateNetworks = []*net.IPNet{
 		ipnet("0.0.0.0/8"),
 		ipnet("10.0.0.0/8"),
 		ipnet("127.0.0.0/8"),
@@ -161,6 +161,11 @@ var (
 		ipnet("203.0.113.0/24"),
 		ipnet("240.0.0.0/4"),
 		ipnet("255.255.255.255/32"),
+	}
+
+	IPv4PublicNetwork = ipnet("100.64.0.0/10")
+
+	IPv6PrivateNetworks = []*net.IPNet{
 		ipnet("::1/128"),
 		ipnet("::/128"),
 		ipnet("::ffff:0:0/96"),
@@ -172,8 +177,6 @@ var (
 		ipnet("fc00::/7"),
 		ipnet("fe80::/10"),
 	}
-
-	IPv4PublicNetwork = ipnet("100.64.0.0/10")
 )
 
 const (
