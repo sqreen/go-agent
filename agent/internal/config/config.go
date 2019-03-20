@@ -102,7 +102,6 @@ var (
 		"Forwarded-For",
 		"Forwarded",
 		"Via",
-		"User-Agent",
 		"Content-Type",
 		"Content-Length",
 		"Host",
