@@ -1,8 +1,8 @@
 package internal
 
 import (
-	"crypto/rand"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"testing"
@@ -53,7 +53,7 @@ func TestGetClientIP(t *testing.T) {
 		require.False(t, isGlobal(privateIP))
 		require.True(t, isPrivate(privateIP))
 
-		for _, tc := range []struct {
+		for i, tc := range []struct {
 			expected, remoteAddr string
 			extraHeaders         map[string]string
 		}{
@@ -85,7 +85,7 @@ func TestGetClientIP(t *testing.T) {
 					"X-Forwarded-For": RandPrivateIPv4().String() + "," + RandPrivateIPv4().String() + "," + RandPrivateIPv4().String(),
 				},
 			},
-			// Globa IP in the middle of XFF and private IPs everywhere else.
+			// Global IP in the middle of XFF and private IPs everywhere else.
 			{
 				expected:   globalIP.String(),
 				remoteAddr: RandPrivateIPv4().String(),
@@ -96,6 +96,7 @@ func TestGetClientIP(t *testing.T) {
 		} {
 			tc := tc
 			t.Run(tc.expected, func(t *testing.T) {
+				t.Logf("%d %+v", i, tc)
 				cfg := &GetClientIPConfigMockup{}
 				defer cfg.AssertExpectations(t)
 				cfg.On("HTTPClientIPHeader").Return("")
@@ -125,7 +126,7 @@ func TestGetClientIP(t *testing.T) {
 			require.False(t, isGlobal(privateIP))
 			require.True(t, isPrivate(privateIP))
 
-			for _, tc := range []struct {
+			for i, tc := range []struct {
 				expected, remoteAddr, uniqueID string
 				extraHeaders                   map[string]string
 			}{
@@ -172,6 +173,7 @@ func TestGetClientIP(t *testing.T) {
 			} {
 				tc := tc
 				t.Run(tc.expected, func(t *testing.T) {
+					t.Logf("%d %+v", i, tc)
 					cfg := &GetClientIPConfigMockup{}
 					defer cfg.AssertExpectations(t)
 					cfg.On("HTTPClientIPHeader").Return("x-uNiQue-iD")                                   // check it works even with a random case
@@ -192,15 +194,13 @@ func TestGetClientIP(t *testing.T) {
 }
 
 func RandIPv4() net.IP {
-	ip := make([]byte, net.IPv4len)
-	rand.Read(ip)
-	return net.IP(ip)
+	return net.IPv4(uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()))
 }
 
 func RandGlobalIPv4() net.IP {
 	for {
 		ip := RandIPv4()
-		if isGlobal(ip) {
+		if isGlobal(ip) && !isPrivate(ip) {
 			return ip
 		}
 	}
@@ -209,7 +209,7 @@ func RandGlobalIPv4() net.IP {
 func RandPrivateIPv4() net.IP {
 	for {
 		ip := RandIPv4()
-		if isPrivate(ip) {
+		if !isGlobal(ip) && isPrivate(ip) {
 			return ip
 		}
 	}
