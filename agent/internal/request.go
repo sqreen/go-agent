@@ -350,6 +350,9 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 }
 
 func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
+	// Hard-coded HA Proxy format for now: `%ci:%cp...` so we expect the value to
+	// start with the client IP in hexadecimal format (eg. 7F000001) separated by
+	// the client port number with a semicolon `:`.
 	sep := strings.IndexRune(value, ':')
 	if sep == -1 {
 		return "", errors.Errorf("unexpected IP address value `%s`", value)
