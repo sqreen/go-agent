@@ -110,6 +110,85 @@ func TestGetClientIP(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("Custom IP header format", func(t *testing.T) {
+		t.Run("HA Proxy X-Unique-Id", func(t *testing.T) {
+			uniqueIDGlobalIP, uniqueID := RandHAProxyUniqueID()
+			require.True(t, isGlobal(uniqueIDGlobalIP))
+			require.False(t, isPrivate(uniqueIDGlobalIP))
+
+			globalIP := RandGlobalIPv4()
+			require.True(t, isGlobal(globalIP))
+			require.False(t, isPrivate(globalIP))
+
+			privateIP := RandPrivateIPv4()
+			require.False(t, isGlobal(privateIP))
+			require.True(t, isPrivate(privateIP))
+
+			for _, tc := range []struct {
+				expected, remoteAddr, uniqueID string
+				extraHeaders                   map[string]string
+			}{
+				// Empty X-Unique-Id value
+				{expected: "127.0.0.1", remoteAddr: "127.0.0.1", uniqueID: ""},
+				// Global IP in X-Unique-Id
+				{expected: uniqueIDGlobalIP.String(), remoteAddr: "127.0.0.1", uniqueID: uniqueID},
+				// Global IP in X-Unique-Id and XFF, but X-Unique-Id is prioritized by the config
+				{
+					expected:   uniqueIDGlobalIP.String(),
+					remoteAddr: "127.0.0.1",
+					uniqueID:   uniqueID,
+					extraHeaders: map[string]string{
+						"X-Forwarded-For": globalIP.String() + "," + RandIPv4().String() + "," + RandIPv4().String(),
+					},
+				},
+				// Private IP in X-Unique-Id which is is prioritized by the config but XFF has a global IP
+				{
+					expected:   globalIP.String(),
+					remoteAddr: "127.0.0.1",
+					uniqueID:   HAProxyUniqueID(privateIP),
+					extraHeaders: map[string]string{
+						"X-Forwarded-For": globalIP.String() + "," + RandIPv4().String() + "," + RandIPv4().String(),
+					},
+				},
+				// Private IPs everywhere.
+				{
+					expected:   privateIP.String(),
+					remoteAddr: RandPrivateIPv4().String(),
+					uniqueID:   HAProxyUniqueID(privateIP),
+					extraHeaders: map[string]string{
+						"X-Forwarded-For": RandPrivateIPv4().String() + "," + RandPrivateIPv4().String() + "," + RandPrivateIPv4().String(),
+					},
+				},
+				// Private IPs everywhere but in the remote addr.
+				{
+					expected:   globalIP.String(),
+					remoteAddr: globalIP.String(),
+					uniqueID:   HAProxyUniqueID(privateIP),
+					extraHeaders: map[string]string{
+						"X-Forwarded-For": RandPrivateIPv4().String() + "," + RandPrivateIPv4().String() + "," + RandPrivateIPv4().String(),
+					},
+				},
+			} {
+				tc := tc
+				t.Run(tc.expected, func(t *testing.T) {
+					cfg := &GetClientIPConfigMockup{}
+					defer cfg.AssertExpectations(t)
+					cfg.On("HTTPClientIPHeader").Return("x-uNiQue-iD")                                   // check it works even with a random case
+					cfg.On("HTTPClientIPHeaderFormat").Return("it just needs to be set for now").Maybe() // depends on the testcase
+
+					req := newRequest(tc.remoteAddr)
+					req.Header.Set("X-Unique-Id", tc.uniqueID)
+					for k, v := range tc.extraHeaders {
+						req.Header.Set(k, v)
+					}
+
+					ip := getClientIP(req, cfg)
+					require.Equal(t, tc.expected, ip)
+				})
+			}
+		})
+	})
 }
 
 func RandIPv4() net.IP {
@@ -134,6 +213,18 @@ func RandPrivateIPv4() net.IP {
 			return ip
 		}
 	}
+}
+
+func RandHAProxyUniqueID() (net.IP, string) {
+	ip := RandGlobalIPv4()
+	return ip, HAProxyUniqueID(ip)
+}
+
+func HAProxyUniqueID(ip net.IP) string {
+	var randStr string
+	fuzz.New().NilChance(0).Fuzz(&randStr)
+	value := fmt.Sprintf("%X:%s", []byte(ip.To4()), randStr)
+	return value
 }
 
 type GetClientIPConfigMockup struct {
