@@ -1,3 +1,40 @@
+# v0.1.0-beta.3
+
+## New Features
+
+- Get the client IP address out of the HAProxy header `X-Unique-Id` using the
+  new configuration variable `ip_header_format`. (#41)
+
+- New configuration option `strip_http_referer`/`SQREEN_STRIP_HTTP_REFERER`
+  allowing to avoid sending the `Referer` HTTP header to the Sqreen backend when
+  it contains sensitive data. (#36)
+
+- Ability to disable/enable the agent through the [dashboard
+  settings](https://my.sqreen.com/application/goto/settings/global) using the
+  Sqreen status button. (#29)
+
+## Breaking Changes
+
+- Agent internals are now under a private Go package and can no longer be
+  imported. Any sub-package under `github.com/sqreen/go-agent/agent` was not
+  supposed to be imported and is now private to avoid future confusions. (#27)
+
+## Fixes
+
+- Remove duplicate `User-Agent` entry sent twice in the request record. (#42)
+
+- Fix IPv4 and IPv6 matching against private network definitions. (#38)
+
+- Remove useless empty request records mistakenly created while not carrying
+  any SDK observation. (#38)
+
+## Minor Changes
+
+- Better memory management and footprint when the agent is disabled by removing
+  globals. This will be also required to be able to cleanly restart the agent by
+  self-managing the initializations. (#28)
+
+
 # v0.1.0-beta.2
 
 ## New feature
