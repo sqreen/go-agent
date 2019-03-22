@@ -1,18 +1,20 @@
-package agent
+package internal
 
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
+	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/types"
 )
 
 type HTTPRequestRecord struct {
@@ -22,11 +24,14 @@ type HTTPRequestRecord struct {
 	eventsLock   sync.Mutex
 	events       []*HTTPRequestEvent
 	identifyOnce sync.Once
+	agent        *Agent
+	shouldSend   bool
 }
 
-func NewHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
+func (a *Agent) newHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
 	return &HTTPRequestRecord{
 		request: req,
+		agent:   a,
 	}
 }
 
@@ -108,7 +113,7 @@ const (
 	sdkMethodTrack    = "track"
 )
 
-func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
+func (ctx *HTTPRequestRecord) NewCustomEvent(event string) types.CustomEvent {
 	evt := &HTTPRequestEvent{
 		method:    sdkMethodTrack,
 		event:     event,
@@ -118,27 +123,27 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	return evt
 }
 
-func (ctx *HTTPRequestRecord) TrackIdentify(id EventUserIdentifiersMap) {
+func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 	ctx.identifyOnce.Do(func() {
 		evt := &HTTPRequestEvent{
 			method:          sdkMethodIdentify,
 			timestamp:       time.Now(),
 			userIdentifiers: id,
 		}
-		ctx.addEvent(evt)
+		ctx.addSilentEvent(evt)
 	})
 }
 
-func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifiersMap) {
+func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
 	if len(id) == 0 {
-		logger.Warn("TrackAuth(): user id is nil or empty")
+		ctx.agent.logger.Warn("TrackAuth(): user id is nil or empty")
 		return
 	}
 
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:              getClientIP(ctx.request),
+			ip:              getClientIP(ctx.request, ctx.agent.config),
 			userIdentifiers: id,
 			timestamp:       time.Now(),
 		},
@@ -146,15 +151,15 @@ func (ctx *HTTPRequestRecord) TrackAuth(loginSuccess bool, id EventUserIdentifie
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifiersMap) {
+func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 	if len(id) == 0 {
-		logger.Warn("TrackSignup(): user id is nil or empty")
+		ctx.agent.logger.Warn("TrackSignup(): user id is nil or empty")
 		return
 	}
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:              getClientIP(ctx.request),
+			ip:              getClientIP(ctx.request, ctx.agent.config),
 			userIdentifiers: id,
 			timestamp:       time.Now(),
 		},
@@ -163,41 +168,51 @@ func (ctx *HTTPRequestRecord) TrackSignup(id EventUserIdentifiersMap) {
 }
 
 func (ctx *HTTPRequestRecord) Close() {
-	addTrackEvent(newHTTPRequestRecord(ctx))
+	if !ctx.shouldSend {
+		return
+	}
+
+	ctx.agent.addRecord(newHTTPRequestRecord(ctx))
+}
+
+func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
+	ctx.addEvent_(event, true)
 }
 
 func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
+	ctx.addEvent_(event, false)
+}
+
+func (ctx *HTTPRequestRecord) addEvent_(event *HTTPRequestEvent, silent bool) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
+	ctx.shouldSend = !silent
 }
 
 func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
-	addUserEvent(event)
+	ctx.agent.addUserEvent(event)
 }
 
-func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithTimestamp(t time.Time) {
 	if e == nil {
-		return nil
+		return
 	}
 	e.timestamp = t
-	return e
 }
 
-func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithProperties(p map[string]string) {
 	if e == nil {
-		return nil
+		return
 	}
 	e.properties = p
-	return e
 }
 
-func (e *HTTPRequestEvent) WithUserIdentifier(id EventUserIdentifiersMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithUserIdentifiers(id map[string]string) {
 	if e == nil {
-		return nil
+		return
 	}
 	e.userIdentifiers = id
-	return e
 }
 
 func (e *HTTPRequestEvent) GetTime() time.Time {
@@ -239,10 +254,6 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 	return &api.Struct{e.userIdentifiers}
 }
 
-func (e *HTTPRequestEvent) Proto() proto.Message {
-	return api.NewRequestRecord_Observed_SDKEventFromFace(e)
-}
-
 type httpRequestRecord struct {
 	ctx         *HTTPRequestRecord
 	rulespackID string
@@ -267,10 +278,15 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request)
+	return getClientIP(r.ctx.request, r.ctx.agent.config)
 }
 
-func getClientIP(req *http.Request) string {
+type getClientIPConfigFace interface {
+	HTTPClientIPHeader() string
+	HTTPClientIPHeaderFormat() string
+}
+
+func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 	var privateIP net.IP
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
@@ -291,10 +307,23 @@ func getClientIP(req *http.Request) string {
 		return nil
 	}
 
-	if prioritizedHeader := config.HTTPClientIPHeader(); prioritizedHeader != "" {
+	if prioritizedHeader := cfg.HTTPClientIPHeader(); prioritizedHeader != "" {
 		if value := req.Header.Get(prioritizedHeader); value != "" {
-			if ip := check(value); ip != nil {
-				return ip.String()
+			if fmt := cfg.HTTPClientIPHeaderFormat(); fmt != "" {
+				parsed, err := parseClientIPHeaderHeaderValue(fmt, value)
+				if err == nil {
+					// Parsing ok, keep its returned value.
+					value = parsed
+				} else {
+					// An error occured while parsing the header value, so ignore it.
+					value = ""
+				}
+			}
+
+			if value != "" {
+				if ip := check(value); ip != nil {
+					return ip.String()
+				}
 			}
 		}
 	}
@@ -320,11 +349,37 @@ func getClientIP(req *http.Request) string {
 	return privateIP.String()
 }
 
+func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
+	// Hard-coded HA Proxy format for now: `%ci:%cp...` so we expect the value to
+	// start with the client IP in hexadecimal format (eg. 7F000001) separated by
+	// the client port number with a semicolon `:`.
+	sep := strings.IndexRune(value, ':')
+	if sep == -1 {
+		return "", errors.Errorf("unexpected IP address value `%s`", value)
+	}
+
+	clientIPHexStr := value[:sep]
+	// Optimize for the best case: there will be an IP address, so allocate size
+	// for at least an IPv4 address.
+	clientIPBuf := make([]byte, 0, net.IPv4len)
+	_, err := fmt.Sscanf(clientIPHexStr, "%x", &clientIPBuf)
+	if err != nil {
+		return "", errors.Wrap(err, "could not parse the IP address value")
+	}
+
+	switch len(clientIPBuf) {
+	case net.IPv4len, net.IPv6len:
+		return net.IP(clientIPBuf).String(), nil
+	default:
+		return "", errors.Errorf("unexpected IP address value `%s`", clientIPBuf)
+	}
+}
+
 func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	req := r.ctx.request
 
 	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := config.HTTPClientIPHeader(); extraHeader != "" {
+	if extraHeader := r.ctx.agent.config.HTTPClientIPHeader(); extraHeader != "" {
 		trackedHeaders = append(trackedHeaders, extraHeader)
 	}
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
@@ -351,13 +406,18 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	if requestId == "" {
 		uuid, err := uuid.NewRandom()
 		if err != nil {
-			logger.Error("could not generate a request id ", err)
+			r.ctx.agent.logger.Error("could not generate a request id ", err)
 			requestId = ""
 		}
 		requestId = hex.EncodeToString(uuid[:])
 	}
 
-	// FIXME: create it from an interface for compile-time errors.
+	var referer string
+	if !r.ctx.agent.config.StripHTTPReferer() {
+		referer = req.Referer()
+	}
+
+	// FIXME: create it from an interface for compile-time error-checking.
 	return api.RequestRecord_Request{
 		Rid:        requestId,
 		Headers:    headers,
@@ -370,7 +430,7 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 		RemotePort: remotePort,
 		Scheme:     scheme,
 		UserAgent:  req.UserAgent(),
-		Referer:    req.Referer(),
+		Referer:    referer,
 	}
 }
 
@@ -389,19 +449,26 @@ func (r *httpRequestRecord) GetObserved() api.RequestRecord_Observed {
 	}
 }
 
-func (r *httpRequestRecord) Proto() proto.Message {
-	return api.NewRequestRecordFromFace(r)
-}
-
 func isGlobal(ip net.IP) bool {
-	if len(ip) == 4 && config.IPv4PublicNetwork.Contains(ip) {
+	if ipv4 := ip.To4(); ipv4 != nil && config.IPv4PublicNetwork.Contains(ipv4) {
 		return false
 	}
 	return !isPrivate(ip)
 }
 
 func isPrivate(ip net.IP) bool {
-	for _, network := range config.IPPrivateNetworks {
+	var privateNetworks []*net.IPNet
+	// We cannot rely on `len(ip)` to know what type of IP address this is.
+	// `net.ParseIP()` or `net.IPv4()` can return internal 16-byte representations
+	// of an IP address even if it is an IPv4. So the trick is to use `ip.To4()`
+	// which returns nil if the address in not an IPv4 address.
+	if ipv4 := ip.To4(); ipv4 != nil {
+		privateNetworks = config.IPv4PrivateNetworks
+	} else {
+		privateNetworks = config.IPv6PrivateNetworks
+	}
+
+	for _, network := range privateNetworks {
 		if network.Contains(ip) {
 			return true
 		}

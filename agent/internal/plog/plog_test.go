@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
 var _ = Describe("plog", func() {
@@ -19,7 +19,7 @@ var _ = Describe("plog", func() {
 		)
 
 		JustBeforeEach(func() {
-			logger = plog.NewLogger("ns")
+			logger = plog.NewLogger("ns", nil)
 		})
 
 		Context("setting its output", func() {

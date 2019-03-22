@@ -2,31 +2,28 @@ package backend
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/config"
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 	"golang.org/x/net/http/httpproxy"
 )
 
-var logger = plog.NewLogger("agent/backend")
-
 type Client struct {
-	client      *http.Client
-	backendURL  string
-	pbMarshaler jsonpb.Marshaler
+	client     *http.Client
+	backendURL string
+	logger     *plog.Logger
 }
 
-func NewClient(backendURL string) (*Client, error) {
+func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Client, error) {
 	var transport *http.Transport
-	if proxySettings := config.BackendHTTPAPIProxy(); proxySettings == "" {
+	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy
 		// settings *_PROXY environment variables.
 		logger.Info("using proxy settings as indicated by the environment variables HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions)")
@@ -52,8 +49,8 @@ func NewClient(backendURL string) (*Client, error) {
 			Timeout:   config.BackendHTTPAPIRequestTimeout,
 			Transport: transport,
 		},
-		backendURL:  backendURL,
-		pbMarshaler: api.DefaultJSONPBMarshaler,
+		backendURL: backendURL,
+		logger:     plog.NewLogger("client", logger),
 	}
 
 	return client, nil
@@ -112,11 +109,15 @@ func (c *Client) Batch(req *api.BatchRequest, session string) error {
 	return nil
 }
 
-func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
+// Do performs the request whose body is pbs[0] pointer, while the expected
+// response is pbs[1] pointer. They are optional, and must be used according to
+// the cases request case.
+func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	var buf bytes.Buffer
+	pbMarshaler := json.NewEncoder(&buf)
 
 	if len(pbs) >= 1 {
-		err := c.pbMarshaler.Marshal(&buf, pbs[0])
+		err := pbMarshaler.Encode(pbs[0])
 		if err != nil {
 			return err
 		}
@@ -125,7 +126,7 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	req.ContentLength = int64(buf.Len())
 
 	dumpReq, _ := httputil.DumpRequestOut(req, true)
-	logger.Debugf("sending request\n%s", dumpReq)
+	c.logger.Debugf("sending request\n%s", dumpReq)
 
 	res, err := c.client.Do(req)
 	if err != nil {
@@ -133,7 +134,7 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	}
 
 	dumpRes, _ := httputil.DumpResponse(res, true)
-	logger.Debugf("received response\n%s", dumpRes)
+	c.logger.Debugf("received response\n%s", dumpRes)
 
 	// As documented (https://golang.org/pkg/net/http/#Response), connections are
 	// reused iif the response body was fully drained. The following chunk thus
@@ -142,7 +143,7 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	// json parsers may stop before.
 	// See also: https://github.com/google/go-github/pull/317
 	defer func() {
-		// fixme: log when n > 00
+		// FIXME: log when n > 00
 		io.CopyN(ioutil.Discard, res.Body, 1)
 		res.Body.Close()
 	}()
@@ -152,7 +153,8 @@ func (c *Client) Do(req *http.Request, pbs ...proto.Message) error {
 	}
 
 	if len(pbs) >= 2 {
-		err = jsonpb.Unmarshal(res.Body, pbs[1])
+		pbUnmarshaler := json.NewDecoder(res.Body)
+		err = pbUnmarshaler.Decode(pbs[1])
 		if err != nil && err != io.EOF {
 			return err
 		}

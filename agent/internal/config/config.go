@@ -13,12 +13,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 
 	"github.com/spf13/viper"
 )
 
-var manager *viper.Viper
+type Config struct {
+	*viper.Viper
+}
+
+// Error messages.
+const (
+	ErrorMessage_UnsupportedCommand = "command is not supported"
+)
 
 type HTTPAPIEndpoint struct {
 	Method, URL string
@@ -95,7 +102,6 @@ var (
 		"Forwarded-For",
 		"Forwarded",
 		"Via",
-		"User-Agent",
 		"Content-Type",
 		"Content-Length",
 		"Host",
@@ -139,7 +145,7 @@ func ipnet(s string) *net.IPNet {
 
 // IP networks allowing to compute whether to
 var (
-	IPPrivateNetworks = []*net.IPNet{
+	IPv4PrivateNetworks = []*net.IPNet{
 		ipnet("0.0.0.0/8"),
 		ipnet("10.0.0.0/8"),
 		ipnet("127.0.0.0/8"),
@@ -154,6 +160,11 @@ var (
 		ipnet("203.0.113.0/24"),
 		ipnet("240.0.0.0/4"),
 		ipnet("255.255.255.255/32"),
+	}
+
+	IPv4PublicNetwork = ipnet("100.64.0.0/10")
+
+	IPv6PrivateNetworks = []*net.IPNet{
 		ipnet("::1/128"),
 		ipnet("::/128"),
 		ipnet("::ffff:0:0/96"),
@@ -165,8 +176,6 @@ var (
 		ipnet("fc00::/7"),
 		ipnet("fe80::/10"),
 	}
-
-	IPv4PublicNetwork = ipnet("100.64.0.0/10")
 )
 
 const (
@@ -177,13 +186,15 @@ const (
 const (
 	configEnvKeyConfigFile = `config_file`
 
-	configKeyBackendHTTPAPIBaseURL = `url`
-	configKeyBackendHTTPAPIToken   = `token`
-	configKeyLogLevel              = `log_level`
-	configKeyAppName               = `app_name`
-	configKeyHTTPClientIPHeader    = `ip_header`
-	configKeyBackendHTTPAPIProxy   = `proxy`
-	configKeyDisable               = `disable`
+	configKeyBackendHTTPAPIBaseURL    = `url`
+	configKeyBackendHTTPAPIToken      = `token`
+	configKeyLogLevel                 = `log_level`
+	configKeyAppName                  = `app_name`
+	configKeyHTTPClientIPHeader       = `ip_header`
+	configKeyHTTPClientIPHeaderFormat = `ip_header_format`
+	configKeyBackendHTTPAPIProxy      = `proxy`
+	configKeyDisable                  = `disable`
+	configKeyStripHTTPReferer         = `strip_http_referer`
 )
 
 // User configuration's default values.
@@ -192,14 +203,10 @@ const (
 	configDefaultLogLevel              = `warn`
 )
 
-func init() {
-	New()
-}
+func New(logger *plog.Logger) *Config {
+	logger = plog.NewLogger("agent/config", logger)
 
-func New() {
-	logger := plog.NewLogger("sqreen/agent/config")
-
-	manager = viper.New()
+	manager := viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()
 	manager.SetConfigName(configFileBasename)
@@ -228,49 +235,65 @@ func New() {
 	manager.SetDefault(configKeyLogLevel, configDefaultLogLevel)
 	manager.SetDefault(configKeyAppName, "")
 	manager.SetDefault(configKeyHTTPClientIPHeader, "")
+	manager.SetDefault(configKeyHTTPClientIPHeaderFormat, "")
 	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	manager.SetDefault(configKeyDisable, "")
+	manager.SetDefault(configKeyStripHTTPReferer, "")
 
 	err := manager.ReadInConfig()
 	if err != nil {
 		logger.Error("could not read the configuration file: ", err)
 	}
+
+	return &Config{manager}
 }
 
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
-func BackendHTTPAPIBaseURL() string {
-	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIBaseURL))
+func (c *Config) BackendHTTPAPIBaseURL() string {
+	return sanitizeString(c.GetString(configKeyBackendHTTPAPIBaseURL))
 }
 
 // BackendHTTPAPIToken returns the access token to the backend API.
-func BackendHTTPAPIToken() string {
-	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIToken))
+func (c *Config) BackendHTTPAPIToken() string {
+	return sanitizeString(c.GetString(configKeyBackendHTTPAPIToken))
 }
 
 // LogLevel returns the log level.
-func LogLevel() string {
-	return sanitizeString(manager.GetString(configKeyLogLevel))
+func (c *Config) LogLevel() string {
+	return sanitizeString(c.GetString(configKeyLogLevel))
 }
 
 // AppName returns the app name.
-func AppName() string {
-	return sanitizeString(manager.GetString(configKeyAppName))
+func (c *Config) AppName() string {
+	return sanitizeString(c.GetString(configKeyAppName))
 }
 
-// HTTPClientIPHeader IPHeader returns the header to first lookup to find the client ip of a HTTP request.
-func HTTPClientIPHeader() string {
-	return sanitizeString(manager.GetString(configKeyHTTPClientIPHeader))
+// HTTPClientIPHeader returns the header to first lookup to find the client ip of a HTTP request.
+func (c *Config) HTTPClientIPHeader() string {
+	return sanitizeString(c.GetString(configKeyHTTPClientIPHeader))
+}
+
+// HTTPClientIPHeaderFormat returns the header format of the `ip_header` value.
+func (c *Config) HTTPClientIPHeaderFormat() string {
+	return sanitizeString(c.GetString(configKeyHTTPClientIPHeaderFormat))
 }
 
 // Proxy returns the proxy configuration to use for backend HTTP calls.
-func BackendHTTPAPIProxy() string {
-	return sanitizeString(manager.GetString(configKeyBackendHTTPAPIProxy))
+func (c *Config) BackendHTTPAPIProxy() string {
+	return sanitizeString(c.GetString(configKeyBackendHTTPAPIProxy))
 }
 
 // Disable returns true when the agent should be disabled, false otherwise.
-func Disable() bool {
-	disable := sanitizeString(manager.GetString(configKeyDisable))
-	return disable != "" || BackendHTTPAPIToken() == ""
+func (c *Config) Disable() bool {
+	disable := sanitizeString(c.GetString(configKeyDisable))
+	return disable != "" || c.BackendHTTPAPIToken() == ""
+}
+
+// Disable returns true when the agent should be strip the `Referer` HTTP
+// header, false otherwise.
+func (c *Config) StripHTTPReferer() bool {
+	strip := sanitizeString(c.GetString(configKeyStripHTTPReferer))
+	return strip != ""
 }
 
 func sanitizeString(s string) string {

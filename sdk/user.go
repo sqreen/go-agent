@@ -1,14 +1,14 @@
 package sdk
 
-import "github.com/sqreen/go-agent/agent"
+import "github.com/sqreen/go-agent/agent/types"
 
 // UserHTTPRequestRecord is the SDK record associated to a HTTP request for a
 // given user. Its methods allow request handlers to signal security events
 // related to the given user. It allows to send security events related to a
 // single user.
 type UserHTTPRequestRecord struct {
-	ctx *agent.HTTPRequestRecord
-	id  EventUserIdentifiersMap
+	record types.RequestRecord
+	id     EventUserIdentifiersMap
 }
 
 // TrackAuth allows to track a user authentication. The boolean value
@@ -23,17 +23,23 @@ func (ctx *UserHTTPRequestRecord) TrackAuth(loginSuccess bool) *UserHTTPRequestR
 	if ctx == nil {
 		return nil
 	}
-	ctx.ctx.TrackAuth(loginSuccess, agent.EventUserIdentifiersMap(ctx.id))
+	ctx.record.NewUserAuth(ctx.id, loginSuccess)
 	return ctx
 }
 
 // TrackAuthSuccess is equivalent to `TrackAuth(true)`.
 func (ctx *UserHTTPRequestRecord) TrackAuthSuccess() *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	return ctx.TrackAuth(true)
 }
 
 // TrackAuthFailure is equivalent to `TrackAuth(false)`.
 func (ctx *UserHTTPRequestRecord) TrackAuthFailure() *UserHTTPRequestRecord {
+	if ctx == nil {
+		return nil
+	}
 	return ctx.TrackAuth(false)
 }
 
@@ -48,7 +54,7 @@ func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
 	if ctx == nil {
 		return nil
 	}
-	ctx.ctx.TrackSignup(agent.EventUserIdentifiersMap(ctx.id))
+	ctx.record.NewUserSignup(ctx.id)
 	return ctx
 }
 
@@ -67,8 +73,8 @@ func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent
 	if ctx == nil {
 		return nil
 	}
-	ctx.ctx.TrackIdentify(agent.EventUserIdentifiersMap(ctx.id))
-	return &UserHTTPRequestEvent{&HTTPRequestEvent{ctx.ctx.TrackEvent(event)}}
+	ctx.record.Identify(ctx.id)
+	return &UserHTTPRequestEvent{HTTPRequestEvent{ctx.record.NewCustomEvent(event)}}
 }
 
 // Identify associates the user to current request so that Sqreen can apply
@@ -83,6 +89,6 @@ func (ctx *UserHTTPRequestRecord) Identify() *UserHTTPRequestRecord {
 	if ctx == nil {
 		return nil
 	}
-	ctx.ctx.TrackIdentify(agent.EventUserIdentifiersMap(ctx.id))
+	ctx.record.Identify(ctx.id)
 	return ctx
 }

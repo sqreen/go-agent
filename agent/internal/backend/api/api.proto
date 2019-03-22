@@ -57,7 +57,9 @@ message CommandRequest {
   string uuid = 3;
 }
 
-message CommandResponse {
+message CommandResult {
+  string output = 1;
+  bool status = 2;
 }
 
 message MetricResponse {
@@ -68,7 +70,7 @@ message MetricResponse {
 }
 
 message AppBeatRequest {
-  map<string, CommandResponse> command_results = 1 [(gogoproto.nullable) = false];
+  map<string, CommandResult> command_results = 1 [(gogoproto.nullable) = false];
   repeated MetricResponse metrics = 2 [(gogoproto.nullable) = false];
 }
 

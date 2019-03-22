@@ -9,15 +9,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/sqreen/go-agent/agent/backend/api"
-	"github.com/sqreen/go-agent/agent/plog"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 )
+
+type Info struct {
+	logger      *plog.Logger
+	hostname    string
+	processInfo ProcessInfo
+}
+
+func NewInfo(logger *plog.Logger) *Info {
+	logger = plog.NewLogger("app/info", logger)
+	return &Info{
+		logger: logger,
+		processInfo: ProcessInfo{
+			name: executable(logger),
+			time: time.Now(),
+			pid:  uint32(os.Getpid()),
+			ppid: uint32(os.Getppid()),
+			euid: uint32(os.Geteuid()),
+			egid: uint32(os.Getegid()),
+			uid:  uint32(os.Getuid()),
+			gid:  uint32(os.Getgid()),
+		},
+	}
+
+}
 
 type Dependency struct {
 }
-
-var logger = plog.NewLogger("agent/app")
 
 type ProcessInfo struct {
 	name                            string
@@ -25,19 +45,8 @@ type ProcessInfo struct {
 	pid, ppid, euid, egid, uid, gid uint32
 }
 
-var processInfo = ProcessInfo{
-	name: executable(),
-	time: time.Now(),
-	pid:  uint32(os.Getpid()),
-	ppid: uint32(os.Getppid()),
-	euid: uint32(os.Geteuid()),
-	egid: uint32(os.Getegid()),
-	uid:  uint32(os.Getuid()),
-	gid:  uint32(os.Getgid()),
-}
-
-func GetProcessInfo() *ProcessInfo {
-	return &processInfo
+func (i *Info) GetProcessInfo() *ProcessInfo {
+	return &i.processInfo
 }
 
 func (p *ProcessInfo) GetName() string {
@@ -72,10 +81,6 @@ func (p *ProcessInfo) GetGid() uint32 {
 	return p.gid
 }
 
-func (p *ProcessInfo) Proto() proto.Message {
-	return api.NewAppLoginRequest_VariousInfosFromFace(p)
-}
-
 func GoVersion() string {
 	return runtime.Version()
 }
@@ -86,24 +91,22 @@ func GoBuildTarget() string {
 	return goBuildTarget
 }
 
-var hostname string
-
-func Hostname() string {
-	if hostname == "" {
+func (a *Info) Hostname() string {
+	if a.hostname == "" {
 		var err error
-		hostname, err = os.Hostname()
+		a.hostname, err = os.Hostname()
 		if err != nil {
-			logger.Error(err)
-			hostname = ""
+			a.logger.Error(err)
+			a.hostname = ""
 		}
 	}
-	return hostname
+	return a.hostname
 }
 
-func Dependencies() ([]*Dependency, error) {
-	executable := processInfo.GetName()
+func (i *Info) Dependencies() ([]*Dependency, error) {
+	executable := i.processInfo.GetName()
 
-	logger.Debug("reading ELF file ", executable)
+	i.logger.Debug("reading ELF file ", executable)
 	exe, err := elf.Open(executable)
 	if err != nil {
 		return nil, err
@@ -114,7 +117,7 @@ func Dependencies() ([]*Dependency, error) {
 	if sec := exe.Section(".gopclntab"); sec != nil {
 		pclndat, err = sec.Data()
 		if err != nil {
-			logger.Error("cannot read .gopclntab section: ", err)
+			i.logger.Error("cannot read .gopclntab section: ", err)
 			return nil, err
 		}
 	}
@@ -127,7 +130,7 @@ func Dependencies() ([]*Dependency, error) {
 	pcln := gosym.NewLineTable(pclndat, exe.Section(".text").Addr)
 	symTab, err := gosym.NewTable(symTabRaw, pcln)
 	if err != nil {
-		logger.Error("cannot create the Go synbol table: ", err)
+		i.logger.Error("cannot create the Go synbol table: ", err)
 		return nil, err
 	}
 
@@ -181,7 +184,7 @@ func packageName(symbol string) string {
 	return symbol[:pathend+i]
 }
 
-func executable() string {
+func executable(logger *plog.Logger) string {
 	name, err := os.Executable()
 	if err != nil {
 		logger.Error("could not read the executable name ", err)
