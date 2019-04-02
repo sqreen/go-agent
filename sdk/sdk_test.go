@@ -275,8 +275,15 @@ func TestDisabled(t *testing.T) {
 	sdk.GracefulStop()
 }
 
-func TestSDK(t *testing.T) {
-	suite.Run(t, new(SDKTestSuite))
+func TestEventPropertyMap(t *testing.T) {
+	key := testlib.RandString(1, 100)
+	value := testlib.RandString(1, 100)
+	props := sdk.EventPropertyMap{
+		key: value,
+	}
+	buf, err := props.MarshalJSON()
+	require.NoError(t, err)
+	require.Equal(t, string(buf), fmt.Sprintf(`{"%s":"%s"}`, key, value))
 }
 
 func newTestRequest() *http.Request {
