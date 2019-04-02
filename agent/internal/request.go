@@ -31,7 +31,7 @@ type HTTPRequestRecord struct {
 type HTTPRequestEvent struct {
 	method          string
 	event           string
-	properties      EventPropertyMap
+	properties      types.EventProperties
 	userIdentifiers EventUserIdentifiersMap
 	timestamp       time.Time
 }
@@ -194,7 +194,7 @@ func (e *HTTPRequestEvent) WithTimestamp(t time.Time) {
 	e.timestamp = t
 }
 
-func (e *HTTPRequestEvent) WithProperties(p map[string]string) {
+func (e *HTTPRequestEvent) WithProperties(p types.EventProperties) {
 	if e == nil {
 		return
 	}
@@ -234,9 +234,10 @@ func (e *HTTPRequestEvent) GetOptions() *api.RequestRecord_Observed_SDKEvent_Arg
 }
 
 func (e *HTTPRequestEvent) GetProperties() *api.Struct {
-	if len(e.properties) == 0 {
+	if e.properties == nil {
 		return nil
 	}
+
 	return &api.Struct{e.properties}
 }
 

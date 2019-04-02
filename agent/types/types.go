@@ -5,6 +5,7 @@
 package types
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -25,6 +26,21 @@ type Agent interface {
 	GracefulStop()
 }
 
+type Request interface {
+	// Record returns the request record of the request.
+	Record() RequestRecord
+
+	// SecurityAction returns a non-nil HTTP handler when a security action is
+	// required for the given request. The returned handler should be used to
+	// handle the request before aborting it. Because of a security rule (eg.
+	// blocking an IP address). The request handler should therefore abort the
+	// request.
+	SecurityAction() http.Handler
+
+	// Close needs to be called when the request is done.
+	Close()
+}
+
 type RequestRecord interface {
 	// NewCustomEvent creates a new custom event and adds it to the request record.
 	NewCustomEvent(event string) CustomEvent
@@ -34,16 +50,17 @@ type RequestRecord interface {
 	NewUserAuth(id map[string]string, success bool)
 	// Identify associates the given user identifiers to the request.
 	Identify(id map[string]string)
+
 	// Close needs to be called when the request is done.
 	Close()
 }
 
 type CustomEvent interface {
 	WithTimestamp(t time.Time)
-	WithProperties(props map[string]string)
+	WithProperties(props EventProperties)
 	WithUserIdentifiers(id map[string]string)
 }
 
-type Action interface {
-	Apply(w http.ResponseWriter)
-}
+// EventProperties is an interface type enforcing a marshable type to the target
+// JSON wire-format.
+type EventProperties json.Marshaler
