@@ -168,6 +168,16 @@ func (a *Agent) InstrumentationDisable() error {
 	return nil
 }
 
+func (a *Agent) ActionsReload() error {
+	actions, err := a.client.ActionsPack()
+	if err != nil {
+		a.logger.Error(err)
+		return err
+	}
+
+	return a.actors.SetActions(actions.Actions)
+}
+
 func (a *Agent) SecurityAction(req *http.Request) http.Handler {
 	ip := getClientIP(req, a.config)
 	action, exists, err := a.actors.FindIP(ip)

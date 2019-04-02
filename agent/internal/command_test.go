@@ -170,3 +170,8 @@ func (a *agentMockup) ExpectInstrumentationEnable() *mock.Call {
 func (a *agentMockup) ExpectInstrumentationDisable() *mock.Call {
 	return a.On("InstrumentationDisable")
 }
+
+func (a *agentMockup) ActionsReload() error {
+	ret := a.Called()
+	return ret.Error(0)
+}
