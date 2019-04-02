@@ -3,6 +3,7 @@ syntax = "proto3";
 package sqreen.agent.backend.api;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
@@ -225,4 +226,35 @@ message RequestRecord {
   Request request = 4 [(gogoproto.nullable) = false];
   Response response = 5 [(gogoproto.nullable) = false];
   Observed observed = 6 [(gogoproto.nullable) = false];
+}
+
+message ActionsPackResponse {
+  message Action {
+    message Params {
+      message UserIdentifiers {
+        map<string, string> user = 1;
+      }
+
+      string url = 1;
+      repeated UserIdentifiers users = 2 [(gogoproto.nullable) = false];
+      repeated string ip_cidr = 3;
+    }
+
+    string action_id = 1;
+    string action = 2;
+    google.protobuf.Duration duration = 3 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+    bool send_response = 4;
+    Params params = 5 [(gogoproto.nullable) = false];
+  }
+
+  repeated Action actions = 1 [(gogoproto.nullable) = false];
+}
+
+message BlockedIPEventProperties {
+  message Output {
+    string ip_address = 1;
+  }
+
+  string action_id = 1;
+  Output output = 2 [(gogoproto.nullable) = false];
 }
