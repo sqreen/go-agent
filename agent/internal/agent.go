@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/app"
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
@@ -26,11 +27,11 @@ type Agent struct {
 	config     *config.Config
 	appInfo    *app.Info
 	client     *backend.Client
+	actors     *actor.Store
 }
 
 func New() *Agent {
 	logger := plog.NewLogger("agent", nil)
-
 	cfg := config.New(logger)
 	plog.SetLevelFromString(cfg.LogLevel())
 	plog.SetOutput(os.Stderr)
@@ -57,6 +58,7 @@ func New() *Agent {
 		config:     cfg,
 		appInfo:    app.NewInfo(logger),
 		client:     client,
+		actors:     actor.NewStore(logger),
 	}
 }
 
@@ -65,7 +67,10 @@ func (a *Agent) Start() {
 }
 
 func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
-	return a.newHTTPRequestRecord(req)
+	return &HTTPRequestRecord{
+		request: req,
+		agent:   a,
+	}
 }
 
 func (a *Agent) start() {
@@ -161,6 +166,21 @@ func (a *Agent) InstrumentationDisable() error {
 	sdk.SetAgent(nil)
 	a.logger.Info("instrumentation disabled")
 	return nil
+}
+
+func (a *Agent) SecurityAction(req *http.Request) http.Handler {
+	ip := getClientIP(req, a.config)
+	action, exists, err := a.actors.FindIP(ip)
+	if err != nil {
+		a.logger.Error(err)
+		return nil
+	}
+
+	if !exists {
+		return nil
+	}
+
+	return actor.NewActionHandler(action, ip)
 }
 
 func (a *Agent) GracefulStop() {

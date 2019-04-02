@@ -28,13 +28,6 @@ type HTTPRequestRecord struct {
 	shouldSend   bool
 }
 
-func (a *Agent) newHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
-	return &HTTPRequestRecord{
-		request: req,
-		agent:   a,
-	}
-}
-
 type HTTPRequestEvent struct {
 	method          string
 	event           string
