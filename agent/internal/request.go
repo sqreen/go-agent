@@ -1,3 +1,7 @@
+// Copyright 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package internal
 
 import (
@@ -44,7 +48,7 @@ type userEventFace interface {
 type userEvent struct {
 	userIdentifiers EventUserIdentifiersMap
 	timestamp       time.Time
-	ip              string
+	ip              net.IP
 }
 
 type authUserEvent struct {
@@ -64,7 +68,7 @@ func (e *authUserEvent) bucketID() (string, error) {
 
 type userMetricKey struct {
 	id EventUserIdentifiersMap
-	ip string
+	ip net.IP
 }
 
 func (k *userMetricKey) bucketID() (string, error) {
@@ -77,7 +81,7 @@ func (k *userMetricKey) bucketID() (string, error) {
 		IP   string          `json:"ip"`
 	}{
 		Keys: keys,
-		IP:   k.ip,
+		IP:   k.ip.String(),
 	}
 	buf, err := json.Marshal(&v)
 	return string(buf), err
@@ -272,7 +276,7 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request, r.ctx.agent.config)
+	return getClientIP(r.ctx.request, r.ctx.agent.config).String()
 }
 
 type getClientIPConfigFace interface {
@@ -280,7 +284,7 @@ type getClientIPConfigFace interface {
 	HTTPClientIPHeaderFormat() string
 }
 
-func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
+func getClientIP(req *http.Request, cfg getClientIPConfigFace) net.IP {
 	var privateIP net.IP
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
@@ -316,7 +320,7 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 
 			if value != "" {
 				if ip := check(value); ip != nil {
-					return ip.String()
+					return ip
 				}
 			}
 		}
@@ -325,22 +329,22 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 	for _, key := range config.IPRelatedHTTPHeaders {
 		value := req.Header.Get(key)
 		if ip := check(value); ip != nil {
-			return ip.String()
+			return ip
 		}
 	}
 
-	remoteIP, _ := parseAddr(req.RemoteAddr)
-	if remoteIP == "" {
+	remoteIPStr, _ := splitHostPort(req.RemoteAddr)
+	if remoteIPStr == "" {
 		if privateIP != nil {
-			return privateIP.String()
+			return privateIP
 		}
-		return ""
+		return nil
 	}
 
-	if privateIP == nil || isGlobal(net.ParseIP(remoteIP)) {
+	if remoteIP := net.ParseIP(remoteIPStr); remoteIP != nil && (privateIP == nil || isGlobal(remoteIP)) {
 		return remoteIP
 	}
-	return privateIP.String()
+	return privateIP
 }
 
 func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
@@ -386,8 +390,8 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 		}
 	}
 
-	remoteIP, remotePort := parseAddr(req.RemoteAddr)
-	_, hostPort := parseAddr(req.Host)
+	remoteIP, remotePort := splitHostPort(req.RemoteAddr)
+	_, hostPort := splitHostPort(req.Host)
 
 	var scheme string
 	if req.TLS != nil {
@@ -470,7 +474,9 @@ func isPrivate(ip net.IP) bool {
 	return false
 }
 
-func parseAddr(addr string) (host string, port string) {
+// splitHostPort splits a network address of the form `host:port` or
+// `[host]:port` into `host` and `port`.
+func splitHostPort(addr string) (host string, port string) {
 	i := strings.LastIndex(addr, "]:")
 	if i != -1 {
 		// ipv6
