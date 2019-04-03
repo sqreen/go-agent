@@ -277,8 +277,6 @@ func TestStore(t *testing.T) {
 			err := actors.SetActions(actions)
 			require.NoError(t, err)
 
-			//: []net.IP{}
-			//: []net.IP{net.IPv4(1, 2, 3, 5), net.IPv4(1, 2, 3, 120), net.IPv4(1, 2, 3, 255)}
 			// Accesses that should be successful.
 
 			// Start with timed actions first so that they shouldn't have expired yet
