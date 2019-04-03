@@ -17,7 +17,12 @@ go/target := $(shell go env GOOS)_$(shell go env GOARCH)
 agent/library/static := pkg/$(go/target)/sqreen/agent.a
 protobufs := $(patsubst %.proto,%.pb.go,$(shell find agent -name '*.proto'))
 protoc/flags := -I. -Ivendor --gogo_out=google/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types:.
-test/packages := ./agent/... ./sdk/...
+test/packages/everything := ./agent/... ./sdk/...
+test/packages := $(or $(TEST_PACKAGE), $(test/packages/everything))
+test/options := $(TEST_OPTIONS)
+benchmark := $(or $(BENCHMARK), .)
+benchmark/results := tools/benchmark/results
+benchmark/result = $(benchmark/results)/$(git/ref/head)/$(shell date '+%Y-%m-%d-%H-%M-%S')
 
 define dockerize =
 if $(lib/docker/is_in_container); then $(lib/argv/1); else docker exec -i $(docker/dev/container) bash -c "$(lib/argv/1)"; fi
@@ -71,15 +76,32 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, go test -v $(test/packages))
+	$(call dockerize, go test -v $(test/options) $(test/packages))
+help += test
 
 .PHONY: test-coverage
 test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, go test -v -cover -coverprofile=coverage.txt $(test/packages))
+	$(call dockerize, go test -v -cover -coverprofile=coverage.txt $(test/options) $(test/packages))
+help += test-coverage
 
 .PHONY: test-race
 test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, go test -v -race $(test/packages))
+	$(call dockerize, go test -v -race $(test/options) $(test/packages))
+help += test-race
+
+.PHONY: benchmark
+benchmark: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	$(call dockerize, go test -v -run=notests -bench=$(benchmark) $(test/options) $(test/packages))
+help += benchmark
+
+.PHONY: benchmark-result
+benchmark-result: $(benchmark/result)
+	$(call dockerize, go test -v -run=notests -bench=$(benchmark) $(test/options) $(test/packages/everything) | tee $(benchmark/result))
+help += benchmark-result
+
+$(benchmark/result): $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+	mkdir -p $(@D) && touch $@
+	$(call dockerize, go test -v -run=notests -bench=. $(test/packages) | tee $@)
 
 #-----------------------------------------------------------------------------
 # Vendor directory

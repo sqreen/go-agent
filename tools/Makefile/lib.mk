@@ -30,3 +30,9 @@ lib/argv/10 = $(call lib/argv, $(10))
 define lib/argv =
 $(or $(strip $1), $(error missing mandatory argument))
 endef
+
+##
+# git/ref/head()
+# Return the short commit reference to HEAD.
+#
+git/ref/head = $(shell git rev-parse --short HEAD)
