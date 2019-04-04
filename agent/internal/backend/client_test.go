@@ -79,6 +79,7 @@ func TestClient(t *testing.T) {
 		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
 
 		request := NewRandomBatchRequest()
+		t.Logf("%#v", request)
 
 		client, server := initFakeServerSession(endpointCfg, request, nil, statusCode, nil)
 		defer server.Close()
@@ -282,36 +283,20 @@ func NewRandomActionsPackResponse() *api.ActionsPackResponse {
 }
 
 func FuzzStruct(e *api.Struct, c fuzz.Continue) {
-	nbFields := c.Uint32() % 10
-	if nbFields == 0 {
-		e.Value = nil
-		return
-	}
-
-	kv := make(map[string]interface{}, nbFields)
-	e.Value = kv
-	for n := 0; n < len(kv); n++ {
-		var k string
-		c.Fuzz(&k)
-
-		var v interface{}
-		switch c.Uint32() % 4 {
-		case 0:
-			v = nil
-		case 1:
-			var actual string
-			c.Fuzz(&actual)
-			v = actual
-		case 2:
-			var actual float64
-			c.Fuzz(&actual)
-			v = actual
-		case 3:
-			var actual bool
-			c.Fuzz(&actual)
-			v = actual
+	v := struct {
+		A string
+		B int
+		C float64
+		D bool
+		F []byte
+		G struct {
+			A string
+			B int
+			C float64
+			D bool
+			F []byte
 		}
-
-		kv[k] = v
-	}
+	}{}
+	c.Fuzz(&v)
+	e.Value = v
 }

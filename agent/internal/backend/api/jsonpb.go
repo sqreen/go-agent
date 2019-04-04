@@ -66,7 +66,11 @@ func (e *BatchRequest_Event) MarshalJSON() ([]byte, error) {
 	if len(buf) <= 2 {
 		return buf, nil
 	}
-	buf = []byte(`{"event_type":"` + e.EventType + `",` + string(buf[1:]))
+	eventType, err := json.Marshal(e.EventType)
+	if err != nil {
+		return nil, err
+	}
+	buf = []byte(`{"event_type":` + string(eventType) + `,` + string(buf[1:]))
 	return buf, nil
 }
 
