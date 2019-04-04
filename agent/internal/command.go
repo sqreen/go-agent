@@ -44,12 +44,23 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 	}
 
 	results := make(map[string]api.CommandResult, len(commands))
+	done := make(map[string]string, len(commands))
 	for _, cmd := range commands {
 		handler, exists := m.handlers[cmd.Name]
 		var result api.CommandResult
 		if exists {
-			result = handler()
+			if lastUuid := done[cmd.Name]; lastUuid == "" {
+				// The command has not been done
+				result = handler()
+				// Set this command as done by storing the uuid that performed it
+				done[cmd.Name] = cmd.Uuid
+			} else {
+				// The command is already done and appears several times in the list of
+				// commands. So just reuse the last result
+				result = results[lastUuid]
+			}
 		} else {
+			// The command is not in the list of supported commands
 			result = api.CommandResult{
 				Status: false,
 				Output: config.ErrorMessage_UnsupportedCommand,
