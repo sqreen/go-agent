@@ -12,11 +12,11 @@ import (
 )
 
 // Check the radix tree package does what we expect.
-func TestRadixTreeV4API(t *testing.T) {
+func TestRadixTreeV6API(t *testing.T) {
 	t.Run("Add", func(t *testing.T) {
-		tree := uint8_tree.NewTreeV4()
+		tree := uint8_tree.NewTreeV6()
 
-		ip, _, err := patricia.ParseIPFromString("1.2.3.5")
+		_, ip, err := patricia.ParseIPFromString("1:2:3:4:5:6:7:8")
 		require.NoError(t, err)
 		increased, nbTags, err := tree.Add(*ip, 45, func(existing uint8, new uint8) bool {
 			// Should not be called as this is the first tag
@@ -45,23 +45,23 @@ func TestRadixTreeV4API(t *testing.T) {
 	})
 
 	t.Run("subsequent CIDR IPs", func(t *testing.T) {
-		tree := uint8_tree.NewTreeV4()
+		tree := uint8_tree.NewTreeV6()
 
-		ip1, _, err := patricia.ParseIPFromString("1.2.3.5")
+		_, ip1, err := patricia.ParseIPFromString("1:2:3:4:5:6:7:8")
 		require.NoError(t, err)
 		increased, nbTags, err := tree.Add(*ip1, 45, nil)
 		require.NoError(t, err)
 		require.Equal(t, nbTags, 1)
 		require.True(t, increased)
 
-		ip2, _, err := patricia.ParseIPFromString("1.2.3.4")
+		_, ip2, err := patricia.ParseIPFromString("1:2:3:4:5:6:7:7")
 		require.NoError(t, err)
 		increased, nbTags, err = tree.Add(*ip2, 44, nil)
 		require.NoError(t, err)
 		require.Equal(t, nbTags, 1)
 		require.True(t, increased)
 
-		ip3, _, err := patricia.ParseIPFromString("1.2.3.6")
+		_, ip3, err := patricia.ParseIPFromString("1:2:3:4:5:6:7:9")
 		require.NoError(t, err)
 		increased, nbTags, err = tree.Add(*ip3, 46, nil)
 		require.NoError(t, err)
@@ -92,28 +92,28 @@ func TestRadixTreeV4API(t *testing.T) {
 		require.Equal(t, tags[0], uint8(44))
 
 		// Check that FindTags returns an array ordered by prefix-length
-		net1, _, err := patricia.ParseIPFromString("10.1.2.0/24")
+		_, net1, err := patricia.ParseIPFromString("fd00::/24")
 		require.NoError(t, err)
 		increased, nbTags, err = tree.Add(*net1, 47, nil)
 		require.NoError(t, err)
 		require.Equal(t, nbTags, 1)
 		require.True(t, increased)
 
-		net2, _, err := patricia.ParseIPFromString("10.1.0.0/16")
+		_, net2, err := patricia.ParseIPFromString("fd00::/16")
 		require.NoError(t, err)
 		increased, nbTags, err = tree.Add(*net2, 48, nil)
 		require.NoError(t, err)
 		require.Equal(t, nbTags, 1)
 		require.True(t, increased)
 
-		net3, _, err := patricia.ParseIPFromString("10.0.0.0/8")
+		_, net3, err := patricia.ParseIPFromString("fd00::/8")
 		require.NoError(t, err)
 		increased, nbTags, err = tree.Add(*net3, 49, nil)
 		require.NoError(t, err)
 		require.Equal(t, nbTags, 1)
 		require.True(t, increased)
 
-		ip4, _, err := patricia.ParseIPFromString("10.1.2.33/32")
+		_, ip4, err := patricia.ParseIPFromString("fd00::42/128")
 		require.NoError(t, err)
 		increased, nbTags, err = tree.Add(*ip4, 50, nil)
 		require.NoError(t, err)
@@ -131,12 +131,12 @@ func TestRadixTreeV4API(t *testing.T) {
 	})
 }
 
-func BenchmarkTreeV4(b *testing.B) {
+func BenchmarkTreeV6(b *testing.B) {
 	b.Run("Lookup", func(b *testing.B) {
 		b.Run("Random addresses", func(b *testing.B) {
 			for n := 1; n <= 1000000; n *= 10 {
 				n := n
-				tree, cidrs := RandTreeV4(b, n, RandPatriciaIPv4Address)
+				tree, cidrs := RandTreeV6(b, n, RandPatriciaIPv6Address)
 				b.Run(fmt.Sprintf("%d", len(cidrs)), func(b *testing.B) {
 					b.ReportAllocs()
 					for n := 0; n < b.N; n++ {
@@ -155,7 +155,7 @@ func BenchmarkTreeV4(b *testing.B) {
 		b.Run("Random Networks", func(b *testing.B) {
 			for n := 1; n <= 1000000; n *= 10 {
 				n := n
-				tree, cidrs := RandTreeV4(b, n, RandPatriciaCIDRv4)
+				tree, cidrs := RandTreeV6(b, n, RandPatriciaCIDRv6)
 				b.Run(fmt.Sprintf("%d", len(cidrs)), func(b *testing.B) {
 					b.ReportAllocs()
 					for n := 0; n < b.N; n++ {
@@ -173,40 +173,42 @@ func BenchmarkTreeV4(b *testing.B) {
 	})
 
 	b.Run("Insertion", func(b *testing.B) {
-		cidr, _, err := patricia.ParseIPFromString("1.2.3.4")
+		_, cidr, err := patricia.ParseIPFromString("1:2:3:4:5:6:7:8")
 		require.NoError(b, err)
 
 		b.Run("Consequitive addresses", func(b *testing.B) {
 			b.ReportAllocs()
-			tree := uint8_tree.NewTreeV4()
+			tree := uint8_tree.NewTreeV6()
 			for n := 0; n < b.N; n++ {
-				cidr.Address += 1
+				cidr.Right += 1
 				tree.Set(*cidr, 0)
 			}
 		})
 
 		b.Run("Random addresses", func(b *testing.B) {
 			b.ReportAllocs()
-			tree := uint8_tree.NewTreeV4()
+			tree := uint8_tree.NewTreeV6()
 			for n := 0; n < b.N; n++ {
-				cidr.Address = rand.Uint32()
+				cidr.Left = rand.Uint64()
+				cidr.Right = rand.Uint64()
 				tree.Set(*cidr, 0)
 			}
 		})
 
 		b.Run("Random networks", func(b *testing.B) {
 			b.ReportAllocs()
-			tree := uint8_tree.NewTreeV4()
+			tree := uint8_tree.NewTreeV6()
 			for n := 0; n < b.N; n++ {
-				cidr.Address = rand.Uint32()
-				cidr.Length = 1 + (uint(rand.Uint32()) % uint(32))
+				cidr.Left = rand.Uint64()
+				cidr.Right = rand.Uint64()
+				cidr.Length = 1 + (uint(rand.Uint32()) % uint(8*net.IPv6len))
 				tree.Set(*cidr, 0)
 			}
 		})
 	})
 
 	b.Run("Size", func(b *testing.B) {
-		cidr := patricia.NewIPv4Address(rand.Uint32(), 32)
+		cidr := RandPatriciaIPv6Address()
 
 		b.Run("Consequitive addresses", func(b *testing.B) {
 			for size := 1; size <= 1000000; size *= 10 {
@@ -214,8 +216,8 @@ func BenchmarkTreeV4(b *testing.B) {
 				b.Run(fmt.Sprint(size), func(b *testing.B) {
 					b.ReportAllocs()
 					for n := 0; n < b.N; n++ {
-						RandTreeV4_ForBenchmark(b, size, func() patricia.IPv4Address {
-							cidr.Address += 1
+						RandTreeV6_ForBenchmark(b, size, func() patricia.IPv6Address {
+							cidr.Right += 1
 							return cidr
 						})
 					}
@@ -229,8 +231,9 @@ func BenchmarkTreeV4(b *testing.B) {
 				b.Run(fmt.Sprint(size), func(b *testing.B) {
 					b.ReportAllocs()
 					for n := 0; n < b.N; n++ {
-						RandTreeV4_ForBenchmark(b, size, func() patricia.IPv4Address {
-							cidr.Address = rand.Uint32()
+						RandTreeV6_ForBenchmark(b, size, func() patricia.IPv6Address {
+							cidr.Left = rand.Uint64()
+							cidr.Right = rand.Uint64()
 							return cidr
 						})
 					}
@@ -244,8 +247,9 @@ func BenchmarkTreeV4(b *testing.B) {
 				b.Run(fmt.Sprint(size), func(b *testing.B) {
 					b.ReportAllocs()
 					for n := 0; n < b.N; n++ {
-						RandTreeV4_ForBenchmark(b, size, func() patricia.IPv4Address {
-							cidr.Address = rand.Uint32()
+						RandTreeV6_ForBenchmark(b, size, func() patricia.IPv6Address {
+							cidr.Left = rand.Uint64()
+							cidr.Right = rand.Uint64()
 							cidr.Length = 1 + (uint(rand.Uint32()) % uint(32))
 							return cidr
 						})
@@ -256,12 +260,12 @@ func BenchmarkTreeV4(b *testing.B) {
 	})
 }
 
-func RandTreeV4_ForBenchmark(t testing.TB, n int, randCIDRv4 func() patricia.IPv4Address) *uint8_tree.TreeV4 {
-	tree := uint8_tree.NewTreeV4()
+func RandTreeV6_ForBenchmark(t testing.TB, n int, randCIDRv6 func() patricia.IPv6Address) *uint8_tree.TreeV6 {
+	tree := uint8_tree.NewTreeV6()
 
 	for i := 0; i < n; i++ {
 		for {
-			cidr := randCIDRv4()
+			cidr := randCIDRv6()
 			added, _, _ := tree.Add(cidr, uint8(rand.Uint32()), func(payload, val uint8) bool {
 				return payload == val
 			})
@@ -274,13 +278,13 @@ func RandTreeV4_ForBenchmark(t testing.TB, n int, randCIDRv4 func() patricia.IPv
 	return tree
 }
 
-func RandTreeV4(t testing.TB, n int, randCIDRv4 func() patricia.IPv4Address) (*uint8_tree.TreeV4, []patricia.IPv4Address) {
-	tree := uint8_tree.NewTreeV4()
-	cidrs := make([]patricia.IPv4Address, 0, n)
+func RandTreeV6(t testing.TB, n int, randCIDRv6 func() patricia.IPv6Address) (*uint8_tree.TreeV6, []patricia.IPv6Address) {
+	tree := uint8_tree.NewTreeV6()
+	cidrs := make([]patricia.IPv6Address, 0, n)
 
 	for i := 0; i < n; i++ {
 		for {
-			cidr := randCIDRv4()
+			cidr := randCIDRv6()
 			added, _, _ := tree.Add(cidr, uint8(rand.Uint32()), func(payload, val uint8) bool {
 				return payload == val
 			})
@@ -294,14 +298,19 @@ func RandTreeV4(t testing.TB, n int, randCIDRv4 func() patricia.IPv4Address) (*u
 	return tree, cidrs
 }
 
-func RandPatriciaIPv4Address() patricia.IPv4Address {
-	return patricia.NewIPv4Address(rand.Uint32(), 32)
+func RandPatriciaIPv6Address() patricia.IPv6Address {
+	ip := RandIPv6()
+	return patricia.NewIPv6Address(ip, net.IPv6len*8)
 }
 
-func RandPatriciaCIDRv4() patricia.IPv4Address {
-	return patricia.NewIPv4Address(rand.Uint32(), uint(1+(rand.Uint32()%32)))
+func RandPatriciaCIDRv6() patricia.IPv6Address {
+	ip := RandIPv6()
+	bits := net.IPv6len * 8
+	return patricia.NewIPv6Address(ip, uint(1+rand.Uint32()%uint32(bits)))
 }
 
-func RandIPv4() net.IP {
-	return net.IPv4(byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()))
+func RandIPv6() net.IP {
+	ip := make([]byte, net.IPv6len)
+	rand.Read(ip)
+	return net.IP(ip)
 }
