@@ -1,7 +1,6 @@
 package actor_test
 
 import (
-	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -76,13 +75,20 @@ func TestStore(t *testing.T) {
 		}{
 			{
 				name:          "Empty store",
-				findIPFailure: []net.IP{net.IPv4(1, 2, 3, 5), net.IPv4(80, 64, 3, 221), RandIPv4(), RandIPv4(), RandIPv4()},
+				findIPFailure: []net.IP{net.IPv4(1, 2, 3, 5), net.IPv4(80, 64, 3, 221), RandIPv4(), RandIPv4(), RandIPv4(), RandIPv6(), RandIPv6(), RandIPv6()},
 			},
 
 			{
-				name: "Number of bits too high",
+				name: "Number of bits too high for IPv4",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.4/35"): nil,
+				},
+			},
+
+			{
+				name: "Number of bits too high for IPv6",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1:2:3:4::33/450"): nil,
 				},
 			},
 
@@ -96,7 +102,28 @@ func TestStore(t *testing.T) {
 			{
 				name: "Malformed",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("[1:2:3:4::]:80"): nil, // The store API does not expect `ip:port`
+				},
+			},
+
+			{
+				name: "Malformed",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2..3.4/0"): nil,
+				},
+			},
+
+			{
+				name: "Malformed",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1:2.2:3:4/42"): nil,
+				},
+			},
+
+			{
+				name: "Malformed",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1:2:3:4:0jul:0"): nil,
 				},
 			},
 
@@ -110,7 +137,7 @@ func TestStore(t *testing.T) {
 			{
 				name: "Malformed",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
-					NewBlockIPAction(testlib.RandString(2, 10)): nil,
+					NewBlockIPAction(testlib.RandString(2, 20)): nil,
 				},
 			},
 
@@ -131,6 +158,14 @@ func TestStore(t *testing.T) {
 			},
 
 			{
+				name: "1:2:3::4/128",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1:2:3::4/128"): []net.IP{net.ParseIP("1:2:3::4")},
+				},
+				findIPFailure: []net.IP{net.IPv4(1, 2, 3, 4), net.ParseIP("1:2:3::5"), net.ParseIP("1:2:3::3")},
+			},
+
+			{
 				name: "1.2.3.4/32",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.4/32", "1.2.3.4"): []net.IP{net.IPv4(1, 2, 3, 4)},
@@ -139,7 +174,7 @@ func TestStore(t *testing.T) {
 			},
 
 			{
-				name: "Overalpping Networks",
+				name: "Overalpping IPv4 Networks",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.4/16", "1.2.3.4/32", "1.2.3.4/24"): []net.IP{
 						net.IPv4(1, 2, 3, 4),
@@ -158,7 +193,38 @@ func TestStore(t *testing.T) {
 			},
 
 			{
-				name: "Overlapping Networks",
+				name: "Overalpping IPv6 Networks",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1::/16", "1:00ff::/32", "1:ff00::/24"): []net.IP{
+						net.ParseIP("1::"),
+						net.ParseIP("1::42"),
+						net.ParseIP("1::ffff:ffff"),
+						net.ParseIP("1:ff00::"),
+						net.ParseIP("1:ff00::42"),
+						net.ParseIP("1:ff00::ffff:ffff"),
+						net.ParseIP("1:00ff::"),
+						net.ParseIP("1:00ff::42"),
+						net.ParseIP("1:00ff::ffff:ffff"),
+					},
+				},
+				findIPFailure: []net.IP{
+					net.IPv4(1, 1, 255, 255),
+					net.IPv4(1, 3, 0, 0),
+					net.IPv4(1, 2, 3, 4),
+					net.IPv4(1, 2, 3, 5),
+					net.IPv4(1, 2, 3, 120),
+					net.IPv4(1, 2, 3, 255),
+					net.IPv4(1, 2, 4, 0),
+					net.IPv4(1, 2, 4, 33),
+					net.IPv4(1, 2, 4, 255),
+					net.IPv4(1, 2, 0, 0),
+					net.IPv4(1, 2, 0, 1),
+					net.IPv4(1, 2, 255, 255),
+				},
+			},
+
+			{
+				name: "Overlapping IPv4 Networks",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.4/32"): []net.IP{net.IPv4(1, 2, 3, 4)},
 					NewBlockIPAction("1.2.3.4/24"): []net.IP{net.IPv4(1, 2, 3, 5), net.IPv4(1, 2, 3, 120), net.IPv4(1, 2, 3, 255)},
@@ -175,7 +241,30 @@ func TestStore(t *testing.T) {
 			},
 
 			{
-				name: "Subsequent CIDRs in a single action",
+				name: "Overlapping IPv6 Networks",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1::/32"): []net.IP{net.ParseIP("1::")},
+					NewBlockIPAction("1:00ff::/24"): []net.IP{
+						net.ParseIP("1:00ff::"),
+						net.ParseIP("1:00ff::42"),
+						net.ParseIP("1:00ff::ffff"),
+					},
+					NewBlockIPAction("1:ff00::/16"): []net.IP{
+						net.ParseIP("1:ff00::"),
+						net.ParseIP("1:ff00::dead"),
+						net.ParseIP("1:ff00::ffff"),
+					},
+				},
+				findIPFailure: []net.IP{
+					net.IPv4(1, 1, 255, 255), net.IPv4(1, 3, 0, 0),
+					net.ParseIP("2::"),
+					net.ParseIP("ffff::"),
+					net.ParseIP("0::"),
+				},
+			},
+
+			{
+				name: "Subsequent IPv4 CIDRs in a single action",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.4", "1.2.3.5", "1.2.3.3"): []net.IP{net.IPv4(1, 2, 3, 5), net.IPv4(1, 2, 3, 3), net.IPv4(1, 2, 3, 4)},
 				},
@@ -183,13 +272,37 @@ func TestStore(t *testing.T) {
 			},
 
 			{
-				name: "Subsequest CIDRs per action",
+				name: "Subsequent IPv6 CIDRs in a single action",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1:2:3::4", "1:2:3::5", "1:2:3::3"): []net.IP{net.ParseIP("1:2:3::5"), net.ParseIP("1:2:3::3"), net.ParseIP("1:2:3::4")},
+				},
+				findIPFailure: []net.IP{
+					net.IPv4(1, 2, 3, 2), net.IPv4(1, 2, 3, 6),
+					net.ParseIP("1:2:3::2"), net.ParseIP("1:2:3::6"),
+				},
+			},
+
+			{
+				name: "Subsequest IPv4 CIDRs per action",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.5"): []net.IP{net.IPv4(1, 2, 3, 5)},
 					NewBlockIPAction("1.2.3.4"): []net.IP{net.IPv4(1, 2, 3, 4)},
 					NewBlockIPAction("1.2.3.3"): []net.IP{net.IPv4(1, 2, 3, 3)},
 				},
 				findIPFailure: []net.IP{net.IPv4(1, 2, 3, 2), net.IPv4(1, 2, 3, 6)},
+			},
+
+			{
+				name: "Subsequest IPv6 CIDRs per action",
+				actions: map[*api.ActionsPackResponse_Action][]net.IP{
+					NewBlockIPAction("1:2:3::5"): []net.IP{net.ParseIP("1:2:3::5")},
+					NewBlockIPAction("1:2:3::4"): []net.IP{net.ParseIP("1:2:3::4")},
+					NewBlockIPAction("1:2:3::3"): []net.IP{net.ParseIP("1:2:3::3")},
+				},
+				findIPFailure: []net.IP{
+					net.IPv4(1, 2, 3, 2), net.IPv4(1, 2, 3, 6),
+					net.ParseIP("1:2:3::2"), net.ParseIP("1:2:3::6"),
+				},
 			},
 		}
 
@@ -352,8 +465,4 @@ func NewTimedBlockIPAction(d time.Duration, CIDRs ...string) *api.ActionsPackRes
 	fuzzer.Fuzz(&action.ActionId)
 	fuzzer.Fuzz(&action.SendResponse)
 	return action
-}
-
-func RandIPv4() net.IP {
-	return net.IPv4(byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()))
 }
