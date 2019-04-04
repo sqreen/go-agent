@@ -76,19 +76,30 @@ func (s *Store) FindIP(ip net.IP) (action Action, exists bool, err error) {
 	}
 
 	if stdIPv4 := ip.To4(); stdIPv4 != nil {
-		if store.treeV4 == nil {
+		tree := store.treeV4
+		if tree == nil {
 			return nil, false, nil
 		}
-		IPv4 := patricia.NewIPv4AddressFromBytes(stdIPv4, 32)
-		action, err := store.treeV4.findAction(&IPv4)
-		if err != nil {
-			return nil, false, err
+		IPv4 := patricia.NewIPv4AddressFromBytes(stdIPv4, ipv4Bits)
+		action, err = tree.findAction(&IPv4)
+	} else if stdIPv6 := ip.To16(); stdIPv6 != nil {
+		// warning: the previous condition is also true with ipv4 address (as they
+		// can be represented using ipv6 ::ffff:ipv4), so testing the ipv4 first is
+		// important to avoid entering this case even with ipv6 addresses.
+		tree := store.treeV6
+		if tree == nil {
+			return nil, false, nil
 		}
-		// action may be nil if ip does not exist in the tree.
-		return action, action != nil, nil
+		IPv6 := patricia.NewIPv6Address(stdIPv6, ipv6Bits)
+		action, err = tree.findAction(&IPv6)
 	}
 
-	return nil, false, nil
+	if err != nil {
+		return nil, false, err
+	}
+
+	// action may be nil if ip does not exist in the tree.
+	return action, action != nil, nil
 }
 
 // SetActions creates a new action store and then replaces the current one. The
@@ -111,6 +122,7 @@ func (s *Store) SetActions(actions []api.ActionsPackResponse_Action) error {
 // thread-safe.
 type store struct {
 	treeV4 *treeV4
+	treeV6 *treeV6
 }
 
 func newStore(actions []api.ActionsPackResponse_Action) (*store, error) {
@@ -118,9 +130,7 @@ func newStore(actions []api.ActionsPackResponse_Action) (*store, error) {
 		return nil, nil
 	}
 
-	store := &store{
-		treeV4: newTreeV4(maxStoreActions),
-	}
+	store := new(store)
 
 	for _, action := range actions {
 		err := store.addAction(action)
@@ -154,13 +164,16 @@ func (s *store) addAction(action api.ActionsPackResponse_Action) error {
 
 func (s *store) addCIDRList(cidrs []string, action Action) error {
 	for _, cidr := range cidrs {
-		ip4, _, err := patricia.ParseIPFromString(cidr)
+		ip4, ip6, err := patricia.ParseIPFromString(cidr)
 		if err != nil {
 			return err
 		}
-
 		if ip4 != nil {
-			if err = s.addCIDRv4(ip4, action); err != nil {
+			if err := s.addCIDRv4(ip4, action); err != nil {
+				return err
+			}
+		} else if ip6 != nil {
+			if err := s.addCIDRv6(ip6, action); err != nil {
 				return err
 			}
 		}
@@ -169,5 +182,16 @@ func (s *store) addCIDRList(cidrs []string, action Action) error {
 }
 
 func (s *store) addCIDRv4(ip *patricia.IPv4Address, action Action) error {
+	if s.treeV4 == nil {
+		s.treeV4 = newTreeV4(maxStoreActions)
+	}
+
 	return s.treeV4.addAction(ip, action)
+}
+
+func (s *store) addCIDRv6(ip *patricia.IPv6Address, action Action) error {
+	if s.treeV6 == nil {
+		s.treeV6 = newTreeV6(maxStoreActions)
+	}
+	return s.treeV6.addAction(ip, action)
 }
