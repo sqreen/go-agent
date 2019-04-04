@@ -85,7 +85,7 @@ func (s *Store) FindIP(ip net.IP) (action Action, exists bool, err error) {
 	} else if stdIPv6 := ip.To16(); stdIPv6 != nil {
 		// warning: the previous condition is also true with ipv4 address (as they
 		// can be represented using ipv6 ::ffff:ipv4), so testing the ipv4 first is
-		// important to avoid entering this case even with ipv6 addresses.
+		// important to avoid entering this case with ipv4 addresses.
 		tree := store.treeV6
 		if tree == nil {
 			return nil, false, nil
