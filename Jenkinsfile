@@ -35,6 +35,9 @@ templates.dockerTemplate(label) {
                         },
                         'With race detection': {
                             sh 'make test-race'
+                        },
+                        'Benchmarks': {
+                            sh 'make benchmark'
                         }
                     ])
                 }
