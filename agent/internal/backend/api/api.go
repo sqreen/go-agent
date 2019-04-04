@@ -1112,3 +1112,56 @@ func NewRequestRecord_Observed_DataPointFromFace(that RequestRecord_Observed_Dat
 	this.Infos = that.GetInfos()
 	return this
 }
+
+type ActionsPackResponse struct {
+	Actions []ActionsPackResponse_Action `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions"`
+}
+
+type ActionsPackResponse_Action struct {
+	ActionId     string                            `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id"`
+	Action       string                            `protobuf:"bytes,2,opt,name=action,proto3" json:"action"`
+	Duration     time.Duration                     `protobuf:"bytes,3,opt,name=duration,proto3,stdduration" json:"duration"`
+	SendResponse bool                              `protobuf:"varint,4,opt,name=send_response,json=sendResponse,proto3" json:"send_response"`
+	Parameters   ActionsPackResponse_Action_Params `protobuf:"bytes,5,opt,name=parameters,proto3" json:"parameters"`
+}
+
+type ActionsPackResponse_Action_Params struct {
+	Url    string                                              `protobuf:"bytes,1,opt,name=url,proto3" json:"url"`
+	Users  []ActionsPackResponse_Action_Params_UserIdentifiers `protobuf:"bytes,2,rep,name=users,proto3" json:"users"`
+	IpCidr []string                                            `protobuf:"bytes,3,rep,name=ip_cidr,json=ipCidr,proto3" json:"ip_cidr"`
+}
+
+type ActionsPackResponse_Action_Params_UserIdentifiers struct {
+	User map[string]string `protobuf:"bytes,1,rep,name=user,proto3" json:"user" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+type BlockedIPEventProperties struct {
+	ActionId string                          `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	Output   BlockedIPEventProperties_Output `protobuf:"bytes,2,opt,name=output,proto3" json:"output"`
+}
+
+type BlockedIPEventProperties_Output struct {
+	IpAddress string `protobuf:"bytes,1,opt,name=ip_address,json=ipAddress,proto3" json:"ip_address,omitempty"`
+}
+
+func NewBlockedIPEventPropertiesFromFace(that BlockedIPEventPropertiesFace) *BlockedIPEventProperties {
+	this := &BlockedIPEventProperties{}
+	this.ActionId = that.GetActionId()
+	this.Output = that.GetOutput()
+	return this
+}
+
+type BlockedIPEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() BlockedIPEventProperties_Output
+}
+
+type BlockedIPEventProperties_OutputFace interface {
+	GetIpAddress() string
+}
+
+func NewBlockedIPEventProperties_OutputFromFace(that BlockedIPEventProperties_OutputFace) *BlockedIPEventProperties_Output {
+	this := &BlockedIPEventProperties_Output{}
+	this.IpAddress = that.GetIpAddress()
+	return this
+}

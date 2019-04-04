@@ -5,13 +5,40 @@
 package types
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 )
 
 type Agent interface {
+	// NewRequestRecord returns a new request record for the given request. It
+	// should be stored into the request context to be retrieved using
+	// `sdk.FromContext()`.
 	NewRequestRecord(req *http.Request) RequestRecord
+
+	// SecurityAction returns a non-nil HTTP handler when a security action is
+	// required for the given request. The returned handler should be used to
+	// handle the request before aborting it. Because of a security rule (eg.
+	// blocking an IP address). The request handler should therefore abort the
+	// request.
+	SecurityAction(r *http.Request) http.Handler
+
 	GracefulStop()
+}
+
+type Request interface {
+	// Record returns the request record of the request.
+	Record() RequestRecord
+
+	// SecurityAction returns a non-nil HTTP handler when a security action is
+	// required for the given request. The returned handler should be used to
+	// handle the request before aborting it. Because of a security rule (eg.
+	// blocking an IP address). The request handler should therefore abort the
+	// request.
+	SecurityAction() http.Handler
+
+	// Close needs to be called when the request is done.
+	Close()
 }
 
 type RequestRecord interface {
@@ -23,12 +50,17 @@ type RequestRecord interface {
 	NewUserAuth(id map[string]string, success bool)
 	// Identify associates the given user identifiers to the request.
 	Identify(id map[string]string)
+
 	// Close needs to be called when the request is done.
 	Close()
 }
 
 type CustomEvent interface {
 	WithTimestamp(t time.Time)
-	WithProperties(props map[string]string)
+	WithProperties(props EventProperties)
 	WithUserIdentifiers(id map[string]string)
 }
+
+// EventProperties is an interface type enforcing a marshable type to the target
+// JSON wire-format.
+type EventProperties json.Marshaler

@@ -1,10 +1,15 @@
 package sdk
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/sqreen/go-agent/agent/types"
 )
+
+// EventProperties is an interface type representing extra custom event
+// properties, suitable for wire-format.
+type EventProperties types.EventProperties
 
 // EventPropertyMap is the type used to represent extra custom event properties.
 //
@@ -15,6 +20,10 @@ import (
 //	sdk.FromContext(ctx).TrackEvent("my.event").WithProperties(props)
 //
 type EventPropertyMap map[string]string
+
+func (p EventPropertyMap) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]string(p))
+}
 
 // HTTPRequestEvent is a SDK event. Its methods allow request handlers to add
 // options further specifying the event, such as a unique user identifier, extra
@@ -44,7 +53,7 @@ func (e *HTTPRequestEvent) WithTimestamp(t time.Time) *HTTPRequestEvent {
 //	}
 //	sdk.FromContext(ctx).TrackEvent("my.event").WithProperties(prop)
 //
-func (e *HTTPRequestEvent) WithProperties(p EventPropertyMap) *HTTPRequestEvent {
+func (e *HTTPRequestEvent) WithProperties(p EventProperties) *HTTPRequestEvent {
 	if e == nil {
 		return nil
 	}

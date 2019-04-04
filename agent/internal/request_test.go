@@ -1,3 +1,7 @@
+// Copyright 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package internal
 
 import (
@@ -107,7 +111,7 @@ func TestGetClientIP(t *testing.T) {
 				}
 
 				ip := getClientIP(req, cfg)
-				require.Equal(t, tc.expected, ip)
+				require.Equal(t, tc.expected, ip.String())
 			})
 		}
 	})
@@ -186,7 +190,7 @@ func TestGetClientIP(t *testing.T) {
 					}
 
 					ip := getClientIP(req, cfg)
-					require.Equal(t, tc.expected, ip)
+					require.Equal(t, tc.expected, ip.String())
 				})
 			}
 		})

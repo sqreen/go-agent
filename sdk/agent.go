@@ -2,7 +2,6 @@ package sdk
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/sqreen/go-agent/agent/types"
 )
@@ -31,35 +30,10 @@ type disabledAgent struct {
 func (_ disabledAgent) GracefulStop() {
 }
 
-func (a disabledAgent) NewRequestRecord(_ *http.Request) types.RequestRecord {
-	// Return itself as long as it can both implement RequestRecord and Agent
-	// interfaces without conflicting thanks to distinct method signatures.
-	return a
+func (disabledAgent) SecurityAction(*http.Request) http.Handler {
+	return nil
 }
 
-func (_ disabledAgent) Close() {
-}
-
-func (a disabledAgent) NewCustomEvent(_ string) types.CustomEvent {
-	// Return itself as long as it can both implement RequestRecord and Event
-	// interfaces without conflicting thanks to distinct method signatures.
-	return a
-}
-
-func (_ disabledAgent) NewUserAuth(_ map[string]string, _ bool) {
-}
-
-func (_ disabledAgent) NewUserSignup(_ map[string]string) {
-}
-
-func (_ disabledAgent) Identify(_ map[string]string) {
-}
-
-func (_ disabledAgent) WithTimestamp(_ time.Time) {
-}
-
-func (_ disabledAgent) WithProperties(_ map[string]string) {
-}
-
-func (_ disabledAgent) WithUserIdentifiers(_ map[string]string) {
+func (a disabledAgent) NewRequestRecord(*http.Request) types.RequestRecord {
+	return nil
 }

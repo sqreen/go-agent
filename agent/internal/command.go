@@ -19,6 +19,7 @@ type CommandHandler func() api.CommandResult
 type CommandManagerAgent interface {
 	InstrumentationEnable() error
 	InstrumentationDisable() error
+	ActionsReload() error
 }
 
 func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
@@ -31,6 +32,7 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 	mng.handlers = map[string]CommandHandler{
 		"instrumentation_enable": mng.InstrumentationEnable,
 		"instrumentation_remove": mng.InstrumentationRemove,
+		"actions_reload":         mng.ActionsReload,
 	}
 
 	return mng
@@ -69,6 +71,11 @@ func (m *CommandManager) InstrumentationEnable() api.CommandResult {
 
 func (m *CommandManager) InstrumentationRemove() api.CommandResult {
 	err := m.agent.InstrumentationDisable()
+	return commandResult(err)
+}
+
+func (m *CommandManager) ActionsReload() api.CommandResult {
+	err := m.agent.ActionsReload()
 	return commandResult(err)
 }
 

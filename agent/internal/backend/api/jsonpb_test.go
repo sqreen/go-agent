@@ -2,12 +2,20 @@ package api_test
 
 import (
 	"encoding/json"
+	"testing"
 
+	"github.com/gogo/protobuf/types"
+	"github.com/stretchr/testify/require"
+
+	"github.com/gogo/protobuf/jsonpb"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	fuzz "github.com/google/gofuzz"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 )
+
+var fuzzer = fuzz.New().Funcs(FuzzStruct)
 
 var _ = Describe("API", func() {
 
@@ -64,6 +72,7 @@ var _ = Describe("API", func() {
 					Context("with properties", func() {
 						BeforeEach(func() {
 							expected = `["my event",{"properties":{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}}]`
+
 							pb = &api.RequestRecord_Observed_SDKEvent_Args{
 								Args: &api.RequestRecord_Observed_SDKEvent_Args_Track_{
 									Track: &api.RequestRecord_Observed_SDKEvent_Args_Track{
@@ -162,3 +171,75 @@ var _ = Describe("API", func() {
 		})
 	})
 })
+
+func TestMyStruct(t *testing.T) {
+	var original api.Struct
+	fuzzer.Fuzz(&original)
+
+	buf, err := json.Marshal(original)
+	require.NoError(t, err)
+	t.Logf("original=%#v pb=%s", original, (string)(buf))
+
+	var pb api.Struct
+	err = json.Unmarshal(buf, &pb)
+	require.NoError(t, err)
+
+	require.Equal(t, pb, original)
+}
+
+func TestStruct(t *testing.T) {
+	pb := &types.Struct{
+		Fields: map[string]*types.Value{
+			"field": &types.Value{
+				Kind: &types.Value_StringValue{"a string"},
+			},
+		},
+	}
+
+	// Check it can be marshaled to the expected JSON struct.
+	marshaler := &jsonpb.Marshaler{}
+	str, err := marshaler.MarshalToString(pb)
+	require.NoError(t, err)
+	require.Equal(t, str, `{"field":"a string"}`)
+
+	// Check it can be unmarshaled back to Protobuf.
+	parsedPB := new(types.Struct)
+	err = jsonpb.UnmarshalString(str, parsedPB)
+	require.NoError(t, err)
+	require.Equal(t, parsedPB, pb)
+}
+
+func FuzzStruct(e *api.Struct, c fuzz.Continue) {
+	nbFields := c.Uint32() % 10
+	if nbFields == 0 {
+		e.Value = nil
+		return
+	}
+
+	kv := make(map[string]interface{}, nbFields)
+	e.Value = kv
+	for n := 0; n < len(kv); n++ {
+		var k string
+		c.Fuzz(&k)
+
+		var v interface{}
+		switch c.Uint32() % 4 {
+		case 0:
+			v = nil
+		case 1:
+			var actual string
+			c.Fuzz(&actual)
+			v = actual
+		case 2:
+			var actual float64
+			c.Fuzz(&actual)
+			v = actual
+		case 3:
+			var actual bool
+			c.Fuzz(&actual)
+			v = actual
+		}
+
+		kv[k] = v
+	}
+}
