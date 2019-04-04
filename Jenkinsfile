@@ -37,7 +37,7 @@ templates.dockerTemplate(label) {
                             sh 'make test-race'
                         },
                         'Benchmarks': {
-                            sh 'make test-benchmark'
+                            sh 'make benchmark'
                         }
                     ])
                 }
