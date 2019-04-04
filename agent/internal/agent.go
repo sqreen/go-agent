@@ -165,7 +165,8 @@ func (a *Agent) InstrumentationEnable() error {
 func (a *Agent) InstrumentationDisable() error {
 	sdk.SetAgent(nil)
 	a.logger.Info("instrumentation disabled")
-	return nil
+	err := a.actors.SetActions(nil)
+	return err
 }
 
 func (a *Agent) ActionsReload() error {
