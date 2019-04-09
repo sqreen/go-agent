@@ -6,12 +6,12 @@ import (
 	"github.com/sqreen/go-agent/agent/types"
 )
 
-// The agent entrypoints are disabled by default. It must set its entrypoints on
-// initialization using SetAgent().
+// The agent entry points are disabled by default. It must set its entry points
+// on initialization using `SetAgent()`.
 var agent types.Agent = disabledAgent{}
 
-// SetAgent allows the agent to set its SDK entrypoints. It is automatically set
-// by the agent when it intializes itself.
+// SetAgent allows the agent to set its SDK entry points. It is automatically
+// set by the agent when it initializes itself.
 func SetAgent(a types.Agent) {
 	if a == nil {
 		agent = disabledAgent{}

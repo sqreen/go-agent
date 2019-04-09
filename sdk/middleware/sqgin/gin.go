@@ -7,8 +7,8 @@ import (
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
 // requests Gin receives. In protection mode, it can block and redirect requests
-// according to its IP address or identified user (using `Identify()` and
-// `SecurityResponse()` methods).
+// according to its IP address or identified user using `Identify()` and
+// `SecurityResponse()` methods from the request handler.
 //
 // SDK methods can be called from request handlers by using the request event
 // record. It can be accessed using `sdk.FromContext()` on a request context or
@@ -31,6 +31,20 @@ import (
 //		// Accessing the SDK through the request context
 //		sdk.FromContext(req.Context()).TrackEvent("my.event.two")
 //		// ...
+//	}
+//
+//	router.GET("/", func(c *gin.Context) {
+//		// Globally identifying a user and checking if the request should be
+//		// aborted.
+//		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+//		sqUser := sdk.FromContext(c).ForUser(uid)
+//		sqUser.Identify() // Globally associate this user to the current request
+//		if sqUser.MatchSecurityResponse() {
+//			// Return to stop further handling the request and let Sqreen's
+//			// middleware apply and abort the request.
+//			return
+//		}
+//		// ... not blocked ...
 //	}
 //
 func Middleware() gingonic.HandlerFunc {

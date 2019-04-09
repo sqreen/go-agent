@@ -92,13 +92,19 @@ func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent
 // They are also required to find security responses for users, for example to
 // block a specific user.
 //
+// This method and `MatchSecurityResponse()` are not concurrency-safe.
+//
+// Usage example:
+//
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.Identify()
-//	if sqUser.SecurityResponse() {
-//		// Return to stop further handling the request and let Sqreen's
-//		// middleware apply and abort the request.
-//		return
+//	if match, err := sqUser.MatchSecurityResponse(); match {
+//		// Return now to stop further handling the request and let Sqreen's
+//		// middleware apply and abort the request. The returned error may help
+//		// aborting from sub-functions by returning it to the callers when the
+//		// Go error handling pattern is used.
+//		return err
 //	}
 //
 func (ctx *UserHTTPRequestRecord) Identify() *UserHTTPRequestRecord {
@@ -115,8 +121,10 @@ func (ctx *UserHTTPRequestRecord) Identify() *UserHTTPRequestRecord {
 // which will apply the security response and abort the request.
 // Note that `panic()` shouldn't be used.
 //
-// The returned error value can be used to help returning from the handler from
-// sub-functions using the classic Go error handling pattern.
+// The returned error may help aborting from sub-functions by returning it to
+// the callers when the Go error handling pattern is used.
+//
+// This method and `Identify()` are not concurrency-safe.
 func (ctx *UserHTTPRequestRecord) MatchSecurityResponse() (match bool, err error) {
 	if ctx == nil {
 		return false, nil
