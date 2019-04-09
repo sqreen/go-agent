@@ -7,9 +7,15 @@ import (
 )
 
 // Middleware is Sqreen's middleware function for `net/http` to monitor and
-// protect received requests. It creates and stores the HTTP request record into
-// the request context so that it can be later accessed to perform SDK calls in
-// the decorated handler using `sdk.FromContext()`.
+// protect received requests. In protection mode, it can block and redirect
+// requests according to its IP address or identified user (using `Identify()`
+// and `SecurityResponse()` methods).
+//
+// SDK methods can be called from request handlers by using the request event
+// record. It can be accessed using `sdk.FromContext()` on a request context.
+// The middleware function stores it into the request context.
+//
+// Usage example:
 //
 //	fn := func(w http.ResponseWriter, r *http.Request) {
 //		sdk.FromContext(r.Context()).TrackEvent("my.event")
@@ -25,13 +31,21 @@ func Middleware(next http.Handler) http.Handler {
 		// Use the newly created request compliant with `sdk.FromContext()`.
 		r = req.Request()
 
-		// Check if a security action is required.
-		if handler := req.SecurityAction(); handler != nil {
+		// Check if an early security action is already required such as based on
+		// the request IP address.
+		if handler := req.SecurityResponse(); handler != nil {
 			handler.ServeHTTP(w, r)
 			return
 		}
 
 		// Call next handler.
 		next.ServeHTTP(w, r)
+
+		// Check if a security response should be applied now after having used
+		// `Identify()` and `MatchSecurityResponse()`.
+		if handler := req.SecurityResponse(); handler != nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
 	})
 }
