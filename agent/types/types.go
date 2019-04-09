@@ -16,29 +16,7 @@ type Agent interface {
 	// `sdk.FromContext()`.
 	NewRequestRecord(req *http.Request) RequestRecord
 
-	// SecurityAction returns a non-nil HTTP handler when a security action is
-	// required for the given request. The returned handler should be used to
-	// handle the request before aborting it. Because of a security rule (eg.
-	// blocking an IP address). The request handler should therefore abort the
-	// request.
-	SecurityAction(r *http.Request) http.Handler
-
 	GracefulStop()
-}
-
-type Request interface {
-	// Record returns the request record of the request.
-	Record() RequestRecord
-
-	// SecurityAction returns a non-nil HTTP handler when a security action is
-	// required for the given request. The returned handler should be used to
-	// handle the request before aborting it. Because of a security rule (eg.
-	// blocking an IP address). The request handler should therefore abort the
-	// request.
-	SecurityAction() http.Handler
-
-	// Close needs to be called when the request is done.
-	Close()
 }
 
 type RequestRecord interface {
@@ -50,7 +28,13 @@ type RequestRecord interface {
 	NewUserAuth(id map[string]string, success bool)
 	// Identify associates the given user identifiers to the request.
 	Identify(id map[string]string)
-
+	// SecurityResponse returns a non-nil HTTP handler when a security response is
+	// required for the current request, according to its IP address (taken from
+	// the request IP address) or user-identifiers (taken from method
+	// `Identify()`). The returned handler should be used to respond to the
+	// request before canceling it. When a security response matches the request,
+	// its value is cached and returned to subsequent calls.
+	SecurityResponse() http.Handler
 	// Close needs to be called when the request is done.
 	Close()
 }

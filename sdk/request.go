@@ -56,6 +56,10 @@ func (r *HTTPRequest) Record() *HTTPRequestRecord {
 	return r.record
 }
 
-func (r *HTTPRequest) SecurityAction() http.Handler {
-	return agent.SecurityAction(r.request)
+func (r *HTTPRequest) SecurityResponse() http.Handler {
+	record := r.Record()
+	if record == nil {
+		return nil
+	}
+	return record.record.SecurityResponse()
 }

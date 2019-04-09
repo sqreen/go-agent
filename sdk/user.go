@@ -1,6 +1,10 @@
 package sdk
 
-import "github.com/sqreen/go-agent/agent/types"
+import (
+	"net/http"
+
+	"github.com/sqreen/go-agent/agent/types"
+)
 
 // UserHTTPRequestRecord is the SDK record associated to a HTTP request for a
 // given user. Its methods allow request handlers to signal security events
@@ -77,13 +81,25 @@ func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent
 	return &UserHTTPRequestEvent{HTTPRequestEvent{ctx.record.NewCustomEvent(event)}}
 }
 
-// Identify associates the user to current request so that Sqreen can apply
-// security countermeasures targeting specific users when necessary. A call to
-// this method does not create an event.
+// Identify globally associates the given user-identifiers to the current
+// request. A call to this method should be followed by a call to method
+// `SecurityResponse()` to check if the request should be aborted.
+//
+// Every event happening in the same request will be therefore automatically
+// associated to these user-identifiers, unless overwritten and forced using
+// `WithUserIdentifiers()`.
+//
+// They are also required to find security responses for users, for example to
+// block a specific user.
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //	sqUser := sdk.FromContext(ctx).ForUser(uid)
 //	sqUser.Identify()
+//	if sqUser.SecurityResponse() {
+//		// Return to stop further handling the request and let Sqreen's
+//		// middleware apply and abort the request.
+//		return
+//	}
 //
 func (ctx *UserHTTPRequestRecord) Identify() *UserHTTPRequestRecord {
 	if ctx == nil {
@@ -91,4 +107,35 @@ func (ctx *UserHTTPRequestRecord) Identify() *UserHTTPRequestRecord {
 	}
 	ctx.record.Identify(ctx.id)
 	return ctx
+}
+
+// MatchSecurityResponse returns `true` and a non-nil error if a security
+// response matches the current request. The handler should stop serving the
+// request by returning from the function up to Sqreen's middleware function
+// which will apply the security response and abort the request.
+// Note that `panic()` shouldn't be used.
+//
+// The returned error value can be used to help returning from the handler from
+// sub-functions using the classic Go error handling pattern.
+func (ctx *UserHTTPRequestRecord) MatchSecurityResponse() (match bool, err error) {
+	if ctx == nil {
+		return false, nil
+	}
+
+	response := ctx.record.SecurityResponse()
+	if response != nil {
+		err = SecurityResponseMatch{response}
+	}
+	return response != nil, err
+}
+
+// SecurityResponseMatch is an error type wrapping the security response that
+// matched the request and helping in bubbling up to Sqreen's middleware
+// function to abort the request.
+type SecurityResponseMatch struct {
+	Handler http.Handler
+}
+
+func (SecurityResponseMatch) Error() string {
+	return "a security response matched the request"
 }

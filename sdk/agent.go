@@ -30,10 +30,6 @@ type disabledAgent struct {
 func (_ disabledAgent) GracefulStop() {
 }
 
-func (disabledAgent) SecurityAction(*http.Request) http.Handler {
-	return nil
-}
-
 func (a disabledAgent) NewRequestRecord(*http.Request) types.RequestRecord {
 	return nil
 }
