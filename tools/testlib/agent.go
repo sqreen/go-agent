@@ -38,38 +38,41 @@ func (a *AgentMockup) ExpectGracefulStop() *mock.Call {
 	return a.On("GracefulStop")
 }
 
-func (a *AgentMockup) SecurityAction(r *http.Request) http.Handler {
-	ret := a.Called(r).Get(0)
-	if ret == nil {
-		return nil
-	}
-	return ret.(http.Handler)
-}
-
-func (a *AgentMockup) ExpectSecurityAction(r interface{}) *mock.Call {
-	return a.On("SecurityAction", r)
-}
-
-func NewAgentForMiddlewareTestsWithoutSecurityAction() (*AgentMockup, *HTTPRequestRecordMockup) {
+func NewAgentForMiddlewareTestsWithoutSecurityResponse() (*AgentMockup, *HTTPRequestRecordMockup) {
 	agent := &AgentMockup{}
 	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
-	agent.ExpectSecurityAction(mock.Anything).Return(nil).Once()
+	record.ExpectSecurityResponse().Return(nil)
 	record.ExpectClose().Once()
 	return agent, record
 }
 
-func NewAgentForMiddlewareTestsWithSecurityAction(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
+func NewAgentForMiddlewareTestsWithEarlySecurityResponse(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
 	agent := &AgentMockup{}
-	record := &HTTPRequestRecordMockup{}
+	record := &HTTPRequestRecordMockup{
+		lateSecurityResponse: false,
+	}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
-	agent.ExpectSecurityAction(mock.Anything).Return(actionHandler).Once()
+	record.ExpectSecurityResponse().Return(actionHandler)
+	record.ExpectClose().Once()
+	return agent, record
+}
+
+func NewAgentForMiddlewareTestsWithLateSecurityResponse(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
+	agent := &AgentMockup{}
+	record := &HTTPRequestRecordMockup{
+		lateSecurityResponse: true,
+	}
+	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
+	record.ExpectSecurityResponse().Return(actionHandler)
 	record.ExpectClose().Once()
 	return agent, record
 }
 
 type HTTPRequestRecordMockup struct {
 	mock.Mock
+	securityResponseCall int
+	lateSecurityResponse bool
 }
 
 // Static assertion of correct interface implementation.
@@ -110,6 +113,23 @@ func (r *HTTPRequestRecordMockup) ExpectTrackSignup(id map[string]string) *mock.
 
 func (r *HTTPRequestRecordMockup) Identify(id map[string]string) {
 	r.Called(id)
+}
+
+func (r *HTTPRequestRecordMockup) SecurityResponse() http.Handler {
+	r.securityResponseCall++
+	if r.lateSecurityResponse && r.securityResponseCall == 1 {
+		return nil
+	}
+
+	ret := r.Called().Get(0)
+	if ret == nil {
+		return nil
+	}
+	return ret.(http.Handler)
+}
+
+func (r *HTTPRequestRecordMockup) ExpectSecurityResponse() *mock.Call {
+	return r.On("SecurityResponse")
 }
 
 func (r *HTTPRequestRecordMockup) ExpectIdentify(id map[string]string) *mock.Call {

@@ -1,6 +1,7 @@
 package sqecho_test
 
 import (
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -74,64 +75,131 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("without security action", func(t *testing.T) {
-		body := testlib.RandString(1, 100)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	t.Run("without security response", func(t *testing.T) {
+		t.Run("without handler error", func(t *testing.T) {
+			body := testlib.RandString(1, 100)
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
-		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityAction()
-		sdk.SetAgent(agent)
-		defer agent.AssertExpectations(t)
-		defer record.AssertExpectations(t)
+			agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
 
-		// Create an Echo context
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		// Define a Echo handler
-		h := func(c echo.Context) error {
-			require.NotNil(t, sqecho.FromContext(c), "The middleware should attach its handle object to Gin's context")
-			require.NotNil(t, sdk.FromContext(c.Request().Context()), "The middleware should attach its handle object to the request's context")
-			body, err := ioutil.ReadAll(c.Request().Body)
-			if err != nil {
-				return err
+			// Create an Echo context
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			// Define a Echo handler
+			h := func(c echo.Context) error {
+				require.NotNil(t, sqecho.FromContext(c), "The middleware should attach its handle object to Gin's context")
+				require.NotNil(t, sdk.FromContext(c.Request().Context()), "The middleware should attach its handle object to the request's context")
+				body, err := ioutil.ReadAll(c.Request().Body)
+				if err != nil {
+					return err
+				}
+				return c.String(http.StatusOK, string(body))
 			}
-			return c.String(http.StatusOK, string(body))
-		}
-		// Perform the request and record the output
-		mw := sqecho.Middleware()
-		err := mw(h)(c)
-		// Check the request was performed as expected
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, body, rec.Body.String())
+			// Perform the request and record the output
+			mw := sqecho.Middleware()
+			err := mw(h)(c)
+			// Check the request was performed as expected
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, body, rec.Body.String())
+		})
+
+		t.Run("with a handler error", func(t *testing.T) {
+			body := testlib.RandString(1, 100)
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+
+			agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
+
+			// Create an Echo context
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			// Define a Echo handler
+			theError := errors.New("oh my error")
+			h := func(c echo.Context) error {
+				return theError
+			}
+			// Perform the request and record the output
+			mw := sqecho.Middleware()
+			err := mw(h)(c)
+			// Check the request was performed as expected
+			require.Error(t, err)
+			require.Equal(t, theError, err)
+		})
 	})
 
-	t.Run("with a security action", func(t *testing.T) {
-		body := testlib.RandString(1, 100)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	t.Run("with a security response", func(t *testing.T) {
+		t.Run("with early response", func(t *testing.T) {
+			body := testlib.RandString(1, 100)
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
-		status := http.StatusBadRequest
-		agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityAction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(status)
-		}))
-		sdk.SetAgent(agent)
-		defer agent.AssertExpectations(t)
-		defer record.AssertExpectations(t)
+			status := http.StatusBadRequest
+			agent, record := testlib.NewAgentForMiddlewareTestsWithEarlySecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
 
-		// Create an Echo context
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		// Define a Echo handler
-		h := func(c echo.Context) error {
-			panic("must not be called")
-		}
-		// Perform the request and record the output
-		mw := sqecho.Middleware()
-		err := mw(h)(c)
-		// Check the request was performed as expected
-		require.NoError(t, err)
-		require.Equal(t, rec.Code, status)
-		require.Equal(t, rec.Body.String(), "")
+			// Create an Echo context
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			// Define a Echo handler
+			h := func(c echo.Context) error {
+				panic("must not be called")
+			}
+			// Perform the request and record the output
+			mw := sqecho.Middleware()
+			err := mw(h)(c)
+			// Check the request was performed as expected
+			require.NoError(t, err)
+			require.Equal(t, rec.Code, status)
+			require.Equal(t, rec.Body.String(), "")
+		})
+
+		t.Run("with late response", func(t *testing.T) {
+			body := testlib.RandString(1, 100)
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+
+			status := http.StatusBadRequest
+			agent, record := testlib.NewAgentForMiddlewareTestsWithLateSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			uid := sdk.EventUserIdentifiersMap{}
+			record.ExpectIdentify(uid)
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
+
+			// Create an Echo context
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			// Define a Echo handler
+			h := func(c echo.Context) error {
+				sqreen := sdk.FromContext(c.Request().Context())
+				sqUser := sqreen.ForUser(uid)
+				sqUser.Identify()
+				match, err := sqUser.MatchSecurityResponse()
+				require.True(t, match)
+				require.Error(t, err)
+				return err
+			}
+			// Perform the request and record the output
+			mw := sqecho.Middleware()
+			err := mw(h)(c)
+			// Check the request was performed as expected
+			require.NoError(t, err)
+			require.Equal(t, rec.Code, status)
+			require.Equal(t, rec.Body.String(), "")
+		})
 	})
 }

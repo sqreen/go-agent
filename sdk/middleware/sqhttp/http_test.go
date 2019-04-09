@@ -61,7 +61,7 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("without security action", func(t *testing.T) {
-		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityAction()
+		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
 		sdk.SetAgent(agent)
 		defer agent.AssertExpectations(t)
 		defer record.AssertExpectations(t)
@@ -86,29 +86,64 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("with security action", func(t *testing.T) {
-		status := http.StatusBadRequest
-		agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityAction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(status)
-		}))
-		sdk.SetAgent(agent)
-		defer agent.AssertExpectations(t)
-		defer record.AssertExpectations(t)
+	t.Run("with security response", func(t *testing.T) {
+		t.Run("early security response", func(t *testing.T) {
+			status := http.StatusBadRequest
+			agent, record := testlib.NewAgentForMiddlewareTestsWithEarlySecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
 
-		// Create a router
-		router := http.NewServeMux()
-		// Add an endpoint accessing the SDK handle
-		subrouter := http.NewServeMux()
-		subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
-			panic("must not be called")
+			// Create a router
+			router := http.NewServeMux()
+			// Add an endpoint accessing the SDK handle
+			subrouter := http.NewServeMux()
+			subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+				panic("must not be called")
+			})
+			router.Handle("/", sqhttp.Middleware(subrouter))
+			// Perform the request and record the output
+			req, _ := http.NewRequest("GET", "/hello", nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			// Check the request was performed as expected
+			require.Equal(t, rec.Body.String(), "")
+			require.Equal(t, rec.Code, status)
 		})
-		router.Handle("/", sqhttp.Middleware(subrouter))
-		// Perform the request and record the output
-		req, _ := http.NewRequest("GET", "/hello", nil)
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		// Check the request was performed as expected
-		require.Equal(t, rec.Body.String(), "")
-		require.Equal(t, rec.Code, status)
+
+		t.Run("late response", func(t *testing.T) {
+			status := http.StatusBadRequest
+			agent, record := testlib.NewAgentForMiddlewareTestsWithLateSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			uid := sdk.EventUserIdentifiersMap{}
+			record.ExpectIdentify(uid)
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
+
+			// Create a router
+			router := http.NewServeMux()
+			// Add an endpoint accessing the SDK handle
+			subrouter := http.NewServeMux()
+			subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+				sqreen := sdk.FromContext(req.Context())
+				sqUser := sqreen.ForUser(uid)
+				sqUser.Identify()
+				match, err := sqUser.MatchSecurityResponse()
+				require.True(t, match)
+				require.Error(t, err)
+			})
+			router.Handle("/", sqhttp.Middleware(subrouter))
+			// Perform the request and record the output
+			req, _ := http.NewRequest("GET", "/hello", nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			// Check the request was performed as expected
+			require.Equal(t, rec.Body.String(), "")
+			require.Equal(t, rec.Code, status)
+		})
 	})
 }

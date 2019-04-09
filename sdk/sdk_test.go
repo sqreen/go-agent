@@ -185,10 +185,28 @@ func TestForUser(t *testing.T) {
 		require.NotNil(t, sqUser)
 	})
 
-	t.Run("Identfy", func(t *testing.T) {
+	t.Run("Identify", func(t *testing.T) {
 		record.ExpectIdentify(userID).Once()
 		sqUser = sqUser.Identify()
 		require.NotNil(t, sqUser)
+	})
+
+	t.Run("MatchSecurityResponse", func(t *testing.T) {
+		t.Run("without security response", func(t *testing.T) {
+			record.ExpectSecurityResponse().Return(http.Handler(nil)).Once()
+			match, err := sqUser.MatchSecurityResponse()
+			require.NoError(t, err)
+			require.False(t, match)
+		})
+
+		t.Run("with security response", func(t *testing.T) {
+			handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+			record.ExpectSecurityResponse().Return(handler).Once()
+			match, err := sqUser.MatchSecurityResponse()
+			require.Error(t, err)
+			require.NotEmpty(t, err.Error())
+			require.True(t, match)
+		})
 	})
 
 	t.Run("TrackEvent", func(t *testing.T) {
@@ -247,6 +265,9 @@ func TestDisabled(t *testing.T) {
 			sqUser = sqUser.TrackAuthSuccess()
 			sqUser = sqUser.TrackAuthFailure()
 			sqUser = sqUser.Identify()
+			match, err := sqUser.MatchSecurityResponse()
+			require.False(match)
+			require.NoError(err)
 			sqUserEvent := sqUser.TrackEvent(testlib.RandString(0, 50))
 			sqUserEvent = sqUserEvent.WithProperties(props)
 			sqUserEvent = sqUserEvent.WithTimestamp(time.Now())
@@ -270,7 +291,7 @@ func TestDisabled(t *testing.T) {
 	require.NotPanics(useTheSDK(record))
 
 	// Other methods
-	req.SecurityAction()
+	req.SecurityResponse()
 	req.Close()
 	sdk.GracefulStop()
 }

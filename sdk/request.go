@@ -6,7 +6,7 @@ import (
 )
 
 // HTTPRequest is a convenience type to hold together the request and its
-// request record. Most impotantly, it is created by `sdk.NewHTTPRequest()` by
+// request record. Most importantly, it is created by `sdk.NewHTTPRequest()` by
 // middleware functions to ensure that the request pointer it contains is the
 // one having the context value expected by `sdk.FromContext()`.
 type HTTPRequest struct {
