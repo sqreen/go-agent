@@ -1,6 +1,7 @@
 package actor_test
 
 import (
+	"fmt"
 	"math/rand"
 	"net"
 	"reflect"
@@ -671,4 +672,71 @@ func NewBlockUserAction(users ...map[string]string) *api.ActionsPackResponse_Act
 	fuzzer.Fuzz(&action.ActionId)
 	fuzzer.Fuzz(&action.SendResponse)
 	return action
+}
+
+func BenchmarkUserStore(b *testing.B) {
+	b.Run("Lookup", func(b *testing.B) {
+		for n := 1; n <= 1000000; n *= 10 {
+			n := n
+			store, users := RandUserStore(b, n, RandUser)
+			b.Run(fmt.Sprintf("%d", len(users)), func(b *testing.B) {
+				b.ReportAllocs()
+				for n := 0; n < b.N; n++ {
+					// Pick a random user that was inserted
+					ix := int(rand.Int63n(int64(len(users))))
+					user := users[ix]
+					_, exists := store.FindUser(user)
+					if !exists {
+						b.FailNow()
+					}
+				}
+			})
+		}
+	})
+
+	b.Run("Insertion", func(b *testing.B) {
+		for n := 1; n <= 1000000; n *= 10 {
+			n := n
+			actions, _ := RandUserActions(b, n, RandUser)
+			store := actor.NewStore(logger)
+			b.Run(fmt.Sprint(n), func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					store.SetActions(actions)
+				}
+			})
+		}
+	})
+
+	b.Run("Size", func(b *testing.B) {
+		for n := 1; n <= 1000000; n *= 10 {
+			n := n
+			actions, _ := RandUserActions(b, n, RandUser)
+			b.Run(fmt.Sprint(n), func(b *testing.B) {
+				b.ReportAllocs()
+				for n := 0; n < b.N; n++ {
+					store := actor.NewStore(logger)
+					store.SetActions(actions)
+				}
+			})
+		}
+	})
+}
+
+func RandUserStore(b *testing.B, count int, randUser func() map[string]string) (store *actor.Store, users []map[string]string) {
+	store = actor.NewStore(logger)
+	actions, users := RandUserActions(b, count, RandUser)
+	err := store.SetActions(actions)
+	require.NoError(b, err)
+	return store, users
+}
+
+func RandUserActions(b *testing.B, count int, randUser func() map[string]string) (actions []api.ActionsPackResponse_Action, users []map[string]string) {
+	actions = make([]api.ActionsPackResponse_Action, 0, count)
+	for i := 0; i < count; i++ {
+		user := randUser()
+		action := NewBlockUserAction(user)
+		actions = append(actions, *action)
+		users = append(users, user)
+	}
+	return
 }

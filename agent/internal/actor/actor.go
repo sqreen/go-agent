@@ -14,7 +14,7 @@
 package actor
 
 import (
-	"hash/crc64"
+	"crypto/sha256"
 	"net"
 	"sync"
 
@@ -265,16 +265,16 @@ func (s *store) addUser(identifiers map[string]string, action Action) {
 // UserIdentifierHash is a type suitable to be used as key type of the map of
 // user actions. It is therefore an array, as slices cannot be used as map key
 // types.
-type UserIdentifiersHash uint64
-
-var crc64Table = crc64.MakeTable(crc64.ISO)
+type UserIdentifiersHash [sha256.Size]byte
 
 func NewUserIdentifiersHash(id map[string]string) UserIdentifiersHash {
-	var hash uint64
+	var hash UserIdentifiersHash
 	for k, v := range id {
-		// hash.Hash doc: method Write() never returns an error.
-		hash += crc64.Checksum([]byte(k), crc64Table)
-		hash += crc64.Checksum([]byte(v), crc64Table)
+		k := sha256.Sum256([]byte(k))
+		v := sha256.Sum256([]byte(v))
+		for i := 0; i < len(hash); i++ {
+			hash[i] += k[i] + v[i]
+		}
 	}
 	return UserIdentifiersHash(hash)
 }
