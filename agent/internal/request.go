@@ -138,6 +138,8 @@ func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 			timestamp:       time.Now(),
 			userIdentifiers: id,
 		}
+		// Globally associate these user-identifiers with the request.
+		ctx.userID = id
 		ctx.addSilentEvent(evt)
 	})
 }
@@ -156,12 +158,25 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastSecurityResponseHandler = actor.NewActionHandler(action, ip)
+	ctx.lastSecurityResponseHandler = actor.NewIPActionHTTPHandler(action, ip)
 	return ctx.lastSecurityResponseHandler
 }
 
 func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
-	return nil
+	userID := ctx.userID
+	if userID == nil {
+		return nil
+	}
+	if ctx.lastUserSecurityResponseHandler != nil {
+		return ctx.lastUserSecurityResponseHandler
+	}
+	agent := ctx.agent
+	action, exists := agent.actors.FindUser(userID)
+	if !exists {
+		return nil
+	}
+	ctx.lastUserSecurityResponseHandler = actor.NewUserActionHTTPHandler(action, userID)
+	return ctx.lastUserSecurityResponseHandler
 }
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {

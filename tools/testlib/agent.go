@@ -42,37 +42,33 @@ func NewAgentForMiddlewareTestsWithoutSecurityResponse() (*AgentMockup, *HTTPReq
 	agent := &AgentMockup{}
 	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
-	record.ExpectSecurityResponse().Return(nil)
+	record.ExpectSecurityResponse().Return(nil).Once()
+	record.ExpectUserSecurityResponse().Return(nil).Maybe() // Some tests don't call it, such as those returning a handler error
 	record.ExpectClose().Once()
 	return agent, record
 }
 
-func NewAgentForMiddlewareTestsWithEarlySecurityResponse(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
+func NewAgentForMiddlewareTestsWithSecurityResponse(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
 	agent := &AgentMockup{}
-	record := &HTTPRequestRecordMockup{
-		lateSecurityResponse: false,
-	}
+	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
-	record.ExpectSecurityResponse().Return(actionHandler)
+	record.ExpectSecurityResponse().Return(actionHandler).Once()
 	record.ExpectClose().Once()
 	return agent, record
 }
 
-func NewAgentForMiddlewareTestsWithLateSecurityResponse(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
+func NewAgentForMiddlewareTestsWithUserSecurityResponse(actionHandler http.Handler) (*AgentMockup, *HTTPRequestRecordMockup) {
 	agent := &AgentMockup{}
-	record := &HTTPRequestRecordMockup{
-		lateSecurityResponse: true,
-	}
+	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
-	record.ExpectSecurityResponse().Return(actionHandler)
+	record.ExpectSecurityResponse().Return(nil).Once()
+	record.ExpectUserSecurityResponse().Return(actionHandler)
 	record.ExpectClose().Once()
 	return agent, record
 }
 
 type HTTPRequestRecordMockup struct {
 	mock.Mock
-	securityResponseCall int
-	lateSecurityResponse bool
 }
 
 // Static assertion of correct interface implementation.
@@ -116,11 +112,6 @@ func (r *HTTPRequestRecordMockup) Identify(id map[string]string) {
 }
 
 func (r *HTTPRequestRecordMockup) SecurityResponse() http.Handler {
-	r.securityResponseCall++
-	if r.lateSecurityResponse && r.securityResponseCall == 1 {
-		return nil
-	}
-
 	ret := r.Called().Get(0)
 	if ret == nil {
 		return nil
@@ -130,6 +121,18 @@ func (r *HTTPRequestRecordMockup) SecurityResponse() http.Handler {
 
 func (r *HTTPRequestRecordMockup) ExpectSecurityResponse() *mock.Call {
 	return r.On("SecurityResponse")
+}
+
+func (r *HTTPRequestRecordMockup) UserSecurityResponse() http.Handler {
+	ret := r.Called().Get(0)
+	if ret == nil {
+		return nil
+	}
+	return ret.(http.Handler)
+}
+
+func (r *HTTPRequestRecordMockup) ExpectUserSecurityResponse() *mock.Call {
+	return r.On("UserSecurityResponse")
 }
 
 func (r *HTTPRequestRecordMockup) ExpectIdentify(id map[string]string) *mock.Call {

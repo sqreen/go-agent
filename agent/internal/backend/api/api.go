@@ -1165,3 +1165,34 @@ func NewBlockedIPEventProperties_OutputFromFace(that BlockedIPEventProperties_Ou
 	this.IpAddress = that.GetIpAddress()
 	return this
 }
+
+type BlockedUserEventProperties struct {
+	ActionId string                            `json:"action_id"`
+	Output   BlockedUserEventProperties_Output `json:"output"`
+}
+
+type BlockedUserEventProperties_Output struct {
+	User map[string]string `json:"user"`
+}
+
+func NewBlockedUserEventPropertiesFromFace(that BlockedUserEventPropertiesFace) *BlockedUserEventProperties {
+	this := &BlockedUserEventProperties{}
+	this.ActionId = that.GetActionId()
+	this.Output = that.GetOutput()
+	return this
+}
+
+type BlockedUserEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() BlockedUserEventProperties_Output
+}
+
+type BlockedUserEventProperties_OutputFace interface {
+	GetUser() map[string]string
+}
+
+func NewBlockedUserEventProperties_OutputFromFace(that BlockedUserEventProperties_OutputFace) *BlockedUserEventProperties_Output {
+	this := &BlockedUserEventProperties_Output{}
+	this.User = that.GetUser()
+	return this
+}

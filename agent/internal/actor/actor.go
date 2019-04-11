@@ -14,6 +14,7 @@
 package actor
 
 import (
+	"crypto/sha256"
 	"net"
 	"sync"
 
@@ -102,6 +103,31 @@ func (s *Store) FindIP(ip net.IP) (action Action, exists bool, err error) {
 	return action, action != nil, nil
 }
 
+// FindUser returns the security action of the given userID map. The returned
+// boolean `exists` is `false` when it is not present in the store, `true`
+// otherwise.
+func (s *Store) FindUser(userID map[string]string) (action Action, exists bool) {
+	store := s.getStore()
+	if store == nil {
+		return nil, false
+	}
+	users := store.users
+	if len(users) == 0 {
+		return nil, false
+	}
+	hash := NewUserIdentifiersHash(userID)
+	action, exists = users[hash]
+
+	// Check if the action is timed.
+	if timed, implementsTimed := action.(Timed); implementsTimed && timed.Expired() {
+		// The action is not removed from the map to avoid locking it with a
+		// RWMutex.
+		return nil, false
+	}
+
+	return
+}
+
 // SetActions creates a new action store and then replaces the current one. The
 // new store is being built while still performing store methods on the current
 // one.
@@ -123,7 +149,10 @@ func (s *Store) SetActions(actions []api.ActionsPackResponse_Action) error {
 type store struct {
 	treeV4 *treeV4
 	treeV6 *treeV6
+	users  userActionMap
 }
+
+type userActionMap map[UserIdentifiersHash]Action
 
 func newStore(actions []api.ActionsPackResponse_Action) (*store, error) {
 	if len(actions) == 0 {
@@ -142,22 +171,28 @@ func newStore(actions []api.ActionsPackResponse_Action) (*store, error) {
 	return store, nil
 }
 
-func (s *store) addAction(action api.ActionsPackResponse_Action) error {
+func (s *store) addAction(action api.ActionsPackResponse_Action) (err error) {
 	switch action.Action {
 	case actionKind_BlockIP:
-		var blockIP Action = newBlockIPAction(action.ActionId)
-		if action.Duration > 0 {
-			blockIP = withDuration(blockIP, action.Duration)
-		}
-		cidrs := action.Parameters.IpCidr
-		if len(cidrs) == 0 {
-			return errors.Errorf("could not add action `%s`: empty list of CIDRs", action.ActionId)
-		}
+		err = s.addBlockIPAction(action)
+	case actionKind_BlockUser:
+		err = s.addBlockUserAction(action)
+	}
+	return err
+}
 
-		err := s.addCIDRList(cidrs, blockIP)
-		if err != nil {
-			return err
-		}
+func (s *store) addBlockIPAction(action api.ActionsPackResponse_Action) error {
+	var blockIP Action = newBlockAction(action.ActionId)
+	if action.Duration > 0 {
+		blockIP = withDuration(blockIP, action.Duration)
+	}
+	cidrs := action.Parameters.IpCidr
+	if len(cidrs) == 0 {
+		return errors.Errorf("could not add action `%s`: empty list of CIDRs", action.ActionId)
+	}
+	err := s.addCIDRList(cidrs, blockIP)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -194,4 +229,52 @@ func (s *store) addCIDRv6(ip *patricia.IPv6Address, action Action) error {
 		s.treeV6 = newTreeV6(maxStoreActions)
 	}
 	return s.treeV6.addAction(ip, action)
+}
+
+func (s *store) addBlockUserAction(action api.ActionsPackResponse_Action) error {
+	var blockUser Action = newBlockAction(action.ActionId)
+	if action.Duration > 0 {
+		blockUser = withDuration(blockUser, action.Duration)
+	}
+	users := action.Parameters.Users
+	if len(users) == 0 {
+		return errors.Errorf("could not add action `%s`: empty list of users", action.ActionId)
+	}
+	return s.addUserList(users, blockUser)
+}
+
+func (s *store) addUserList(users []api.ActionsPackResponse_Action_Params_UserIdentifiers, action Action) error {
+	if len(s.users)+len(users) >= maxStoreActions {
+		return errors.Errorf("number of actions `%d` exceeds `%d`", len(users), maxStoreActions)
+	}
+
+	if s.users == nil {
+		s.users = make(userActionMap, len(users))
+	}
+	for _, user := range users {
+		s.addUser(user.User, action)
+	}
+	return nil
+}
+
+func (s *store) addUser(identifiers map[string]string, action Action) {
+	hash := NewUserIdentifiersHash(identifiers)
+	s.users[hash] = action
+}
+
+// UserIdentifierHash is a type suitable to be used as key type of the map of
+// user actions. It is therefore an array, as slices cannot be used as map key
+// types.
+type UserIdentifiersHash [sha256.Size]byte
+
+func NewUserIdentifiersHash(id map[string]string) UserIdentifiersHash {
+	var hash UserIdentifiersHash
+	for k, v := range id {
+		k := sha256.Sum256([]byte(k))
+		v := sha256.Sum256([]byte(v))
+		for i := 0; i < len(hash); i++ {
+			hash[i] += k[i] + v[i]
+		}
+	}
+	return UserIdentifiersHash(hash)
 }
