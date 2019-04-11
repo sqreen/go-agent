@@ -3,30 +3,49 @@ package sqecho
 import (
 	"github.com/labstack/echo"
 	"github.com/sqreen/go-agent/sdk"
+	"golang.org/x/xerrors"
 )
 
 // Middleware is Sqreen's middleware function for Echo to monitor and protect
-// the requests Echo receives. It creates and stores the HTTP request record
-// both into the Echo and request contexts so that it can be later accessed from
-// handlers using `sdk.FromContext()` to perform SDK calls.
+// the requests Echo receives. In protection mode, it can block and redirect
+// requests according to its IP address or identified user using `Identify()`
+// and `MatchSecurityResponse()` methods from the request handler.
 //
-// Note that Echo's context does not implement the `context.Context` interface,
-// so `sdk.FromContext()` cannot be used with it, hence `FromContext()` in this
-// package to access the SDK context value from Echo's context.
-// `sdk.FromContext()` can still be used on the request context.
+// SDK methods can be called from request handlers by using the request event
+// record. It can be accessed using `sdk.FromContext()` on a request context or
+// this package's `FromContext()` on an Echo request context. The middleware
+// function stores it into both of them.
+//
+// Usage example:
 //
 //	e := echo.New()
 //	e.Use(sqecho.Middleware())
 //
-//	e.GET("/", func(c echo.Context) {
+//	e.GET("/", func(c echo.Context) error {
 //		// Accessing the SDK through Echo's context
 //		sqecho.FromContext(c).TrackEvent("my.event.one")
 //		foo(c.Request())
+//		return nil
 //	}
 //
 //	func foo(req *http.Request) {
 //		// Accessing the SDK through the request context
 //		sdk.FromContext(req.Context()).TrackEvent("my.event.two")
+//	}
+//
+//	e.GET("/", func(c echo.Context) {
+//		// Globally identifying a user and checking if the request should be
+//		// aborted.
+//		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+//		sqUser := sqecho.FromContext(c).ForUser(uid)
+//		sqUser.Identify() // Globally associate this user to the current request
+//		if match, err := sqUser.MatchSecurityResponse(); match {
+//			// Return to stop further handling the request and let Sqreen's
+//			// middleware apply and abort the request.
+//			return err
+//		}
+//		// ... not blocked ...
+//		return nil
 //	}
 //
 func Middleware() echo.MiddlewareFunc {
@@ -42,8 +61,9 @@ func Middleware() echo.MiddlewareFunc {
 			// Also replace Echo's request pointer with it.
 			c.SetRequest(r)
 
-			// Check if a security action is required
-			if handler := req.SecurityAction(); handler != nil {
+			// Check if an early security action is already required such as based on
+			// the request IP address.
+			if handler := req.SecurityResponse(); handler != nil {
 				handler.ServeHTTP(c.Response(), req.Request())
 				return nil
 			}
@@ -54,7 +74,19 @@ func Middleware() echo.MiddlewareFunc {
 			c.Set(contextKey, req.Record())
 
 			// Call next handler.
-			return next(c)
+			err := next(c)
+			if err != nil && !xerrors.As(err, &sdk.SecurityResponseMatch{}) {
+				// The error is not a security response match
+				return err
+			}
+
+			// Check if a security response should be applied now after having used
+			// `Identify()` and `MatchSecurityResponse()`.
+			if handler := req.UserSecurityResponse(); handler != nil {
+				handler.ServeHTTP(c.Response(), req.Request())
+			}
+
+			return nil
 		}
 	}
 }

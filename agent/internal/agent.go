@@ -179,21 +179,6 @@ func (a *Agent) ActionsReload() error {
 	return a.actors.SetActions(actions.Actions)
 }
 
-func (a *Agent) SecurityAction(req *http.Request) http.Handler {
-	ip := getClientIP(req, a.config)
-	action, exists, err := a.actors.FindIP(ip)
-	if err != nil {
-		a.logger.Error(err)
-		return nil
-	}
-
-	if !exists {
-		return nil
-	}
-
-	return actor.NewActionHandler(action, ip)
-}
-
 func (a *Agent) GracefulStop() {
 	if a.config.Disable() {
 		return

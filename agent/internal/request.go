@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/types"
@@ -28,8 +29,18 @@ type HTTPRequestRecord struct {
 	eventsLock   sync.Mutex
 	events       []*HTTPRequestEvent
 	identifyOnce sync.Once
-	agent        *Agent
-	shouldSend   bool
+	// User-identifiers globally associated to this request using `Identify()`
+	userID map[string]string
+	// The last non-nil security response is cached and returned to every
+	// subsequent calls to method `SecurityResponse()`.
+	lastSecurityResponseHandler http.Handler
+	// The last non-nil user security response is cached and returned to every
+	// subsequent calls to method `UserSecurityResponse()`. Middleware functions
+	// can therefore observe the same result with `UserSecurityResponse()` as in
+	// the request handler with `MatchSecurityResponse()`.
+	lastUserSecurityResponseHandler http.Handler
+	agent                           *Agent
+	shouldSend                      bool
 }
 
 type HTTPRequestEvent struct {
@@ -129,6 +140,28 @@ func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 		}
 		ctx.addSilentEvent(evt)
 	})
+}
+
+func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
+	if ctx.lastSecurityResponseHandler != nil {
+		return ctx.lastSecurityResponseHandler
+	}
+	agent := ctx.agent
+	ip := getClientIP(ctx.request, agent.config)
+	action, exists, err := agent.actors.FindIP(ip)
+	if err != nil {
+		agent.logger.Error(err)
+		return nil
+	}
+	if !exists {
+		return nil
+	}
+	ctx.lastSecurityResponseHandler = actor.NewActionHandler(action, ip)
+	return ctx.lastSecurityResponseHandler
+}
+
+func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
+	return nil
 }
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
