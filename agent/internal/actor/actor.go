@@ -15,8 +15,10 @@ package actor
 
 import (
 	"crypto/sha256"
+	"math"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/kentik/patricia"
 	"github.com/pkg/errors"
@@ -182,19 +184,27 @@ func (s *store) addAction(action api.ActionsPackResponse_Action) (err error) {
 }
 
 func (s *store) addBlockIPAction(action api.ActionsPackResponse_Action) error {
+	duration, err := float64ToDuration(action.Duration)
+	if err != nil {
+		return err
+	}
 	var blockIP Action = newBlockAction(action.ActionId)
-	if action.Duration > 0 {
-		blockIP = withDuration(blockIP, action.Duration)
+	if duration > 0 {
+		blockIP = withDuration(blockIP, duration)
 	}
 	cidrs := action.Parameters.IpCidr
 	if len(cidrs) == 0 {
 		return errors.Errorf("could not add action `%s`: empty list of CIDRs", action.ActionId)
 	}
-	err := s.addCIDRList(cidrs, blockIP)
-	if err != nil {
-		return err
+	return s.addCIDRList(cidrs, blockIP)
+}
+
+// Convert a float64 to a `time.Duration` by making sure it doesn't overflow.
+func float64ToDuration(duration float64) (time.Duration, error) {
+	if duration <= math.MinInt64 || duration >= math.MaxInt64 {
+		return 0, errors.Errorf("could not convert the time duration `%f` to seconds due to int64 overflow", duration)
 	}
-	return nil
+	return time.Duration(duration) * time.Second, nil
 }
 
 func (s *store) addCIDRList(cidrs []string, action Action) error {
@@ -232,9 +242,13 @@ func (s *store) addCIDRv6(ip *patricia.IPv6Address, action Action) error {
 }
 
 func (s *store) addBlockUserAction(action api.ActionsPackResponse_Action) error {
+	duration, err := float64ToDuration(action.Duration)
+	if err != nil {
+		return err
+	}
 	var blockUser Action = newBlockAction(action.ActionId)
-	if action.Duration > 0 {
-		blockUser = withDuration(blockUser, action.Duration)
+	if duration > 0 {
+		blockUser = withDuration(blockUser, duration)
 	}
 	users := action.Parameters.Users
 	if len(users) == 0 {
@@ -243,7 +257,7 @@ func (s *store) addBlockUserAction(action api.ActionsPackResponse_Action) error 
 	return s.addUserList(users, blockUser)
 }
 
-func (s *store) addUserList(users []api.ActionsPackResponse_Action_Params_UserIdentifiers, action Action) error {
+func (s *store) addUserList(users []map[string]string, action Action) error {
 	if len(s.users)+len(users) >= maxStoreActions {
 		return errors.Errorf("number of actions `%d` exceeds `%d`", len(users), maxStoreActions)
 	}
@@ -252,7 +266,7 @@ func (s *store) addUserList(users []api.ActionsPackResponse_Action_Params_UserId
 		s.users = make(userActionMap, len(users))
 	}
 	for _, user := range users {
-		s.addUser(user.User, action)
+		s.addUser(user, action)
 	}
 	return nil
 }
@@ -262,7 +276,7 @@ func (s *store) addUser(identifiers map[string]string, action Action) {
 	s.users[hash] = action
 }
 
-// UserIdentifierHash is a type suitable to be used as key type of the map of
+// UserIdentifiersHash is a type suitable to be used as key type of the map of
 // user actions. It is therefore an array, as slices cannot be used as map key
 // types.
 type UserIdentifiersHash [sha256.Size]byte

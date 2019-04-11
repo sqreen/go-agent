@@ -141,7 +141,7 @@ func TestStore(t *testing.T) {
 				for _, action := range tc.actions {
 					actions = append(actions, *action)
 					for _, user := range action.Parameters.Users {
-						users = append(users, user.User)
+						users = append(users, user)
 					}
 				}
 
@@ -183,9 +183,9 @@ func TestStore(t *testing.T) {
 			// Set its actions and check its returned error according to the test
 			// case.
 			actions := []api.ActionsPackResponse_Action{
-				*NewTimedBlockUserAction(1*time.Second, map[string]string{"uid": "oh my uid"}), // Enough time to perform the test
+				*NewTimedBlockUserAction(1, map[string]string{"uid": "oh my uid"}), // Enough time to perform the test
 				*NewBlockUserAction(map[string]string{"uid": "oh my uid 2"}),
-				*NewTimedBlockUserAction(1*time.Second, map[string]string{"uid": "oh my uid 3"}), // Enough time to perform the test
+				*NewTimedBlockUserAction(1, map[string]string{"uid": "oh my uid 3"}), // Enough time to perform the test
 			}
 			err := actors.SetActions(actions)
 			require.NoError(t, err)
@@ -194,19 +194,19 @@ func TestStore(t *testing.T) {
 
 			// Start with timed actions first so that they shouldn't have expired yet
 			timed := actions[0]
-			timedUserID1 := timed.Parameters.Users[0].User
+			timedUserID1 := timed.Parameters.Users[0]
 			got, exists := actors.FindUser(timedUserID1)
 			require.True(t, exists)
 			require.Equal(t, got.ActionID(), timed.ActionId)
 
 			timed = actions[2]
-			timedUserID2 := timed.Parameters.Users[0].User
+			timedUserID2 := timed.Parameters.Users[0]
 			got, exists = actors.FindUser(timedUserID2)
 			require.True(t, exists)
 			require.Equal(t, got.ActionID(), timed.ActionId)
 
 			// Wait for the timed duration to make sure it has expired
-			time.Sleep(timed.Duration)
+			time.Sleep(time.Duration(timed.Duration) * time.Second)
 			// Tests should be false now
 			_, exists = actors.FindUser(timedUserID1)
 			require.False(t, exists) // The user does not exist
@@ -214,7 +214,7 @@ func TestStore(t *testing.T) {
 			require.False(t, exists) // The user does not exist
 
 			notTimed := actions[1]
-			notTimedUserID := notTimed.Parameters.Users[0].User
+			notTimedUserID := notTimed.Parameters.Users[0]
 			got, exists = actors.FindUser(notTimedUserID)
 			require.True(t, exists)
 			require.Equal(t, got.ActionID(), notTimed.ActionId)
@@ -542,9 +542,9 @@ func TestStore(t *testing.T) {
 			// Set its actions and check its returned error according to the test
 			// case.
 			actions := []api.ActionsPackResponse_Action{
-				*NewTimedBlockIPAction(1*time.Second, "1.2.3.4/32"), // Enough time to perform the test
+				*NewTimedBlockIPAction(1, "1.2.3.4/32"), // Enough time to perform the test
 				*NewBlockIPAction("1.2.3.4/24"),
-				*NewTimedBlockIPAction(1*time.Second, "1.2.3.4/16"), // Enough time to perform the test
+				*NewTimedBlockIPAction(1, "1.2.3.4/16"), // Enough time to perform the test
 			}
 			err := actors.SetActions(actions)
 			require.NoError(t, err)
@@ -576,7 +576,7 @@ func TestStore(t *testing.T) {
 			require.Equal(t, got.ActionID(), actions[0].ActionId)
 
 			// Wait for the timed duration to make sure it has expired
-			time.Sleep(timed.Duration)
+			time.Sleep(time.Duration(timed.Duration) * time.Second)
 			// Tests should be false now
 			for _, ip := range []net.IP{
 				net.IPv4(1, 2, 4, 0),
@@ -615,7 +615,7 @@ func RandUser() map[string]string {
 func findOriginalUserActionID(userID map[string]string, actions []api.ActionsPackResponse_Action) string {
 	for _, action := range actions {
 		for _, user := range action.Parameters.Users {
-			eq := reflect.DeepEqual(userID, user.User)
+			eq := reflect.DeepEqual(userID, user)
 			if eq {
 				return action.ActionId
 			}
@@ -636,7 +636,7 @@ func NewBlockIPAction(CIDRs ...string) *api.ActionsPackResponse_Action {
 	return action
 }
 
-func NewTimedBlockIPAction(d time.Duration, CIDRs ...string) *api.ActionsPackResponse_Action {
+func NewTimedBlockIPAction(d float64, CIDRs ...string) *api.ActionsPackResponse_Action {
 	action := &api.ActionsPackResponse_Action{
 		Action:   "block_ip",
 		Duration: d,
@@ -651,16 +651,14 @@ func NewTimedBlockIPAction(d time.Duration, CIDRs ...string) *api.ActionsPackRes
 
 func NewTimedBlockUserAction(d time.Duration, users ...map[string]string) *api.ActionsPackResponse_Action {
 	action := NewBlockUserAction(users...)
-	action.Duration = d
+	action.Duration = float64(d)
 	return action
 }
 
 func NewBlockUserAction(users ...map[string]string) *api.ActionsPackResponse_Action {
-	userList := make([]api.ActionsPackResponse_Action_Params_UserIdentifiers, 0, len(users))
+	userList := make([]map[string]string, 0, len(users))
 	for _, user := range users {
-		userList = append(userList, api.ActionsPackResponse_Action_Params_UserIdentifiers{
-			User: user,
-		})
+		userList = append(userList, user)
 	}
 
 	action := &api.ActionsPackResponse_Action{
