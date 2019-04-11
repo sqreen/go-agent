@@ -1,7 +1,6 @@
 // This package is the contract between the agent and the SDK. It allows to
 // strictly separate the SDK from the agent package since the agent does not
 // export its internals.
-
 package types
 
 import (

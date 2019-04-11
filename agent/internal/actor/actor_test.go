@@ -1,7 +1,9 @@
 package actor_test
 
 import (
+	"math/rand"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -62,7 +64,163 @@ func TestStore(t *testing.T) {
 			err := actors.SetActions([]api.ActionsPackResponse_Action{})
 			require.NoError(t, err)
 		})
+	})
 
+	t.Run("User", func(t *testing.T) {
+		tests := []struct {
+			name string
+			// List of actions with their list of user-IDs to test against them.
+			// It allows to check that successful calls to FindUser() returns the
+			// correct action. SetActions() is expected to fail when all the values
+			// are nil.
+			actions []*api.ActionsPackResponse_Action
+		}{
+			{
+				name: "one action and one user",
+				actions: []*api.ActionsPackResponse_Action{
+					NewBlockUserAction(map[string]string{"uid": "oh my uid"}),
+				},
+			},
+
+			{
+				name: "one action and one user with multiple fields",
+				actions: []*api.ActionsPackResponse_Action{
+					NewBlockUserAction(map[string]string{"uid": "oh my uid"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid", "field2": "value 21"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid", "field2": "value 21", "field3": "value 31"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid", "field2": "value 21", "field3": "value 32"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid", "field2": "value 22", "field3": "value 33"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid", "field2": "value 23", "field3": "value 33"}),
+				},
+			},
+
+			{
+				name: "one action and several users",
+				actions: []*api.ActionsPackResponse_Action{
+					NewBlockUserAction(
+						map[string]string{"uid": "oh my uid"},
+						map[string]string{"uid": "oh my uid 2"},
+						map[string]string{"uid": "oh my uid 3"},
+						map[string]string{"uid": "oh my uid 4"},
+						map[string]string{"uid": "oh my uid 5"},
+						map[string]string{"uid": "oh my uid 6"},
+						map[string]string{"uid": "oh my uid 7"},
+						RandUser(),
+						RandUser(),
+						RandUser(),
+						RandUser(),
+						RandUser(),
+					),
+				},
+			},
+
+			{
+				name: "several actions with one user",
+				actions: []*api.ActionsPackResponse_Action{
+					NewBlockUserAction(map[string]string{"uid": "oh my uid"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid 2"}),
+					NewBlockUserAction(map[string]string{"uid": "oh my uid 3"}),
+					NewBlockUserAction(RandUser()),
+					NewBlockUserAction(RandUser()),
+					NewBlockUserAction(RandUser()),
+					NewBlockUserAction(RandUser()),
+				},
+			},
+		}
+
+		for _, tc := range tests {
+			tc := tc // new scope for the following closure
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				// Create the list of actions from the map keys.
+				var (
+					actions []api.ActionsPackResponse_Action
+					users   []map[string]string
+				)
+				for _, action := range tc.actions {
+					actions = append(actions, *action)
+					for _, user := range action.Parameters.Users {
+						users = append(users, user.User)
+					}
+				}
+
+				// Create an actor store.
+				actors := actor.NewStore(logger)
+				// Set its actions and check its returned error according to the test
+				// case.
+				err := actors.SetActions(actions)
+				require.NoError(t, err)
+
+				// Test the store in parallel as it is meant to be thread-safe.
+				t.Run("FindUser", func(t *testing.T) {
+					// Accesses that should be successful.
+					for _, user := range users {
+						user := user // new scope for the following closure
+						t.Run("FindUser", func(t *testing.T) {
+							t.Parallel()
+							t.Logf("FindUser(%#v)", user)
+							got, exists := actors.FindUser(user)
+							require.True(t, exists)
+							require.Equal(t, got.ActionID(), findOriginalUserActionID(user, actions))
+						})
+					}
+
+					// Accesses that should fail
+					t.Run("Failed FindUser", func(t *testing.T) {
+						t.Parallel()
+						_, exists := actors.FindUser(RandUser())
+						require.False(t, exists)
+					})
+				})
+			})
+		}
+
+		t.Run("Timed actions", func(t *testing.T) {
+			t.Parallel()
+			// Create an actor store.
+			actors := actor.NewStore(logger)
+			// Set its actions and check its returned error according to the test
+			// case.
+			actions := []api.ActionsPackResponse_Action{
+				*NewTimedBlockUserAction(1*time.Second, map[string]string{"uid": "oh my uid"}), // Enough time to perform the test
+				*NewBlockUserAction(map[string]string{"uid": "oh my uid 2"}),
+				*NewTimedBlockUserAction(1*time.Second, map[string]string{"uid": "oh my uid 3"}), // Enough time to perform the test
+			}
+			err := actors.SetActions(actions)
+			require.NoError(t, err)
+
+			// Accesses that should be successful.
+
+			// Start with timed actions first so that they shouldn't have expired yet
+			timed := actions[0]
+			timedUserID1 := timed.Parameters.Users[0].User
+			got, exists := actors.FindUser(timedUserID1)
+			require.True(t, exists)
+			require.Equal(t, got.ActionID(), timed.ActionId)
+
+			timed = actions[2]
+			timedUserID2 := timed.Parameters.Users[0].User
+			got, exists = actors.FindUser(timedUserID2)
+			require.True(t, exists)
+			require.Equal(t, got.ActionID(), timed.ActionId)
+
+			// Wait for the timed duration to make sure it has expired
+			time.Sleep(timed.Duration)
+			// Tests should be false now
+			_, exists = actors.FindUser(timedUserID1)
+			require.False(t, exists) // The user does not exist
+			_, exists = actors.FindUser(timedUserID2)
+			require.False(t, exists) // The user does not exist
+
+			notTimed := actions[1]
+			notTimedUserID := notTimed.Parameters.Users[0].User
+			got, exists = actors.FindUser(notTimedUserID)
+			require.True(t, exists)
+			require.Equal(t, got.ActionID(), notTimed.ActionId)
+		})
+	})
+
+	t.Run("IP", func(t *testing.T) {
 		tests := []struct {
 			name string
 			// Map of actions with their list of CIDRs to test against them. It allows
@@ -283,7 +441,7 @@ func TestStore(t *testing.T) {
 			},
 
 			{
-				name: "Subsequest IPv4 CIDRs per action",
+				name: "Subsequent IPv4 CIDRs per action",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1.2.3.5"): []net.IP{net.IPv4(1, 2, 3, 5)},
 					NewBlockIPAction("1.2.3.4"): []net.IP{net.IPv4(1, 2, 3, 4)},
@@ -293,7 +451,7 @@ func TestStore(t *testing.T) {
 			},
 
 			{
-				name: "Subsequest IPv6 CIDRs per action",
+				name: "Subsequent IPv6 CIDRs per action",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
 					NewBlockIPAction("1:2:3::5"): []net.IP{net.ParseIP("1:2:3::5")},
 					NewBlockIPAction("1:2:3::4"): []net.IP{net.ParseIP("1:2:3::4")},
@@ -442,6 +600,29 @@ func TestStore(t *testing.T) {
 	})
 }
 
+func RandUser() map[string]string {
+	count := int(1 + rand.Uint32()%10)
+	user := make(map[string]string, count)
+	for n := 0; n < count; n++ {
+		k := testlib.RandString(1, 50)
+		v := testlib.RandString(1, 50)
+		user[k] = v
+	}
+	return user
+}
+
+func findOriginalUserActionID(userID map[string]string, actions []api.ActionsPackResponse_Action) string {
+	for _, action := range actions {
+		for _, user := range action.Parameters.Users {
+			eq := reflect.DeepEqual(userID, user.User)
+			if eq {
+				return action.ActionId
+			}
+		}
+	}
+	return ""
+}
+
 func NewBlockIPAction(CIDRs ...string) *api.ActionsPackResponse_Action {
 	action := &api.ActionsPackResponse_Action{
 		Action: "block_ip",
@@ -460,6 +641,31 @@ func NewTimedBlockIPAction(d time.Duration, CIDRs ...string) *api.ActionsPackRes
 		Duration: d,
 		Parameters: api.ActionsPackResponse_Action_Params{
 			IpCidr: CIDRs,
+		},
+	}
+	fuzzer.Fuzz(&action.ActionId)
+	fuzzer.Fuzz(&action.SendResponse)
+	return action
+}
+
+func NewTimedBlockUserAction(d time.Duration, users ...map[string]string) *api.ActionsPackResponse_Action {
+	action := NewBlockUserAction(users...)
+	action.Duration = d
+	return action
+}
+
+func NewBlockUserAction(users ...map[string]string) *api.ActionsPackResponse_Action {
+	userList := make([]api.ActionsPackResponse_Action_Params_UserIdentifiers, 0, len(users))
+	for _, user := range users {
+		userList = append(userList, api.ActionsPackResponse_Action_Params_UserIdentifiers{
+			User: user,
+		})
+	}
+
+	action := &api.ActionsPackResponse_Action{
+		Action: "block_user",
+		Parameters: api.ActionsPackResponse_Action_Params{
+			Users: userList,
 		},
 	}
 	fuzzer.Fuzz(&action.ActionId)
