@@ -60,7 +60,7 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("without security action", func(t *testing.T) {
+	t.Run("without security response", func(t *testing.T) {
 		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
 		sdk.SetAgent(agent)
 		defer agent.AssertExpectations(t)
@@ -87,9 +87,9 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("with security response", func(t *testing.T) {
-		t.Run("early security response", func(t *testing.T) {
+		t.Run("ip security response", func(t *testing.T) {
 			status := http.StatusBadRequest
-			agent, record := testlib.NewAgentForMiddlewareTestsWithEarlySecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(status)
 			}))
 			sdk.SetAgent(agent)
@@ -113,9 +113,9 @@ func TestMiddleware(t *testing.T) {
 			require.Equal(t, rec.Code, status)
 		})
 
-		t.Run("late response", func(t *testing.T) {
+		t.Run("user response", func(t *testing.T) {
 			status := http.StatusBadRequest
-			agent, record := testlib.NewAgentForMiddlewareTestsWithLateSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			agent, record := testlib.NewAgentForMiddlewareTestsWithUserSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(status)
 			}))
 			uid := sdk.EventUserIdentifiersMap{}

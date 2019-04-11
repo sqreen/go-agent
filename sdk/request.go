@@ -63,3 +63,11 @@ func (r *HTTPRequest) SecurityResponse() http.Handler {
 	}
 	return record.record.SecurityResponse()
 }
+
+func (r *HTTPRequest) UserSecurityResponse() http.Handler {
+	record := r.Record()
+	if record == nil {
+		return nil
+	}
+	return record.record.UserSecurityResponse()
+}

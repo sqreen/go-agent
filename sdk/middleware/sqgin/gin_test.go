@@ -86,10 +86,10 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("with security response", func(t *testing.T) {
-		t.Run("with early response", func(t *testing.T) {
+		t.Run("with ip response", func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "/", nil)
 			status := http.StatusBadRequest
-			agent, record := testlib.NewAgentForMiddlewareTestsWithEarlySecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(status)
 			}))
 			sdk.SetAgent(agent)
@@ -112,10 +112,10 @@ func TestMiddleware(t *testing.T) {
 			require.Equal(t, rec.Body.String(), "")
 		})
 
-		t.Run("with late response", func(t *testing.T) {
+		t.Run("with user response", func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "/", nil)
 			status := http.StatusBadRequest
-			agent, record := testlib.NewAgentForMiddlewareTestsWithLateSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			agent, record := testlib.NewAgentForMiddlewareTestsWithUserSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(status)
 			}))
 			uid := sdk.EventUserIdentifiersMap{}

@@ -193,7 +193,7 @@ func TestForUser(t *testing.T) {
 
 	t.Run("MatchSecurityResponse", func(t *testing.T) {
 		t.Run("without security response", func(t *testing.T) {
-			record.ExpectSecurityResponse().Return(http.Handler(nil)).Once()
+			record.ExpectUserSecurityResponse().Return(http.Handler(nil)).Once()
 			match, err := sqUser.MatchSecurityResponse()
 			require.NoError(t, err)
 			require.False(t, match)
@@ -201,7 +201,7 @@ func TestForUser(t *testing.T) {
 
 		t.Run("with security response", func(t *testing.T) {
 			handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
-			record.ExpectSecurityResponse().Return(handler).Once()
+			record.ExpectUserSecurityResponse().Return(handler).Once()
 			match, err := sqUser.MatchSecurityResponse()
 			require.Error(t, err)
 			require.NotEmpty(t, err.Error())

@@ -32,12 +32,15 @@ type HTTPRequestRecord struct {
 	// User-identifiers globally associated to this request using `Identify()`
 	userID map[string]string
 	// The last non-nil security response is cached and returned to every
-	// subsequent calls to method `SecurityResponse()`. Middleware functions can
-	// therefore observe the same result with `SecurityResponse()` as in the
-	// request handler with `MatchSecurityResponse()`.
+	// subsequent calls to method `SecurityResponse()`.
 	lastSecurityResponseHandler http.Handler
-	agent                       *Agent
-	shouldSend                  bool
+	// The last non-nil user security response is cached and returned to every
+	// subsequent calls to method `UserSecurityResponse()`. Middleware functions
+	// can therefore observe the same result with `UserSecurityResponse()` as in
+	// the request handler with `MatchSecurityResponse()`.
+	lastUserSecurityResponseHandler http.Handler
+	agent                           *Agent
+	shouldSend                      bool
 }
 
 type HTTPRequestEvent struct {
@@ -155,6 +158,10 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	}
 	ctx.lastSecurityResponseHandler = actor.NewActionHandler(action, ip)
 	return ctx.lastSecurityResponseHandler
+}
+
+func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
+	return nil
 }
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {

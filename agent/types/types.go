@@ -30,11 +30,17 @@ type RequestRecord interface {
 	Identify(id map[string]string)
 	// SecurityResponse returns a non-nil HTTP handler when a security response is
 	// required for the current request, according to its IP address (taken from
-	// the request IP address) or user-identifiers (taken from method
-	// `Identify()`). The returned handler should be used to respond to the
-	// request before canceling it. When a security response matches the request,
-	// its value is cached and returned to subsequent calls.
+	// the request IP address). The returned handler should be used to respond to
+	// the request before canceling it. When a security response matches the
+	// request, its value is cached and returned to subsequent calls.
 	SecurityResponse() http.Handler
+	// UserSecurityResponse returns a non-nil HTTP handler when a security
+	// response is required for the current request, according to its
+	// user-identifiers (taken from method `Identify()`). The returned handler
+	// should be used to respond to the request before canceling it. When a
+	// security response matches the request, its value is cached and returned to
+	// subsequent calls.
+	UserSecurityResponse() http.Handler
 	// Close needs to be called when the request is done.
 	Close()
 }

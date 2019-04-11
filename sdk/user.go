@@ -130,7 +130,7 @@ func (ctx *UserHTTPRequestRecord) MatchSecurityResponse() (match bool, err error
 		return false, nil
 	}
 
-	response := ctx.record.SecurityResponse()
+	response := ctx.record.UserSecurityResponse()
 	if response != nil {
 		err = SecurityResponseMatch{response}
 	}

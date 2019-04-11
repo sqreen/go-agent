@@ -9,7 +9,7 @@ import (
 // Middleware is Sqreen's middleware function for `net/http` to monitor and
 // protect received requests. In protection mode, it can block and redirect
 // requests according to its IP address or identified user using `Identify()`
-// and `SecurityResponse()` methods during from the request handler.
+// and `MatchSecurityResponse()` methods during from the request handler.
 //
 // SDK methods can be called from request handlers by using the request event
 // record. It can be accessed using `sdk.FromContext()` on a request context.
@@ -29,7 +29,7 @@ import (
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sqreen.ForUser(uid)
 //		sqUser.Identify() // Globally associate this user to the current request
-//		if sqUser.MatchSecurityResponse() {
+//		if match, _ := sqUser.MatchSecurityResponse(); match {
 //			// Return to stop further handling the request and let Sqreen's
 //			// middleware apply and abort the request.
 //			return
@@ -59,7 +59,7 @@ func Middleware(next http.Handler) http.Handler {
 
 		// Check if a security response should be applied now after having used
 		// `Identify()` and `MatchSecurityResponse()`.
-		if handler := req.SecurityResponse(); handler != nil {
+		if handler := req.UserSecurityResponse(); handler != nil {
 			handler.ServeHTTP(w, r)
 			return
 		}

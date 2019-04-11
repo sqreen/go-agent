@@ -9,7 +9,7 @@ import (
 // Middleware is Sqreen's middleware function for Echo to monitor and protect
 // the requests Echo receives. In protection mode, it can block and redirect
 // requests according to its IP address or identified user using `Identify()`
-// and `SecurityResponse()` methods from the request handler.
+// and `MatchSecurityResponse()` methods from the request handler.
 //
 // SDK methods can be called from request handlers by using the request event
 // record. It can be accessed using `sdk.FromContext()` on a request context or
@@ -21,10 +21,11 @@ import (
 //	e := echo.New()
 //	e.Use(sqecho.Middleware())
 //
-//	e.GET("/", func(c echo.Context) {
+//	e.GET("/", func(c echo.Context) error {
 //		// Accessing the SDK through Echo's context
 //		sqecho.FromContext(c).TrackEvent("my.event.one")
 //		foo(c.Request())
+//		return nil
 //	}
 //
 //	func foo(req *http.Request) {
@@ -38,12 +39,13 @@ import (
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sqecho.FromContext(c).ForUser(uid)
 //		sqUser.Identify() // Globally associate this user to the current request
-//		if sqUser.MatchSecurityResponse() {
+//		if match, err := sqUser.MatchSecurityResponse(); match {
 //			// Return to stop further handling the request and let Sqreen's
 //			// middleware apply and abort the request.
-//			return
+//			return err
 //		}
 //		// ... not blocked ...
+//		return nil
 //	}
 //
 func Middleware() echo.MiddlewareFunc {
@@ -80,7 +82,7 @@ func Middleware() echo.MiddlewareFunc {
 
 			// Check if a security response should be applied now after having used
 			// `Identify()` and `MatchSecurityResponse()`.
-			if handler := req.SecurityResponse(); handler != nil {
+			if handler := req.UserSecurityResponse(); handler != nil {
 				handler.ServeHTTP(c.Response(), req.Request())
 			}
 
