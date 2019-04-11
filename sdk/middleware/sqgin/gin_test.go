@@ -43,7 +43,7 @@ func TestMiddleware(t *testing.T) {
 		body := testlib.RandString(1, 100)
 		// Create a Gin router
 		router := gin.New()
-		// Attach our middelware
+		// Attach our middleware
 		router.Use(sqgin.Middleware())
 		// Add an endpoint accessing the SDK handle
 		router.GET("/", func(c *gin.Context) {
@@ -59,8 +59,8 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("without security action", func(t *testing.T) {
-		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityAction()
+	t.Run("without security response", func(t *testing.T) {
+		agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
 		sdk.SetAgent(agent)
 		defer agent.AssertExpectations(t)
 		defer record.AssertExpectations(t)
@@ -69,7 +69,7 @@ func TestMiddleware(t *testing.T) {
 		body := testlib.RandString(1, 100)
 		// Create a Gin router
 		router := gin.New()
-		// Attach our middelware
+		// Attach our middleware
 		router.Use(sqgin.Middleware())
 		// Add an endpoint accessing the SDK handle
 		router.GET("/", func(c *gin.Context) {
@@ -85,29 +85,64 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("with security action", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/", nil)
-		status := http.StatusBadRequest
-		agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityAction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(status)
-		}))
-		sdk.SetAgent(agent)
-		defer agent.AssertExpectations(t)
-		defer record.AssertExpectations(t)
+	t.Run("with security response", func(t *testing.T) {
+		t.Run("with ip response", func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/", nil)
+			status := http.StatusBadRequest
+			agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
 
-		// Create a Gin router
-		router := gin.New()
-		// Attach our middelware
-		router.Use(sqgin.Middleware())
-		// Add an endpoint accessing the SDK handle
-		router.GET("/", func(c *gin.Context) {
-			panic("must not be called")
+			// Create a Gin router
+			router := gin.New()
+			// Attach our middleware
+			router.Use(sqgin.Middleware())
+			// Add an endpoint accessing the SDK handle
+			router.GET("/", func(c *gin.Context) {
+				panic("must not be called")
+			})
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			// Check the request was performed as expected
+			require.Equal(t, rec.Code, status)
+			require.Equal(t, rec.Body.String(), "")
 		})
-		// Perform the request and record the output
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		// Check the request was performed as expected
-		require.Equal(t, rec.Code, status)
-		require.Equal(t, rec.Body.String(), "")
+
+		t.Run("with user response", func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/", nil)
+			status := http.StatusBadRequest
+			agent, record := testlib.NewAgentForMiddlewareTestsWithUserSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			uid := sdk.EventUserIdentifiersMap{}
+			record.ExpectIdentify(uid)
+			sdk.SetAgent(agent)
+			defer agent.AssertExpectations(t)
+			defer record.AssertExpectations(t)
+
+			// Create a Gin router
+			router := gin.New()
+			// Attach our middleware
+			router.Use(sqgin.Middleware())
+			// Add an endpoint accessing the SDK handle
+			router.GET("/", func(c *gin.Context) {
+				sqreen := sdk.FromContext(c)
+				sqUser := sqreen.ForUser(uid)
+				sqUser.Identify()
+				match, err := sqUser.MatchSecurityResponse()
+				require.True(t, match)
+				require.Error(t, err)
+			})
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			// Check the request was performed as expected
+			require.Equal(t, rec.Code, status)
+			require.Equal(t, rec.Body.String(), "")
+		})
 	})
 }

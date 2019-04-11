@@ -1120,19 +1120,15 @@ type ActionsPackResponse struct {
 type ActionsPackResponse_Action struct {
 	ActionId     string                            `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id"`
 	Action       string                            `protobuf:"bytes,2,opt,name=action,proto3" json:"action"`
-	Duration     time.Duration                     `protobuf:"bytes,3,opt,name=duration,proto3,stdduration" json:"duration"`
+	Duration     float64                           `json:"duration"`
 	SendResponse bool                              `protobuf:"varint,4,opt,name=send_response,json=sendResponse,proto3" json:"send_response"`
 	Parameters   ActionsPackResponse_Action_Params `protobuf:"bytes,5,opt,name=parameters,proto3" json:"parameters"`
 }
 
 type ActionsPackResponse_Action_Params struct {
-	Url    string                                              `protobuf:"bytes,1,opt,name=url,proto3" json:"url"`
-	Users  []ActionsPackResponse_Action_Params_UserIdentifiers `protobuf:"bytes,2,rep,name=users,proto3" json:"users"`
-	IpCidr []string                                            `protobuf:"bytes,3,rep,name=ip_cidr,json=ipCidr,proto3" json:"ip_cidr"`
-}
-
-type ActionsPackResponse_Action_Params_UserIdentifiers struct {
-	User map[string]string `protobuf:"bytes,1,rep,name=user,proto3" json:"user" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Url    string              `protobuf:"bytes,1,opt,name=url,proto3" json:"url"`
+	Users  []map[string]string `proto3" json:"users"`
+	IpCidr []string            `protobuf:"bytes,3,rep,name=ip_cidr,json=ipCidr,proto3" json:"ip_cidr"`
 }
 
 type BlockedIPEventProperties struct {
@@ -1163,5 +1159,36 @@ type BlockedIPEventProperties_OutputFace interface {
 func NewBlockedIPEventProperties_OutputFromFace(that BlockedIPEventProperties_OutputFace) *BlockedIPEventProperties_Output {
 	this := &BlockedIPEventProperties_Output{}
 	this.IpAddress = that.GetIpAddress()
+	return this
+}
+
+type BlockedUserEventProperties struct {
+	ActionId string                            `json:"action_id"`
+	Output   BlockedUserEventProperties_Output `json:"output"`
+}
+
+type BlockedUserEventProperties_Output struct {
+	User map[string]string `json:"user"`
+}
+
+func NewBlockedUserEventPropertiesFromFace(that BlockedUserEventPropertiesFace) *BlockedUserEventProperties {
+	this := &BlockedUserEventProperties{}
+	this.ActionId = that.GetActionId()
+	this.Output = that.GetOutput()
+	return this
+}
+
+type BlockedUserEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() BlockedUserEventProperties_Output
+}
+
+type BlockedUserEventProperties_OutputFace interface {
+	GetUser() map[string]string
+}
+
+func NewBlockedUserEventProperties_OutputFromFace(that BlockedUserEventProperties_OutputFace) *BlockedUserEventProperties_Output {
+	this := &BlockedUserEventProperties_Output{}
+	this.User = that.GetUser()
 	return this
 }

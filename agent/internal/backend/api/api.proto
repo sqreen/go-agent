@@ -13,248 +13,256 @@ option (gogoproto.face_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
 message AppLoginRequest {
-  message VariousInfos {
-    google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    uint32 pid = 3;
-    uint32 ppid = 4;
-    uint32 euid = 5;
-    uint32 egid = 6;
-    uint32 uid = 7;
-    uint32 gid = 8;
-    string name = 9;
-  }
+	message VariousInfos {
+		google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+		uint32 pid = 3;
+		uint32 ppid = 4;
+		uint32 euid = 5;
+		uint32 egid = 6;
+		uint32 uid = 7;
+		uint32 gid = 8;
+		string name = 9;
+	}
 
-  string bundle_signature = 1;
-  VariousInfos various_infos = 2 [(gogoproto.nullable) = false];
-  string agent_type = 3;
-  string agent_version = 4;
-  string os_type = 5;
-  string hostname = 6;
-  string runtime_type = 7;
-  string runtime_version = 8;
-  string framework_type = 9;
-  string framework_version = 10;
-  string environment = 11;
+	string bundle_signature = 1;
+	VariousInfos various_infos = 2 [(gogoproto.nullable) = false];
+	string agent_type = 3;
+	string agent_version = 4;
+	string os_type = 5;
+	string hostname = 6;
+	string runtime_type = 7;
+	string runtime_version = 8;
+	string framework_type = 9;
+	string framework_version = 10;
+	string environment = 11;
 }
 
 message AppLoginResponse {
-  message Feature {
-    uint32 batch_size = 1;
-    uint32 max_staleness = 2;
-    uint32 heartbeat_delay = 3;
-  }
+	message Feature {
+		uint32 batch_size = 1;
+		uint32 max_staleness = 2;
+		uint32 heartbeat_delay = 3;
+	}
 
-  string session_id = 1;
-  bool status = 2;
-  repeated CommandRequest commands = 3 [(gogoproto.nullable) = false];
-  Feature features = 4 [(gogoproto.nullable) = false];
-  string pack_id = 5;
-  repeated Rule rules = 6 [(gogoproto.nullable) = false];
+	string session_id = 1;
+	bool status = 2;
+	repeated CommandRequest commands = 3 [(gogoproto.nullable) = false];
+	Feature features = 4 [(gogoproto.nullable) = false];
+	string pack_id = 5;
+	repeated Rule rules = 6 [(gogoproto.nullable) = false];
 }
 
 message CommandRequest {
-  string name = 1;
-  repeated string params = 2;
-  string uuid = 3;
+	string name = 1;
+	repeated string params = 2;
+	string uuid = 3;
 }
 
 message CommandResult {
-  string output = 1;
-  bool status = 2;
+	string output = 1;
+	bool status = 2;
 }
 
 message MetricResponse {
-  string name = 1;
-  google.protobuf.Timestamp start = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-  google.protobuf.Timestamp finish = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-  google.protobuf.Struct observation = 4 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
+	string name = 1;
+	google.protobuf.Timestamp start = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	google.protobuf.Timestamp finish = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	google.protobuf.Struct observation = 4 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
 }
 
 message AppBeatRequest {
-  map<string, CommandResult> command_results = 1 [(gogoproto.nullable) = false];
-  repeated MetricResponse metrics = 2 [(gogoproto.nullable) = false];
+	map<string, CommandResult> command_results = 1 [(gogoproto.nullable) = false];
+	repeated MetricResponse metrics = 2 [(gogoproto.nullable) = false];
 }
 
 message AppBeatResponse {
-  repeated CommandRequest commands = 1 [(gogoproto.nullable) = false];
-  bool status = 2;
+	repeated CommandRequest commands = 1 [(gogoproto.nullable) = false];
+	bool status = 2;
 }
 
 message BatchRequest {
-  message Event {
-    string event_type = 1;
-    google.protobuf.Struct event = 2 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
-  }
-  repeated Event batch = 1 [(gogoproto.nullable) = false];
+	message Event {
+		string event_type = 1;
+		google.protobuf.Struct event = 2 [(gogoproto.customtype) = "Struct", (gogoproto.nullable) = false];
+	}
+	repeated Event batch = 1 [(gogoproto.nullable) = false];
 }
 
 message Rule {
 }
 
 message Dependency {
-  message Source {
-    string name = 1;
-    repeated string remotes = 2;
-  }
+	message Source {
+		string name = 1;
+		repeated string remotes = 2;
+	}
 
-  string name = 1;
-  string version = 2;
-  string homepage = 3;
-  Source source = 4;
+	string name = 1;
+	string version = 2;
+	string homepage = 3;
+	Source source = 4;
 }
 
 message RequestRecord {
-  message Request {
-    message Header {
-      string key = 1;
-      string value = 2;
-    }
+	message Request {
+		message Header {
+			string key = 1;
+			string value = 2;
+		}
 
-    message Params {
-      // string json = 1;
-      //string query = 2;
-      //string form = 3;
-      //string others = 4;
-    }
+		message Params {
+			// string json = 1;
+			//string query = 2;
+			//string form = 3;
+			//string others = 4;
+		}
 
-    string rid = 1;
-    repeated Header headers = 2 [(gogoproto.nullable) = false];
-    string verb = 3;
-    string path = 4;
-    string raw_path = 5;
-    string host = 6;
-    string port = 7;
-    string remote_ip = 8;
-    string remote_port = 9;
-    string scheme = 10;
-    string user_agent = 11;
-    string referer = 12;
-    Params params = 13 [(gogoproto.nullable) = false];
-  }
+		string rid = 1;
+		repeated Header headers = 2 [(gogoproto.nullable) = false];
+		string verb = 3;
+		string path = 4;
+		string raw_path = 5;
+		string host = 6;
+		string port = 7;
+		string remote_ip = 8;
+		string remote_port = 9;
+		string scheme = 10;
+		string user_agent = 11;
+		string referer = 12;
+		Params params = 13 [(gogoproto.nullable) = false];
+	}
 
-  message Response {
-    uint32 status = 1;
-    uint32 content_length = 2;
-    string content_type = 3;
-  }
+	message Response {
+		uint32 status = 1;
+		uint32 content_length = 2;
+		string content_type = 3;
+	}
 
-  message Observed {
-    message Attack {
-      string rule_name = 1;
-      bool test = 2;
-      string infos = 3;
-      repeated string backtrace = 4;
-      google.protobuf.Timestamp time = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-      bool block = 6;
-    }
+	message Observed {
+		message Attack {
+			string rule_name = 1;
+			bool test = 2;
+			string infos = 3;
+			repeated string backtrace = 4;
+			google.protobuf.Timestamp time = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+			bool block = 6;
+		}
 
-    message SDKEvent {
-      // Helper message type to disable the face extension only on it and not in
-      // the entire SDKEvent message type. oneof + face is not supported.
-      message Args {
-        option (gogoproto.face) = false;
+		message SDKEvent {
+			// Helper message type to disable the face extension only on it and not in
+			// the entire SDKEvent message type. oneof + face is not supported.
+			message Args {
+				option (gogoproto.face) = false;
 
-        // Serialized into:
-        // [
-        //   "<name>",
-        //   {
-        //     "user_identifiers": <user_identifiers>,
-        //     "properties": <properties>
-        //   }
-        // ]
-        message Track {
-          message Options {
-            google.protobuf.Struct properties = 1 [(gogoproto.customtype) = "Struct"];
-            google.protobuf.Struct user_identifiers = 2 [(gogoproto.customtype) = "Struct"];
-          }
-          string event = 1; // inlined
-          Options options = 2; // inlined
-        }
+				// Serialized into:
+				// [
+				//   "<name>",
+				//   {
+				//     "user_identifiers": <user_identifiers>,
+				//     "properties": <properties>
+				//   }
+				// ]
+				message Track {
+					message Options {
+						google.protobuf.Struct properties = 1 [(gogoproto.customtype) = "Struct"];
+						google.protobuf.Struct user_identifiers = 2 [(gogoproto.customtype) = "Struct"];
+					}
+					string event = 1; // inlined
+					Options options = 2; // inlined
+				}
 
-        // Serialized into:
-        // [ <user_identifiers> ]
-        message Identify
-        {
-          google.protobuf.Struct user_identifiers = 1 [(gogoproto.customtype) = "Struct"]; // inlined
-        }
+				// Serialized into:
+				// [ <user_identifiers> ]
+				message Identify {
+					google.protobuf.Struct user_identifiers = 1 [(gogoproto.customtype) = "Struct"]; // inlined
+				}
 
-        oneof args {
-          Track    track = 1;
-          Identify identify = 2;
-        } // inlined
-      }
+				oneof args {
+					Track track = 1;
+					Identify identify = 2;
+				} // inlined
+			}
 
-      google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-      string name = 2;
-      Args args = 3 [(gogoproto.nullable) = false]; // inlined
-    }
+			google.protobuf.Timestamp time = 1 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+			string name = 2;
+			Args args = 3 [(gogoproto.nullable) = false]; // inlined
+		}
 
-    message Exception {
-      string message = 1;
-      string klass = 2;
-      string rule_name = 3;
-      bool test = 4;
-      string infos = 5;
-      repeated string backtrace = 6;
-      google.protobuf.Timestamp time = 7 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    }
+		message Exception {
+			string message = 1;
+			string klass = 2;
+			string rule_name = 3;
+			bool test = 4;
+			string infos = 5;
+			repeated string backtrace = 6;
+			google.protobuf.Timestamp time = 7 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+		}
 
-    message Observation {
-      string category = 1;
-      string key = 2;
-      string value = 3;
-      google.protobuf.Timestamp time = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    }
+		message Observation {
+			string category = 1;
+			string key = 2;
+			string value = 3;
+			google.protobuf.Timestamp time = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+		}
 
-    message DataPoint {
-      string rulespack_id = 1;
-      string rule_name = 2;
-      google.protobuf.Timestamp time = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-      string infos = 4;
-    }
+		message DataPoint {
+			string rulespack_id = 1;
+			string rule_name = 2;
+			google.protobuf.Timestamp time = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+			string infos = 4;
+		}
 
-    repeated Attack attacks = 1;
-    repeated SDKEvent sdk = 2;
-    repeated Exception sqreen_exceptions = 3;
-    repeated Observation observations = 4;
-    repeated DataPoint data_points = 5;
-  }
+		repeated Attack attacks = 1;
+		repeated SDKEvent sdk = 2;
+		repeated Exception sqreen_exceptions = 3;
+		repeated Observation observations = 4;
+		repeated DataPoint data_points = 5;
+	}
 
-  string version = 1;
-  string rulespack_id = 2 [(gogoproto.jsontag) = "rulespack_id"];
-  string client_ip = 3 [(gogoproto.jsontag) = "client_ip"];
-  Request request = 4 [(gogoproto.nullable) = false];
-  Response response = 5 [(gogoproto.nullable) = false];
-  Observed observed = 6 [(gogoproto.nullable) = false];
+	string version = 1;
+	string rulespack_id = 2 [(gogoproto.jsontag) = "rulespack_id"];
+	string client_ip = 3 [(gogoproto.jsontag) = "client_ip"];
+	Request request = 4 [(gogoproto.nullable) = false];
+	Response response = 5 [(gogoproto.nullable) = false];
+	Observed observed = 6 [(gogoproto.nullable) = false];
 }
 
 message ActionsPackResponse {
-  message Action {
-    message Params {
-      message UserIdentifiers {
-        map<string, string> user = 1;
-      }
+	message Action {
+		message Params {
+			message UserIdentifiers {
+				map<string, string> user = 1;
+			}
 
-      string url = 1;
-      repeated UserIdentifiers users = 2 [(gogoproto.nullable) = false];
-      repeated string ip_cidr = 3;
-    }
+			string url = 1;
+			repeated UserIdentifiers users = 2 [(gogoproto.nullable) = false];
+			repeated string ip_cidr = 3;
+		}
 
-    string action_id = 1;
-    string action = 2;
-    google.protobuf.Duration duration = 3 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
-    bool send_response = 4;
-    Params params = 5 [(gogoproto.nullable) = false];
-  }
+		string action_id = 1;
+		string action = 2;
+		google.protobuf.Duration duration = 3 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+		bool send_response = 4;
+		Params params = 5 [(gogoproto.nullable) = false];
+	}
 
-  repeated Action actions = 1 [(gogoproto.nullable) = false];
+	repeated Action actions = 1 [(gogoproto.nullable) = false];
 }
 
 message BlockedIPEventProperties {
-  message Output {
-    string ip_address = 1;
-  }
+	message Output {
+		string ip_address = 1;
+	}
 
-  string action_id = 1;
-  Output output = 2 [(gogoproto.nullable) = false];
+	string action_id = 1;
+	Output output = 2 [(gogoproto.nullable) = false];
+}
+
+message BlockedUserEventProperties {
+	message Output {
+		map<string, string> user = 1;
+	}
+
+	string action_id = 1;
+	Output output = 2 [(gogoproto.nullable) = false];
 }
