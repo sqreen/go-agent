@@ -212,7 +212,7 @@ func TestForUser(t *testing.T) {
 	t.Run("TrackEvent", func(t *testing.T) {
 		eventID := testlib.RandString(2, 50)
 		record.ExpectTrackEvent(eventID).Once()
-		record.ExpectIdentify(userID).Once()
+		record.ExpectWithUserIdentifiers(userID).Once()
 		sqEvent := sqUser.TrackEvent(eventID)
 		require.NotNil(t, sqEvent)
 

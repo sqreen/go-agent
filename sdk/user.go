@@ -62,23 +62,33 @@ func (ctx *UserHTTPRequestRecord) TrackSignup() *UserHTTPRequestRecord {
 	return ctx
 }
 
-// TrackEvent allows to send a custom security event related to the user. A call
-// to this method creates an event. Note that this method automatically
-// associates the user to the request, compared to the top-level `TrackEvent()`
-// that does not, unless using its `WithUserCredentials()` method. To avoid
-// confusion, the object returned does not provide `WithUserCredentials()`
-// method.
+// TrackEvent is a convenience method to send a custom security event
+// associated to the user. It is equivalent to using method
+// `WithUserIdentifiers()` of the regular `TrackEvent()` method.
+// So it is equivalent to
+// `sdk.FromContext(ctx).TrackEvent("event").WithUserIdentifiers(uid)`.
+// This alternative should be considered when performing multiple user events
+// as it allow to write a few less code.
+//
+// Usage example:
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //	sqUser := sdk.FromContext(ctx).ForUser(uid)
-//	sqUser.TrackEvent("my.event")
+//	sqUser.TrackSignup()
+//	if match, _ := sqUser.MatchSecurityResponse(); match {
+//		return
+//	}
+//	sqUser.TrackEvent("my.event.one")
+//	sqUser.TrackEvent("my.event.two")
+//	// ...
 //
 func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent {
 	if ctx == nil {
 		return nil
 	}
-	ctx.record.Identify(ctx.id)
-	return &UserHTTPRequestEvent{HTTPRequestEvent{ctx.record.NewCustomEvent(event)}}
+	sdkEvent := HTTPRequestEvent{ctx.record.NewCustomEvent(event)}
+	sdkEvent.WithUserIdentifiers(ctx.id)
+	return &UserHTTPRequestEvent{sdkEvent}
 }
 
 // Identify globally associates the given user-identifiers to the current
