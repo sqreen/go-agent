@@ -111,9 +111,10 @@ func (ctx *UserHTTPRequestRecord) TrackEvent(event string) *UserHTTPRequestEvent
 //	sqUser.Identify()
 //	if match, err := sqUser.MatchSecurityResponse(); match {
 //		// Return now to stop further handling the request and let Sqreen's
-//		// middleware apply and abort the request. The returned error may help
-//		// aborting from sub-functions by returning it to the callers when the
-//		// Go error handling pattern is used.
+//		// middleware apply the configured security response and abort the
+//		// request. The returned error may help aborting from sub-functions by
+//		// returning it to the callers when the Go error handling pattern is
+//		// used.
 //		return err
 //	}
 //
