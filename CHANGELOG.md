@@ -1,3 +1,63 @@
+# v0.1.0-beta.4
+
+This release adds the ability to block IP addresses or users into your Go web
+services by adding support for [Security Automation] according to your
+[playbooks] and their configured security responses.
+
+Note that redirecting users or IP addresses is not supported yet.
+
+## New Feature
+
+- [Security Automation]:  
+  It is now possible to block IP addresses or users. When a [playbook]
+  triggers, the agent is notified and gets the batch of security responses.
+  They are asynchronously stored into data structures optimized for fast lookup
+  and low memory usage. Middleware functions can thus perform fast lookups to
+  block requests in a few microseconds in order to exit request handlers as
+  fast as possible.
+
+  - Blocking IP addresses:  
+    No changes are required to block IP addresses. Our middleware functions
+    have been updated to block requests whose IP addresses match a security
+    response. The request is aborted with HTTP status code `500` and Sqreen's
+    default HTML information page.
+  
+  - Blocking users:   
+    Blocking users is performed by combining SDK methods `Identify()` and
+    `MatchSecurityResponse()` in order to firstly associate a user to the
+    current request, and secondly to check if it matches a security response.
+    When a security response matches, the request handler and any related
+    goroutines should be stopped as soon as possible.
+    
+    Usage example:
+    ```go
+    uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+    sqUser := sdk.FromContext(ctx).ForUser(uid)
+    sqUser.Identify()
+    if match, err := sqUser.MatchSecurityResponse(); match {
+      // Return now to stop further handling the request and let Sqreen's
+      // middleware apply the configured security response and abort the
+      // request. The returned error may help aborting from sub-functions by
+      // returning it to the callers when the Go error handling pattern is
+      // used.
+      return err
+    }
+    ```
+    
+    We strongly recommend to create a user-authentication middleware function
+    in order to seamlessly integrate user-blocking to all your
+    user-authenticated endpoints.
+
+## Fix
+
+- Escape the event type name to avoid JSON marshaling error. Note that this
+  case could not happen in previous agent versions. (#52)
+
+## Minor Change
+
+- Avoid performing multiple times commands within the same command batch. (51)
+
+
 # v0.1.0-beta.3
 
 ## New Features
@@ -123,3 +183,7 @@ share your impressions with us.
 
 - agent/config: avoid conflicts with global viper configs (#16).
 - sdk: better documentation with examples.
+
+[Security Automation]: https://docs.sqreen.com/security-automation/introduction/
+[playbook]: https://docs.sqreen.com/security-automation/introduction-playbooks
+[playbooks]: https://docs.sqreen.com/security-automation/introduction-playbooks
