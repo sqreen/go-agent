@@ -19,7 +19,7 @@ import (
 var (
 	logger = plog.NewLogger("test", nil)
 	cfg    = config.New(logger)
-	fuzzer = fuzz.New()
+	fuzzer = fuzz.New().Funcs(FuzzStruct)
 )
 
 func TestClient(t *testing.T) {
@@ -56,8 +56,6 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("AppBeat", func(t *testing.T) {
-		session := testlib.RandString(2, 50)
-
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
@@ -65,17 +63,10 @@ func TestClient(t *testing.T) {
 		response := NewRandomAppBeatResponse()
 		request := NewRandomAppBeatRequest()
 
-		headers := http.Header{
-			config.BackendHTTPAPIHeaderSession: []string{session},
-		}
-
-		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
+		client, server := initFakeServerSession(endpointCfg, request, response, statusCode, nil)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL(), cfg, logger)
-		g.Expect(err).NotTo(HaveOccurred())
-
-		res, err := client.AppBeat(request, session)
+		res, err := client.AppBeat(request)
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -83,49 +74,48 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("Batch", func(t *testing.T) {
-		t.Skip("need json unmarshaler")
-		session := testlib.RandString(2, 50)
-
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
 
 		request := NewRandomBatchRequest()
+		t.Logf("%#v", request)
 
-		headers := http.Header{
-			config.BackendHTTPAPIHeaderSession: []string{session},
-		}
-
-		server := initFakeServer(endpointCfg, request, nil, statusCode, headers)
+		client, server := initFakeServerSession(endpointCfg, request, nil, statusCode, nil)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL(), cfg, logger)
-		g.Expect(err).NotTo(HaveOccurred())
-
-		err = client.Batch(request, session)
+		err := client.Batch(request)
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
 	})
 
-	t.Run("AppLogout", func(t *testing.T) {
-		session := testlib.RandString(2, 50)
+	t.Run("ActionsPack", func(t *testing.T) {
+		statusCode := http.StatusOK
 
+		endpointCfg := &config.BackendHTTPAPIEndpoint.ActionsPack
+
+		response := NewRandomActionsPackResponse()
+
+		client, server := initFakeServerSession(endpointCfg, nil, response, statusCode, nil)
+		defer server.Close()
+
+		res, err := client.ActionsPack()
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+		g.Expect(res).Should(Equal(response))
+	})
+
+	t.Run("AppLogout", func(t *testing.T) {
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogout
 
-		headers := http.Header{
-			config.BackendHTTPAPIHeaderSession: []string{session},
-		}
-
-		server := initFakeServer(endpointCfg, nil, nil, statusCode, headers)
+		client, server := initFakeServerSession(endpointCfg, nil, nil, statusCode, nil)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL(), cfg, logger)
-		g.Expect(err).NotTo(HaveOccurred())
-
-		err = client.AppLogout(session)
+		err := client.AppLogout()
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -151,6 +141,55 @@ func initFakeServer(endpointCfg *config.HTTPAPIEndpoint, request, response inter
 	server := ghttp.NewServer()
 	server.AppendHandlers(ghttp.CombineHandlers(handlers...))
 	return server
+}
+
+func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, response interface{}, statusCode int, headers http.Header) (client *backend.Client, server *ghttp.Server) {
+	server = ghttp.NewServer()
+
+	loginReq := NewRandomAppLoginRequest()
+	loginRes := NewRandomAppLoginResponse()
+	loginRes.SessionId = testlib.RandString(2, 50)
+	loginRes.Status = true
+	server.AppendHandlers(ghttp.RespondWithJSONEncoded(http.StatusOK, loginRes))
+
+	client, err := backend.NewClient(server.URL(), cfg, logger)
+	if err != nil {
+		panic(err)
+	}
+
+	token := testlib.RandString(2, 50)
+	appName := testlib.RandString(2, 50)
+	_, err = client.AppLogin(loginReq, token, appName)
+	if err != nil {
+		panic(err)
+	}
+
+	if headers != nil {
+		headers.Add(config.BackendHTTPAPIHeaderSession, loginRes.SessionId)
+	} else {
+		headers = http.Header{
+			config.BackendHTTPAPIHeaderSession: []string{loginRes.SessionId},
+		}
+	}
+
+	handlers := []http.HandlerFunc{
+		ghttp.VerifyRequest(endpointCfg.Method, endpointCfg.URL),
+		ghttp.VerifyHeader(headers),
+	}
+
+	if request != nil {
+		handlers = append(handlers, ghttp.VerifyJSONRepresenting(request))
+	}
+
+	if response != nil {
+		handlers = append(handlers, ghttp.RespondWithJSONEncoded(statusCode, response))
+	} else {
+		handlers = append(handlers, ghttp.RespondWith(statusCode, nil))
+	}
+
+	server.AppendHandlers(ghttp.CombineHandlers(handlers...))
+
+	return client, server
 }
 
 func copyHeader(src http.Header, dst http.Header) {
@@ -235,4 +274,29 @@ func NewRandomBatchRequest() *api.BatchRequest {
 	pb := new(api.BatchRequest)
 	fuzzer.Fuzz(pb)
 	return pb
+}
+
+func NewRandomActionsPackResponse() *api.ActionsPackResponse {
+	pb := new(api.ActionsPackResponse)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
+func FuzzStruct(e *api.Struct, c fuzz.Continue) {
+	v := struct {
+		A string
+		B int
+		C float64
+		D bool
+		F []byte
+		G struct {
+			A string
+			B int
+			C float64
+			D bool
+			F []byte
+		}
+	}{}
+	c.Fuzz(&v)
+	e.Value = v
 }

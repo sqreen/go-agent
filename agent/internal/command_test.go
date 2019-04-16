@@ -53,6 +53,10 @@ func TestCommandManager(t *testing.T) {
 			Command:           "instrumentation_remove",
 			AgentExpectedCall: agent.ExpectInstrumentationDisable,
 		},
+		{
+			Command:           "actions_reload",
+			AgentExpectedCall: agent.ExpectActionsReload,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -142,6 +146,63 @@ func TestCommandManager(t *testing.T) {
 
 		results := mng.Do(commands)
 		require.Equal(t, results, expectedResults)
+		agent.AssertExpectations(t)
+	})
+
+	t.Run("repeated commands", func(t *testing.T) {
+		agent.Reset()
+
+		var (
+			commands        []api.CommandRequest
+			expectedResults = make(map[string]api.CommandResult)
+		)
+
+		// Generate the list of commands and the expected results
+		for _, tc := range testCases {
+			uuid := testlib.RandString(1, 126)
+			uuid2 := testlib.RandString(1, 126)
+
+			commands = append(commands, api.CommandRequest{
+				Uuid: uuid,
+				Name: tc.Command,
+			})
+
+			commands = append(commands, api.CommandRequest{
+				Uuid: uuid2,
+				Name: tc.Command,
+			})
+
+			expectedResults[uuid] = api.CommandResult{
+				Status: true,
+				Output: "",
+			}
+
+			expectedResults[uuid2] = api.CommandResult{
+				Status: true,
+				Output: "",
+			}
+
+			tc.AgentExpectedCall().Return(nil).Once() // Checks command are performed just once
+		}
+
+		// Also include wrong commands
+		for n := 0; n <= int(testlib.RandUint32(1)); n++ {
+			uuid := testlib.RandString(1, 126)
+
+			commands = append(commands, api.CommandRequest{
+				Uuid: uuid,
+				Name: testlib.RandString(1, 50),
+			})
+
+			expectedResults[uuid] = api.CommandResult{
+				Status: false,
+				Output: config.ErrorMessage_UnsupportedCommand,
+			}
+		}
+
+		results := mng.Do(commands)
+		require.Equal(t, results, expectedResults)
+		agent.AssertExpectations(t)
 	})
 }
 
@@ -163,10 +224,19 @@ func (a *agentMockup) InstrumentationDisable() error {
 	return ret.Error(0)
 }
 
+func (a *agentMockup) ActionsReload() error {
+	ret := a.Called()
+	return ret.Error(0)
+}
+
 func (a *agentMockup) ExpectInstrumentationEnable() *mock.Call {
 	return a.On("InstrumentationEnable")
 }
 
 func (a *agentMockup) ExpectInstrumentationDisable() *mock.Call {
 	return a.On("InstrumentationDisable")
+}
+
+func (a *agentMockup) ExpectActionsReload() *mock.Call {
+	return a.On("ActionsReload")
 }

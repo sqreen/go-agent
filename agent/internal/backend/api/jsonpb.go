@@ -3,8 +3,6 @@ package api
 import (
 	"encoding/json"
 	fmt "fmt"
-
-	fuzz "github.com/google/gofuzz"
 )
 
 var RequestRecordVersion = "20171208"
@@ -17,14 +15,6 @@ func (h *RequestRecord_Request_Header) MarshalJSON() ([]byte, error) {
 }
 
 type ListValue []interface{}
-
-func (l ListValue) Fuzz(c fuzz.Continue) {
-	var a []int
-	c.Fuzz(a)
-	for _, v := range a {
-		l = append(l, v)
-	}
-}
 
 func (l ListValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(([]interface{})(l))
@@ -45,17 +35,22 @@ type Struct struct {
 	Value interface{}
 }
 
-func (s *Struct) Fuzz(c fuzz.Continue) {
-	var v map[string]string
-	c.Fuzz(&v)
-	s.Value = v
-}
+// Static assert that the type implements the interface.
+var (
+	_ json.Marshaler   = Struct{}
+	_ json.Marshaler   = &Struct{}
+	_ json.Unmarshaler = &Struct{}
+)
 
-func (s *Struct) MarshalJSON() ([]byte, error) {
+func (s Struct) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.Value)
 }
 
-func (s *Struct) String() string {
+func (s *Struct) UnmarshalJSON(buf []byte) error {
+	return json.Unmarshal(buf, &s.Value)
+}
+
+func (s Struct) String() string {
 	return fmt.Sprintf("%+v", s.Value)
 }
 
@@ -71,7 +66,11 @@ func (e *BatchRequest_Event) MarshalJSON() ([]byte, error) {
 	if len(buf) <= 2 {
 		return buf, nil
 	}
-	buf = []byte(`{"event_type":"` + e.EventType + `",` + string(buf[1:]))
+	eventType, err := json.Marshal(e.EventType)
+	if err != nil {
+		return nil, err
+	}
+	buf = []byte(`{"event_type":` + string(eventType) + `,` + string(buf[1:]))
 	return buf, nil
 }
 

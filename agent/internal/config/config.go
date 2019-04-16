@@ -43,12 +43,13 @@ var (
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
-		AppLogin, AppLogout, AppBeat, Batch HTTPAPIEndpoint
+		AppLogin, AppLogout, AppBeat, Batch, ActionsPack HTTPAPIEndpoint
 	}{
-		AppLogin:  HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
-		AppLogout: HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
-		AppBeat:   HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
-		Batch:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
+		AppLogin:    HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
+		AppLogout:   HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
+		AppBeat:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
+		Batch:       HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
+		ActionsPack: HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
 	}
 
 	// Header name of the API token.

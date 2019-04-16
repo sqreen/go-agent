@@ -1,3 +1,7 @@
+// Copyright 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package internal
 
 import (
@@ -12,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/types"
@@ -24,21 +29,24 @@ type HTTPRequestRecord struct {
 	eventsLock   sync.Mutex
 	events       []*HTTPRequestEvent
 	identifyOnce sync.Once
-	agent        *Agent
-	shouldSend   bool
-}
-
-func (a *Agent) newHTTPRequestRecord(req *http.Request) *HTTPRequestRecord {
-	return &HTTPRequestRecord{
-		request: req,
-		agent:   a,
-	}
+	// User-identifiers globally associated to this request using `Identify()`
+	userID map[string]string
+	// The last non-nil security response is cached and returned to every
+	// subsequent calls to method `SecurityResponse()`.
+	lastSecurityResponseHandler http.Handler
+	// The last non-nil user security response is cached and returned to every
+	// subsequent calls to method `UserSecurityResponse()`. Middleware functions
+	// can therefore observe the same result with `UserSecurityResponse()` as in
+	// the request handler with `MatchSecurityResponse()`.
+	lastUserSecurityResponseHandler http.Handler
+	agent                           *Agent
+	shouldSend                      bool
 }
 
 type HTTPRequestEvent struct {
 	method          string
 	event           string
-	properties      EventPropertyMap
+	properties      types.EventProperties
 	userIdentifiers EventUserIdentifiersMap
 	timestamp       time.Time
 }
@@ -51,7 +59,7 @@ type userEventFace interface {
 type userEvent struct {
 	userIdentifiers EventUserIdentifiersMap
 	timestamp       time.Time
-	ip              string
+	ip              net.IP
 }
 
 type authUserEvent struct {
@@ -71,7 +79,7 @@ func (e *authUserEvent) bucketID() (string, error) {
 
 type userMetricKey struct {
 	id EventUserIdentifiersMap
-	ip string
+	ip net.IP
 }
 
 func (k *userMetricKey) bucketID() (string, error) {
@@ -84,7 +92,7 @@ func (k *userMetricKey) bucketID() (string, error) {
 		IP   string          `json:"ip"`
 	}{
 		Keys: keys,
-		IP:   k.ip,
+		IP:   k.ip.String(),
 	}
 	buf, err := json.Marshal(&v)
 	return string(buf), err
@@ -130,8 +138,45 @@ func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 			timestamp:       time.Now(),
 			userIdentifiers: id,
 		}
+		// Globally associate these user-identifiers with the request.
+		ctx.userID = id
 		ctx.addSilentEvent(evt)
 	})
+}
+
+func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
+	if ctx.lastSecurityResponseHandler != nil {
+		return ctx.lastSecurityResponseHandler
+	}
+	agent := ctx.agent
+	ip := getClientIP(ctx.request, agent.config)
+	action, exists, err := agent.actors.FindIP(ip)
+	if err != nil {
+		agent.logger.Error(err)
+		return nil
+	}
+	if !exists {
+		return nil
+	}
+	ctx.lastSecurityResponseHandler = actor.NewIPActionHTTPHandler(action, ip)
+	return ctx.lastSecurityResponseHandler
+}
+
+func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
+	userID := ctx.userID
+	if userID == nil {
+		return nil
+	}
+	if ctx.lastUserSecurityResponseHandler != nil {
+		return ctx.lastUserSecurityResponseHandler
+	}
+	agent := ctx.agent
+	action, exists := agent.actors.FindUser(userID)
+	if !exists {
+		return nil
+	}
+	ctx.lastUserSecurityResponseHandler = actor.NewUserActionHTTPHandler(action, userID)
+	return ctx.lastUserSecurityResponseHandler
 }
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
@@ -201,7 +246,7 @@ func (e *HTTPRequestEvent) WithTimestamp(t time.Time) {
 	e.timestamp = t
 }
 
-func (e *HTTPRequestEvent) WithProperties(p map[string]string) {
+func (e *HTTPRequestEvent) WithProperties(p types.EventProperties) {
 	if e == nil {
 		return
 	}
@@ -241,9 +286,10 @@ func (e *HTTPRequestEvent) GetOptions() *api.RequestRecord_Observed_SDKEvent_Arg
 }
 
 func (e *HTTPRequestEvent) GetProperties() *api.Struct {
-	if len(e.properties) == 0 {
+	if e.properties == nil {
 		return nil
 	}
+
 	return &api.Struct{e.properties}
 }
 
@@ -278,7 +324,7 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request, r.ctx.agent.config)
+	return getClientIP(r.ctx.request, r.ctx.agent.config).String()
 }
 
 type getClientIPConfigFace interface {
@@ -286,7 +332,7 @@ type getClientIPConfigFace interface {
 	HTTPClientIPHeaderFormat() string
 }
 
-func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
+func getClientIP(req *http.Request, cfg getClientIPConfigFace) net.IP {
 	var privateIP net.IP
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
@@ -322,7 +368,7 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 
 			if value != "" {
 				if ip := check(value); ip != nil {
-					return ip.String()
+					return ip
 				}
 			}
 		}
@@ -331,22 +377,22 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) string {
 	for _, key := range config.IPRelatedHTTPHeaders {
 		value := req.Header.Get(key)
 		if ip := check(value); ip != nil {
-			return ip.String()
+			return ip
 		}
 	}
 
-	remoteIP, _ := parseAddr(req.RemoteAddr)
-	if remoteIP == "" {
+	remoteIPStr, _ := splitHostPort(req.RemoteAddr)
+	if remoteIPStr == "" {
 		if privateIP != nil {
-			return privateIP.String()
+			return privateIP
 		}
-		return ""
+		return nil
 	}
 
-	if privateIP == nil || isGlobal(net.ParseIP(remoteIP)) {
+	if remoteIP := net.ParseIP(remoteIPStr); remoteIP != nil && (privateIP == nil || isGlobal(remoteIP)) {
 		return remoteIP
 	}
-	return privateIP.String()
+	return privateIP
 }
 
 func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
@@ -392,8 +438,8 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 		}
 	}
 
-	remoteIP, remotePort := parseAddr(req.RemoteAddr)
-	_, hostPort := parseAddr(req.Host)
+	remoteIP, remotePort := splitHostPort(req.RemoteAddr)
+	_, hostPort := splitHostPort(req.Host)
 
 	var scheme string
 	if req.TLS != nil {
@@ -476,7 +522,9 @@ func isPrivate(ip net.IP) bool {
 	return false
 }
 
-func parseAddr(addr string) (host string, port string) {
+// splitHostPort splits a network address of the form `host:port` or
+// `[host]:port` into `host` and `port`.
+func splitHostPort(addr string) (host string, port string) {
 	i := strings.LastIndex(addr, "]:")
 	if i != -1 {
 		// ipv6
