@@ -1,5 +1,17 @@
+go:1.10:
+  stage: test
+  image: golang:1.10
+  script:
+    - make test
+
 go:1.11:
   stage: test
   image: golang:1.11
+  script:
+    - make test
+
+go:1.12:
+  stage: test
+  image: golang:1.12
   script:
     - make test
