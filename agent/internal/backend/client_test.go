@@ -23,7 +23,7 @@ import (
 var (
 	logger = plog.NewLogger("test", nil)
 	cfg    = config.New(logger)
-	fuzzer = fuzz.New().Funcs(FuzzStruct)
+	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest)
 )
 
 func TestClient(t *testing.T) {
@@ -303,4 +303,9 @@ func FuzzStruct(e *api.Struct, c fuzz.Continue) {
 	}{}
 	c.Fuzz(&v)
 	e.Value = v
+}
+
+func FuzzCommandRequest(e *api.CommandRequest, c fuzz.Continue) {
+	c.Fuzz(&e.Name)
+	c.Fuzz(&e.Uuid)
 }
