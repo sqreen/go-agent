@@ -30,13 +30,13 @@ type blockAction struct {
 	ID string
 }
 
-func newBlockAction(id string) *blockAction {
-	return &blockAction{
+func newBlockAction(id string) blockAction {
+	return blockAction{
 		ID: id,
 	}
 }
 
-func (a *blockAction) ActionID() string {
+func (a blockAction) ActionID() string {
 	return a.ID
 }
 
