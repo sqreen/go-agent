@@ -22,7 +22,7 @@ type HTTPRequestRecord struct {
 //
 type EventUserIdentifiersMap map[string]string
 
-// FromContext allows to access the HTTPRequestRecord from request handlers if
+// FromContext allows to access the request record from request handlers if
 // present, and nil otherwise. The value is stored in handler contexts by the
 // middleware function of the framework, and is of type *HTTPRequestRecord. It
 // is possible to use it with framework's contexts when they implement Go's
@@ -78,9 +78,14 @@ func (ctx *HTTPRequestRecord) TrackEvent(event string) *HTTPRequestEvent {
 	return &HTTPRequestEvent{ctx.record.NewCustomEvent(event)}
 }
 
-// ForUser returns a new SDK context for the given user uniquely identified by
-// `id`. Its methods allow to track security events related to this user. A call
-// to this method does not create a new event.
+// ForUser returns a new user request record for the given user `id`. Its
+// methods allow to perform security events related to this user. A call to
+// this method does not create a new event.
+//
+// Note that it doesn't associate the user to the request unless `Identify()`
+// is explicitly called.
+//
+// Usage example:
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //	sqUser := sdk.FromContext(ctx).ForUser(uid)

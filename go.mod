@@ -8,6 +8,7 @@ require (
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/google/uuid v1.1.0
 	github.com/json-iterator/go v1.1.5 // indirect
+	github.com/kentik/patricia v0.0.0-20190405133149-20eb46c597b3
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/labstack/gommon v0.2.8 // indirect
 	github.com/mattn/go-colorable v0.0.9 // indirect
