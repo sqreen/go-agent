@@ -2,15 +2,6 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-// Actor store
-//
-// The actor store is a central agent store associating actor IP addresses and
-// user identifiers to security actions provided by the backend. Since it is
-// used in HTTP request handlers, it is designed to be as efficient as possible
-// to avoid slowing down requests. An important design constraint is the fact
-// that the sooner a request is handled, the sooner its memory is released
-// (goroutines and memory they used). So time-efficiency is considered as a
-// better general memory-efficiency here.
 package actor
 
 import (

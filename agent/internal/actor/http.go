@@ -2,13 +2,6 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-// Security Action HTTP Handlers
-//
-// Constructors `NewUserActionHTTPHandler()` and `NewIPActionHTTPHandler()`
-// allow to create a `http.Handler` from an action that matched a user or an IP
-// address. They allow to apply the expected security response to the request's
-// response. The user and IP address are used as properties of events performed
-// by handlers.
 package actor
 
 import (
