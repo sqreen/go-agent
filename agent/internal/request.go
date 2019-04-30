@@ -41,6 +41,8 @@ type HTTPRequestRecord struct {
 	lastUserSecurityResponseHandler http.Handler
 	agent                           *Agent
 	shouldSend                      bool
+	// clientIP value deduced from the request headers.
+	clientIP net.IP
 }
 
 type HTTPRequestEvent struct {
@@ -149,7 +151,7 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 		return ctx.lastSecurityResponseHandler
 	}
 	agent := ctx.agent
-	ip := getClientIP(ctx.request, agent.config)
+	ip := ctx.clientIP
 	action, exists, err := agent.actors.FindIP(ip)
 	if err != nil {
 		agent.logger.Error(err)
@@ -188,7 +190,7 @@ func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess boo
 	event := &authUserEvent{
 		loginSuccess: loginSuccess,
 		userEvent: &userEvent{
-			ip:              getClientIP(ctx.request, ctx.agent.config),
+			ip:              ctx.clientIP,
 			userIdentifiers: id,
 			timestamp:       time.Now(),
 		},
@@ -204,7 +206,7 @@ func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 
 	event := &signupUserEvent{
 		userEvent: &userEvent{
-			ip:              getClientIP(ctx.request, ctx.agent.config),
+			ip:              ctx.clientIP,
 			userIdentifiers: id,
 			timestamp:       time.Now(),
 		},
@@ -300,6 +302,38 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 	return &api.Struct{e.userIdentifiers}
 }
 
+// WhitelistedHTTPRequestRecord is a request record whose methods do nothing in
+// order to whitelist the request.
+type WhitelistedHTTPRequestRecord struct {
+}
+
+func (WhitelistedHTTPRequestRecord) NewCustomEvent(string) types.CustomEvent {
+	return nil
+}
+
+func (WhitelistedHTTPRequestRecord) NewUserSignup(map[string]string) {
+}
+
+func (WhitelistedHTTPRequestRecord) NewUserAuth(map[string]string, bool) {
+}
+
+func (WhitelistedHTTPRequestRecord) Identify(map[string]string) {
+}
+
+func (WhitelistedHTTPRequestRecord) SecurityResponse() http.Handler {
+	return nil
+}
+
+func (WhitelistedHTTPRequestRecord) UserSecurityResponse() http.Handler {
+	return nil
+}
+
+func (WhitelistedHTTPRequestRecord) Close() {
+}
+
+// httpRequestRecord is an adapter type implementing interface
+// `api.RequestRecordFace` to serialize an HTTP request record to the backend
+// API message format.
 type httpRequestRecord struct {
 	ctx         *HTTPRequestRecord
 	rulespackID string
@@ -324,7 +358,7 @@ func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
 }
 
 func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request, r.ctx.agent.config).String()
+	return r.ctx.clientIP.String()
 }
 
 type getClientIPConfigFace interface {

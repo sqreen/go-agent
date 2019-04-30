@@ -67,9 +67,21 @@ func (a *Agent) Start() {
 }
 
 func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
+	clientIP := getClientIP(req, a.config)
+	whitelisted, matched, err := a.actors.IsIPWhitelisted(clientIP)
+	if err != nil {
+		a.logger.Error(err)
+		whitelisted = false
+	}
+	if whitelisted {
+		a.addWhitelistEvent(matched)
+		return &WhitelistedHTTPRequestRecord{
+		}
+	}
 	return &HTTPRequestRecord{
-		request: req,
-		agent:   a,
+		request:  req,
+		agent:    a,
+		clientIP: clientIP,
 	}
 }
 
