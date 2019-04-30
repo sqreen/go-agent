@@ -179,6 +179,10 @@ func (a *Agent) ActionsReload() error {
 	return a.actors.SetActions(actions.Actions)
 }
 
+func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
+	return a.actors.SetCIDRWhitelist(cidrs)
+}
+
 func (a *Agent) GracefulStop() {
 	if a.config.Disable() {
 		return

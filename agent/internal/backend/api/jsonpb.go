@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	fmt "fmt"
+	"fmt"
 )
 
 var RequestRecordVersion = "20171208"

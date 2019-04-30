@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -43,7 +44,10 @@ func TestCommandManager(t *testing.T) {
 
 	testCases := []struct {
 		Command           string
-		AgentExpectedCall func() *mock.Call
+		AgentExpectedCall func(args ...interface{}) *mock.Call
+		ExpectedArgs      []interface{}
+		Args              []json.RawMessage
+		BadArgs           [][]json.RawMessage
 	}{
 		{
 			Command:           "instrumentation_enable",
@@ -57,6 +61,18 @@ func TestCommandManager(t *testing.T) {
 			Command:           "actions_reload",
 			AgentExpectedCall: agent.ExpectActionsReload,
 		},
+		{
+			Command:           "ips_whitelist",
+			Args:              []json.RawMessage{json.RawMessage(`["a","b","c"]`)},
+			ExpectedArgs:      []interface{}{[]string{"a", "b", "c"}},
+			AgentExpectedCall: agent.ExpectSetCIDRWhitelist,
+			BadArgs: [][]json.RawMessage{
+				{json.RawMessage(`"wrong type"`)},
+				{json.RawMessage(`[1,2,3]`)},
+				{json.RawMessage(`["a","b","c"]`), json.RawMessage(`"wrong count"`)},
+				{json.RawMessage(`["a", "b", "c"]`), json.RawMessage(`["a", "b", "c"]`)},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -64,33 +80,39 @@ func TestCommandManager(t *testing.T) {
 			t.Run("without errors", func(t *testing.T) {
 				agent.Reset()
 
-				tc.AgentExpectedCall().Return(nil).Once()
+				tc.AgentExpectedCall(tc.ExpectedArgs...).Return(nil).Once()
 				uuid := testlib.RandString(1, 126)
 				results := mng.Do([]api.CommandRequest{
 					{
-						Uuid: uuid,
-						Name: tc.Command,
+						Uuid:   uuid,
+						Name:   tc.Command,
+						Params: tc.Args,
 					},
 				})
-				require.Equal(t, results, map[string]api.CommandResult{
-					uuid: api.CommandResult{
-						Status: true,
-						Output: "",
+				require.Equal(
+					t,
+					map[string]api.CommandResult{
+						uuid: api.CommandResult{
+							Status: true,
+							Output: "",
+						},
 					},
-				})
+					results,
+				)
 				agent.AssertExpectations(t)
 			})
 
-			t.Run("with error", func(t *testing.T) {
+			t.Run("with errors", func(t *testing.T) {
 				agent.Reset()
 
 				errorMsg := testlib.RandString(1, 126)
-				tc.AgentExpectedCall().Return(errors.New(errorMsg)).Once()
+				tc.AgentExpectedCall(tc.ExpectedArgs...).Return(errors.New(errorMsg)).Once()
 				uuid := testlib.RandString(1, 126)
 				results := mng.Do([]api.CommandRequest{
 					{
-						Uuid: uuid,
-						Name: tc.Command,
+						Uuid:   uuid,
+						Name:   tc.Command,
+						Params: tc.Args,
 					},
 				})
 				require.Equal(t, results, map[string]api.CommandResult{
@@ -101,6 +123,27 @@ func TestCommandManager(t *testing.T) {
 				})
 				agent.AssertExpectations(t)
 			})
+
+			if len(tc.BadArgs) > 0 {
+				t.Run("with args errors", func(t *testing.T) {
+					for _, args := range tc.BadArgs {
+						args := args // new scope
+						agent.Reset()
+						// No agent calls are expected
+
+						uuid := testlib.RandString(1, 126)
+						results := mng.Do([]api.CommandRequest{
+							{
+								Uuid:   uuid,
+								Name:   tc.Command,
+								Params: args,
+							},
+						})
+						require.False(t, results[uuid].Status)
+						agent.AssertExpectations(t)
+					}
+				})
+			}
 		})
 	}
 
@@ -117,8 +160,9 @@ func TestCommandManager(t *testing.T) {
 			uuid := testlib.RandString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
-				Uuid: uuid,
-				Name: tc.Command,
+				Uuid:   uuid,
+				Name:   tc.Command,
+				Params: tc.Args,
 			})
 
 			expectedResults[uuid] = api.CommandResult{
@@ -126,7 +170,7 @@ func TestCommandManager(t *testing.T) {
 				Output: "",
 			}
 
-			tc.AgentExpectedCall().Return(nil).Once()
+			tc.AgentExpectedCall(tc.ExpectedArgs...).Return(nil).Once()
 		}
 
 		// Also include wrong commands
@@ -163,13 +207,15 @@ func TestCommandManager(t *testing.T) {
 			uuid2 := testlib.RandString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
-				Uuid: uuid,
-				Name: tc.Command,
+				Uuid:   uuid,
+				Name:   tc.Command,
+				Params: tc.Args,
 			})
 
 			commands = append(commands, api.CommandRequest{
-				Uuid: uuid2,
-				Name: tc.Command,
+				Uuid:   uuid2,
+				Name:   tc.Command,
+				Params: tc.Args,
 			})
 
 			expectedResults[uuid] = api.CommandResult{
@@ -182,7 +228,7 @@ func TestCommandManager(t *testing.T) {
 				Output: "",
 			}
 
-			tc.AgentExpectedCall().Return(nil).Once() // Checks command are performed just once
+			tc.AgentExpectedCall(tc.ExpectedArgs...).Return(nil).Once() // Checks command are performed just once
 		}
 
 		// Also include wrong commands
@@ -229,14 +275,23 @@ func (a *agentMockup) ActionsReload() error {
 	return ret.Error(0)
 }
 
-func (a *agentMockup) ExpectInstrumentationEnable() *mock.Call {
+func (a *agentMockup) SetCIDRWhitelist(cidrs []string) error {
+	ret := a.Called(cidrs)
+	return ret.Error(0)
+}
+
+func (a *agentMockup) ExpectInstrumentationEnable(...interface{}) *mock.Call {
 	return a.On("InstrumentationEnable")
 }
 
-func (a *agentMockup) ExpectInstrumentationDisable() *mock.Call {
+func (a *agentMockup) ExpectInstrumentationDisable(...interface{}) *mock.Call {
 	return a.On("InstrumentationDisable")
 }
 
-func (a *agentMockup) ExpectActionsReload() *mock.Call {
+func (a *agentMockup) ExpectActionsReload(...interface{}) *mock.Call {
 	return a.On("ActionsReload")
+}
+
+func (a *agentMockup) ExpectSetCIDRWhitelist(args ...interface{}) *mock.Call {
+	return a.On("SetCIDRWhitelist", args...)
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"time"
 	//	_ "github.com/gogo/protobuf/gogoproto"
 	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
@@ -48,9 +49,10 @@ type AppLoginResponse_Feature struct {
 }
 
 type CommandRequest struct {
-	Name   string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
-	Params []string `protobuf:"bytes,2,rep,name=params,proto3" json:"params"`
-	Uuid   string   `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid"`
+	Name string `json:"name"`
+	Uuid string `json:"uuid"`
+	// Params: parse and validate the params when used.
+	Params []json.RawMessage `json:"params"`
 }
 
 type CommandResult struct {
@@ -451,33 +453,6 @@ func NewAppLoginResponse_FeatureFromFace(that AppLoginResponse_FeatureFace) *App
 	this.BatchSize = that.GetBatchSize()
 	this.MaxStaleness = that.GetMaxStaleness()
 	this.HeartbeatDelay = that.GetHeartbeatDelay()
-	return this
-}
-
-type CommandRequestFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
-	GetName() string
-	GetParams() []string
-	GetUuid() string
-}
-
-func (this *CommandRequest) GetName() string {
-	return this.Name
-}
-
-func (this *CommandRequest) GetParams() []string {
-	return this.Params
-}
-
-func (this *CommandRequest) GetUuid() string {
-	return this.Uuid
-}
-
-func NewCommandRequestFromFace(that CommandRequestFace) *CommandRequest {
-	this := &CommandRequest{}
-	this.Name = that.GetName()
-	this.Params = that.GetParams()
-	this.Uuid = that.GetUuid()
 	return this
 }
 
