@@ -61,3 +61,18 @@ func (a *timedAction) Expired() bool {
 	// Is the current time after the deadline?
 	return time.Now().After(a.deadline)
 }
+
+type whitelistAction struct {
+	// The CIDR is used as action ID
+	CIDR string
+}
+
+func newWhitelistAction(cidr string) whitelistAction {
+	return whitelistAction{
+		CIDR: cidr,
+	}
+}
+
+func (a whitelistAction) ActionID() string {
+	return a.CIDR
+}
