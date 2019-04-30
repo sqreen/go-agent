@@ -2,12 +2,6 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-// Security Actions
-//
-// Security actions are stored using structures implementing the Action
-// interface. Actions can have a time duration by implementing the Timed
-// interface.
-//
 package actor
 
 import (
