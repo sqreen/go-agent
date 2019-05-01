@@ -2,20 +2,24 @@ variables:
   GIT_REPO: github.com/sqreen/go-agent
   GO_PACKAGE_PATH_WITHOUT_GOMODULES: /go/src/$GIT_REPO
 
-go:1.9:
+test:1.9:
   extends: .test-without-gomodules
   image: golang:1.9
 
-go:1.10:
+test:1.10:
   extends: .test-without-gomodules
   image: golang:1.10
 
-go:1.11:
+test:1.11:
   extends: .test
   image: golang:1.11
 
-go:1.12:
+test:1.12:
   extends: .test
+  image: golang:1.12
+
+coverage:1.12:
+  extends: .coverage
   image: golang:1.12
 
 .test:
@@ -32,3 +36,10 @@ go:1.12:
     - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
     # Download dependencies, including thos required by the tests
     - go get -t -d -v ./...
+
+
+.coverage:
+  stage: test
+  script:
+    - make test-coverage
+    - bash <(curl -s https://codecov.io/bash)
