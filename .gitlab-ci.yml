@@ -3,36 +3,32 @@ variables:
   GO_PACKAGE_PATH_WITHOUT_GOMODULES: /go/src/$GIT_REPO
 
 go:1.9:
-  stage: test
+  extends: .test-without-gomodules
   image: golang:1.9
-  before_script:
-    - mkdir -p $(dirname $GO_PACKAGE_PATH_WITHOUT_GOMODULES)
-    - ln -s $CI_PROJECT_DIR $GO_PACKAGE_PATH_WITHOUT_GOMODULES
-    - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
-    - go get -t -d -v ./...
-  script:
-    - make test
-
 
 go:1.10:
-  stage: test
+  extends: .test-without-gomodules
   image: golang:1.10
+
+go:1.11:
+  extends: .test
+  image: golang:1.11
+
+go:1.12:
+  extends: .test
+  image: golang:1.12
+
+.test:
+  stage: test
+  script:
+    - make test
+
+.test-without-gomodules:
+  extends: .test
   before_script:
+    # Prepare the expected GOPATH
     - mkdir -p $(dirname $GO_PACKAGE_PATH_WITHOUT_GOMODULES)
     - ln -s $CI_PROJECT_DIR $GO_PACKAGE_PATH_WITHOUT_GOMODULES
     - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
+    # Download dependencies, including thos required by the tests
     - go get -t -d -v ./...
-  script:
-    - make test
-
-go:1.11:
-  stage: test
-  image: golang:1.11
-  script:
-    - make test
-
-go:1.12:
-  stage: test
-  image: golang:1.12
-  script:
-    - make test
