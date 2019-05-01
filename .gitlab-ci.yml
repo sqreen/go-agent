@@ -2,6 +2,18 @@ variables:
   GIT_REPO: github.com/sqreen/go-agent
   GO_PACKAGE_PATH_WITHOUT_GOMODULES: /go/src/$GIT_REPO
 
+go:1.9:
+  stage: test
+  image: golang:1.9
+  before_script:
+    - mkdir -p $(dirname $GO_PACKAGE_PATH_WITHOUT_GOMODULES)
+    - ln -s $CI_PROJECT_DIR $GO_PACKAGE_PATH_WITHOUT_GOMODULES
+    - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
+    - go get -t -d -v ./...
+  script:
+    - make test
+
+
 go:1.10:
   stage: test
   image: golang:1.10
