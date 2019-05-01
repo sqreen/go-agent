@@ -75,7 +75,7 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 #------------------------------------------------------------------------------
 
 .PHONY: test
-test: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+test: $(needs-dev-container) $(needs-protobufs)
 	$(call dockerize, go test -v $(test/options) $(test/packages))
 help += test
 
