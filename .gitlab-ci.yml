@@ -18,14 +18,16 @@ test:1.12:
   extends: .test
   image: golang:1.12
 
-coverage:1.12:
-  extends: .coverage
-  image: golang:1.12
+coverage:
+  image: golang:1
+  script:
+    - make test-coverage
+    - bash <(curl -s https://codecov.io/bash)
 
 .test:
-  stage: test
+  extends: .test
   script:
-    - make test
+    - make test-coverage
 
 .test-without-gomodules:
   extends: .test
@@ -36,10 +38,3 @@ coverage:1.12:
     - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
     # Download dependencies, including thos required by the tests
     - go get -t -d -v ./...
-
-
-.coverage:
-  stage: test
-  script:
-    - make test-coverage
-    - bash <(curl -s https://codecov.io/bash)
