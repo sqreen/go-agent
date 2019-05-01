@@ -85,12 +85,12 @@ test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 help += test-coverage
 
 .PHONY: test-race
-test-race: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+test-race: $(needs-dev-container) $(needs-protobufs)
 	$(call dockerize, go test -v -race $(test/options) $(test/packages))
 help += test-race
 
 .PHONY: benchmark
-benchmark: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
+benchmark: $(needs-dev-container) $(needs-protobufs)
 	$(call dockerize, go test -v -run=notests -bench=$(benchmark) $(test/options) $(test/packages))
 help += benchmark
 
