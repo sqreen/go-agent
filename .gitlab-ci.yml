@@ -27,7 +27,7 @@ coverage:
 
 .test:
   script:
-    - make test
+    - make test test-race benchmark
 
 .test-without-gomodules:
   extends: .test
