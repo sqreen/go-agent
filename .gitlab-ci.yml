@@ -9,7 +9,7 @@ go:1.10:
     - mkdir -p $(dirname $GO_PACKAGE_PATH_WITHOUT_GOMODULES)
     - ln -s $CI_PROJECT_DIR $GO_PACKAGE_PATH_WITHOUT_GOMODULES
     - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
-    - go get -d -v ./...
+    - go get -t -d -v ./...
   script:
     - make test
 
