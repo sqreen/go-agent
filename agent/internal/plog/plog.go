@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"sync"
+	"strings"
 )
 
 // LogLevel represents the log level. Higher levels include lowers.
@@ -27,8 +27,6 @@ const (
 	Panic
 	// Error and Panic logs.
 	Error
-	// Warn to Panic logs.
-	Warn
 	// Info to Panic logs.
 	Info
 	// Debug to Panic logs.
@@ -36,14 +34,10 @@ const (
 )
 
 const (
-	// Disabled value.
-	DisabledString = "disabled"
 	// Panic logs.
-	PanicString = "fatal"
+	PanicString = "panic"
 	// Error and Panic logs.
 	ErrorString = "error"
-	// Warn to Panic logs.
-	WarnString = "warn"
 	// Info to Panic logs.
 	InfoString = "info"
 	// Debug to Panic logs.
@@ -54,11 +48,9 @@ const (
 func (l LogLevel) String() string {
 	switch l {
 	case Panic:
-		return "fatal"
+		return "panic"
 	case Error:
 		return "error"
-	case Warn:
-		return "warn"
 	case Info:
 		return "info"
 	case Debug:
@@ -71,14 +63,13 @@ func (l LogLevel) String() string {
 type Logger struct {
 	PanicLogger
 	ErrorLogger
-	WarnLogger
 	InfoLogger
 	DebugLogger
 
 	output    io.Writer
 	namespace string
 	cache     struct {
-		fatal, error, warn, info, debug logger
+		panic, error, info, debug logger
 	}
 }
 
@@ -91,12 +82,6 @@ type PanicLogger interface {
 type ErrorLogger interface {
 	Error(v ...interface{})
 	Errorf(format string, v ...interface{})
-	OutputSetter
-}
-
-type WarnLogger interface {
-	Warn(v ...interface{})
-	Warnf(format string, v ...interface{})
 	OutputSetter
 }
 
@@ -122,7 +107,6 @@ func NewLogger(namespace string, parent *Logger) *Logger {
 	logger := &Logger{
 		PanicLogger: disabledLogger{},
 		ErrorLogger: disabledLogger{},
-		WarnLogger:  disabledLogger{},
 		InfoLogger:  disabledLogger{},
 		DebugLogger: disabledLogger{},
 		namespace:   namespace,
@@ -135,48 +119,7 @@ func NewLogger(namespace string, parent *Logger) *Logger {
 		logger.SetLevel(parent.getLevel())
 		logger.SetOutput(parent.output)
 	}
-
-	lock.Lock()
-	defer lock.Unlock()
-	loggers[namespace] = logger
 	return logger
-}
-
-// SetOutput sets the output of all loggers created so far.
-func SetOutput(output io.Writer) {
-	for _, l := range loggers {
-		l.SetOutput(output)
-	}
-}
-
-// SetLevelFromString sets the logging level of all loggers created so far.
-func SetLevelFromString(level string) {
-	lvl := Disabled
-	switch level {
-	case DebugString:
-		lvl = Debug
-		break
-	case InfoString:
-		lvl = Info
-		break
-	case WarnString:
-		lvl = Warn
-		break
-	case ErrorString:
-		lvl = Error
-		break
-	case PanicString:
-		lvl = Panic
-		break
-	}
-	SetLevel(lvl)
-}
-
-// SetLevel sets the logging level of all loggers created so far.
-func SetLevel(level LogLevel) {
-	for _, l := range loggers {
-		l.SetLevel(level)
-	}
 }
 
 // SetOutput sets the output of the logger. When `nil`, the logger is disabled
@@ -189,7 +132,6 @@ func (l *Logger) SetOutput(output io.Writer) {
 	}
 	l.PanicLogger.SetOutput(output)
 	l.ErrorLogger.SetOutput(output)
-	l.WarnLogger.SetOutput(output)
 	l.InfoLogger.SetOutput(output)
 	l.DebugLogger.SetOutput(output)
 }
@@ -204,9 +146,6 @@ func (l *Logger) SetLevelFromString(level string) {
 		break
 	case InfoString:
 		lvl = Info
-		break
-	case WarnString:
-		lvl = Warn
 		break
 	case ErrorString:
 		lvl = Error
@@ -229,10 +168,6 @@ func (l *Logger) getLevel() LogLevel {
 		return Info
 	}
 
-	if _, disabled := l.WarnLogger.(disabledLogger); !disabled {
-		return Warn
-	}
-
 	if _, disabled := l.ErrorLogger.(disabledLogger); !disabled {
 		return Error
 	}
@@ -251,42 +186,30 @@ func (l *Logger) SetLevel(level LogLevel) {
 	case Disabled:
 		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
-		l.WarnLogger = disabledLogger{}
 		l.ErrorLogger = disabledLogger{}
 		l.PanicLogger = disabledLogger{}
 		break
 	case Debug:
 		l.DebugLogger = l.getLogger(Debug)
 		l.InfoLogger = l.getLogger(Info)
-		l.WarnLogger = l.getLogger(Warn)
 		l.ErrorLogger = l.getLogger(Error)
 		l.PanicLogger = l.getLogger(Panic)
 		break
 	case Info:
 		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = l.getLogger(Info)
-		l.WarnLogger = l.getLogger(Warn)
-		l.ErrorLogger = l.getLogger(Error)
-		l.PanicLogger = l.getLogger(Panic)
-		break
-	case Warn:
-		l.DebugLogger = disabledLogger{}
-		l.InfoLogger = disabledLogger{}
-		l.WarnLogger = l.getLogger(Warn)
 		l.ErrorLogger = l.getLogger(Error)
 		l.PanicLogger = l.getLogger(Panic)
 		break
 	case Error:
 		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
-		l.WarnLogger = disabledLogger{}
 		l.ErrorLogger = l.getLogger(Error)
 		l.PanicLogger = l.getLogger(Panic)
 		break
 	case Panic:
 		l.DebugLogger = disabledLogger{}
 		l.InfoLogger = disabledLogger{}
-		l.WarnLogger = disabledLogger{}
 		l.ErrorLogger = disabledLogger{}
 		l.PanicLogger = l.getLogger(Panic)
 		break
@@ -295,10 +218,6 @@ func (l *Logger) SetLevel(level LogLevel) {
 
 // *log.Logger format prefix: UTC time, date of the day and time with microseconds.
 const flags = log.LUTC | log.Ldate | log.Lmicroseconds
-
-// Map of loggers.
-var loggers = make(map[string]*Logger)
-var lock sync.Mutex
 
 // Enabled logger instance.
 type logger struct {
@@ -328,12 +247,10 @@ func (l *Logger) getCachedLogger(level LogLevel) *logger {
 		return &l.cache.debug
 	case Info:
 		return &l.cache.info
-	case Warn:
-		return &l.cache.warn
 	case Error:
 		return &l.cache.error
 	case Panic:
-		return &l.cache.fatal
+		return &l.cache.panic
 	}
 	return nil
 }
@@ -364,14 +281,6 @@ func (l logger) Infof(format string, v ...interface{}) {
 	l.logger.Output(3, fmt.Sprintf(format, v...))
 }
 
-func (l logger) Warn(v ...interface{}) {
-	l.logger.Output(3, fmt.Sprint(v...))
-}
-
-func (l logger) Warnf(format string, v ...interface{}) {
-	l.logger.Output(3, fmt.Sprintf(format, v...))
-}
-
 func (l logger) Error(v ...interface{}) {
 	l.logger.Output(3, fmt.Sprint(v...))
 }
@@ -394,10 +303,6 @@ func (_ disabledLogger) Panicf(_ error, _ string, _ ...interface{}) {
 func (_ disabledLogger) Error(_ ...interface{}) {
 }
 func (_ disabledLogger) Errorf(_ string, _ ...interface{}) {
-}
-func (_ disabledLogger) Warn(_ ...interface{}) {
-}
-func (_ disabledLogger) Warnf(_ string, _ ...interface{}) {
 }
 func (_ disabledLogger) Info(_ ...interface{}) {
 }

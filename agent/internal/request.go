@@ -183,7 +183,7 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
 	if len(id) == 0 {
-		ctx.agent.logger.Warn("TrackAuth(): user id is nil or empty")
+		ctx.agent.logger.Info("TrackAuth(): user id is nil or empty")
 		return
 	}
 
@@ -200,7 +200,7 @@ func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess boo
 
 func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 	if len(id) == 0 {
-		ctx.agent.logger.Warn("TrackSignup(): user id is nil or empty")
+		ctx.agent.logger.Info("TrackSignup(): user id is nil or empty")
 		return
 	}
 
