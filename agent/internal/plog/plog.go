@@ -132,25 +132,21 @@ func (l *Logger) SetOutput(output io.Writer) {
 	l.DebugLogger.SetOutput(output)
 }
 
-// SetLevelFromString change the level of the logger to `level`, possibly
-// disabling it when the "disabled" string is passed.
-func (l *Logger) SetLevelFromString(level string) {
-	lvl := Disabled
-	switch level {
+// ParseLogLevel returns the logger level corresponding to the string
+// representation `level`. The returned LogLevel is Disabled when none matches.
+func ParseLogLevel(level string) LogLevel {
+	switch strings.TrimSpace(strings.ToLower(level)) {
 	case DebugString:
-		lvl = Debug
-		break
+		return Debug
 	case InfoString:
-		lvl = Info
-		break
+		return Info
 	case ErrorString:
-		lvl = Error
-		break
+		return Error
 	case PanicString:
-		lvl = Panic
-		break
+		return Panic
+	default:
+		return Disabled
 	}
-	l.SetLevel(lvl)
 }
 
 // SetLevel changes the level of the logger to `level`, possibly disabling it

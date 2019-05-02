@@ -32,9 +32,12 @@ type Agent struct {
 
 func New() *Agent {
 	logger := plog.NewLogger("agent", nil)
+	// Only print errors while early processing the configuration
+	logger.SetLevel(plog.Error)
+	logger.SetOutput(os.Stderr)
 	cfg := config.New(logger)
-	plog.SetLevelFromString(cfg.LogLevel())
-	plog.SetOutput(os.Stderr)
+	// Now set the configured log level
+	logger.SetLevel(plog.ParseLogLevel(cfg.LogLevel()))
 
 	if cfg.Disable() {
 		return nil
