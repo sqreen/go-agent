@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUserConfig(t *testing.T) {
-	logger := plog.NewLogger("test", nil)
+	logger := testlib.LoggerMockup{}
+	logger.On("Error", mock.Anything, mock.Anything).Return()
 	cfg := New(logger)
 
 	stringValueTests := []struct {

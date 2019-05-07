@@ -23,7 +23,6 @@ import (
 	"github.com/kentik/patricia"
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
-	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
 // Store is the structure associating IP addresses or user IDs to security
@@ -44,14 +43,10 @@ type Store struct {
 	// entire store methods.
 	lock  sync.RWMutex
 	store *store
-
-	logger *plog.Logger
 }
 
-func NewStore(logger *plog.Logger) *Store {
-	return &Store{
-		logger: plog.NewLogger("actors", logger),
-	}
+func NewStore() *Store {
+	return &Store{}
 }
 
 // getStore is a thread-safe store pointer getter.
@@ -136,7 +131,6 @@ func (s *Store) FindUser(userID map[string]string) (action Action, exists bool) 
 func (s *Store) SetActions(actions []api.ActionsPackResponse_Action) error {
 	store, err := newStore(actions)
 	if err != nil {
-		s.logger.Error(err)
 		return err
 	}
 	s.setStore(store)

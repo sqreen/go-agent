@@ -19,7 +19,6 @@ type Info struct {
 }
 
 func NewInfo(logger *plog.Logger) *Info {
-	logger = plog.NewLogger("app/info", logger)
 	return &Info{
 		logger: logger,
 		processInfo: ProcessInfo{

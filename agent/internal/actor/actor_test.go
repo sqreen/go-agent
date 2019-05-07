@@ -11,21 +11,17 @@ import (
 	fuzz "github.com/google/gofuzz"
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
-	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	logger = plog.NewLogger("test", nil)
-	fuzzer = fuzz.New().NilChance(0)
-)
+var fuzzer = fuzz.New().NilChance(0)
 
 func TestStore(t *testing.T) {
 	t.Run("SetActions", func(t *testing.T) {
 		t.Run("The number of actions should be limited", func(t *testing.T) {
 			t.Skip("too long - make it configurable through the package API")
-			actors := actor.NewStore(logger)
+			actors := actor.NewStore()
 			var (
 				actions []api.ActionsPackResponse_Action
 				err     error
@@ -39,7 +35,7 @@ func TestStore(t *testing.T) {
 
 		t.Run("Malformed action list", func(t *testing.T) {
 			t.Parallel()
-			actors := actor.NewStore(logger)
+			actors := actor.NewStore()
 			err := actors.SetActions([]api.ActionsPackResponse_Action{
 				{
 					Action:   "block_ip",
@@ -54,14 +50,14 @@ func TestStore(t *testing.T) {
 
 		t.Run("Nil action list", func(t *testing.T) {
 			t.Parallel()
-			actors := actor.NewStore(logger)
+			actors := actor.NewStore()
 			err := actors.SetActions(nil)
 			require.NoError(t, err)
 		})
 
 		t.Run("Empty action list", func(t *testing.T) {
 			t.Parallel()
-			actors := actor.NewStore(logger)
+			actors := actor.NewStore()
 			err := actors.SetActions([]api.ActionsPackResponse_Action{})
 			require.NoError(t, err)
 		})
@@ -146,7 +142,7 @@ func TestStore(t *testing.T) {
 				}
 
 				// Create an actor store.
-				actors := actor.NewStore(logger)
+				actors := actor.NewStore()
 				// Set its actions and check its returned error according to the test
 				// case.
 				err := actors.SetActions(actions)
@@ -179,7 +175,7 @@ func TestStore(t *testing.T) {
 		t.Run("Timed actions", func(t *testing.T) {
 			t.Parallel()
 			// Create an actor store.
-			actors := actor.NewStore(logger)
+			actors := actor.NewStore()
 			// Set its actions and check its returned error according to the test
 			// case.
 			actions := []api.ActionsPackResponse_Action{
@@ -490,7 +486,7 @@ func TestStore(t *testing.T) {
 				}
 
 				// Create an actor store.
-				actors := actor.NewStore(logger)
+				actors := actor.NewStore()
 				// Set its actions and check its returned error according to the test
 				// case.
 				err := actors.SetActions(actions)
@@ -538,7 +534,7 @@ func TestStore(t *testing.T) {
 		t.Run("Timed actions", func(t *testing.T) {
 			t.Parallel()
 			// Create an actor store.
-			actors := actor.NewStore(logger)
+			actors := actor.NewStore()
 			// Set its actions and check its returned error according to the test
 			// case.
 			actions := []api.ActionsPackResponse_Action{
@@ -696,7 +692,7 @@ func BenchmarkUserStore(b *testing.B) {
 		for n := 1; n <= 1000000; n *= 10 {
 			n := n
 			actions, _ := RandUserActions(b, n, RandUser)
-			store := actor.NewStore(logger)
+			store := actor.NewStore()
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
 				for n := 0; n < b.N; n++ {
 					store.SetActions(actions)
@@ -712,7 +708,7 @@ func BenchmarkUserStore(b *testing.B) {
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
 				b.ReportAllocs()
 				for n := 0; n < b.N; n++ {
-					store := actor.NewStore(logger)
+					store := actor.NewStore()
 					store.SetActions(actions)
 				}
 			})
@@ -721,7 +717,7 @@ func BenchmarkUserStore(b *testing.B) {
 }
 
 func RandUserStore(b *testing.B, count int, randUser func() map[string]string) (store *actor.Store, users []map[string]string) {
-	store = actor.NewStore(logger)
+	store = actor.NewStore()
 	actions, users := RandUserActions(b, count, RandUser)
 	err := store.SetActions(actions)
 	require.NoError(b, err)

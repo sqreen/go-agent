@@ -31,19 +31,19 @@ type Agent struct {
 }
 
 func New() *Agent {
-	logger := plog.NewLogger("agent", nil)
 	// Only print errors while early processing the configuration
-	logger.SetLevel(plog.Error)
-	logger.SetOutput(os.Stderr)
+	logger := plog.NewLogger(plog.Error, os.Stderr)
+	// Read the configuration
 	cfg := config.New(logger)
-	// Now set the configured log level
-	logger.SetLevel(plog.ParseLogLevel(cfg.LogLevel()))
+	// Now create a logger with the configured log level
+	level := plog.ParseLogLevel(cfg.LogLevel())
+	logger = plog.NewLogger(level, os.Stderr)
 
 	if cfg.Disable() {
 		return nil
 	}
 
-	// Agent graceful stopping using context cancelation.
+	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
@@ -61,7 +61,7 @@ func New() *Agent {
 		config:     cfg,
 		appInfo:    app.NewInfo(logger),
 		client:     client,
-		actors:     actor.NewStore(logger),
+		actors:     actor.NewStore(),
 	}
 }
 
@@ -96,7 +96,7 @@ func (a *Agent) start() {
 	}
 
 	// Create the command manager to process backend commands
-	commandMng := NewCommandManager(a, a.logger)
+	commandMng := NewCommandManager(a)
 	// Process commands that may have been received on login.
 	commandResults := commandMng.Do(appLoginRes.Commands)
 

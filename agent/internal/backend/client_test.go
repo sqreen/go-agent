@@ -11,16 +11,12 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
-	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	logger = plog.NewLogger("test", nil)
-	cfg    = config.New(logger)
-	fuzzer = fuzz.New().Funcs(FuzzStruct)
-)
+var fuzzer = fuzz.New().Funcs(FuzzStruct)
 
 func TestClient(t *testing.T) {
 	RegisterTestingT(t)
@@ -45,6 +41,12 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
 		defer server.Close()
 
+		logger := testlib.LoggerMockup{}
+		logger.On("Info", mock.Anything, mock.Anything).Return()
+		logger.On("Debugf", mock.Anything, mock.Anything).Return()
+		//logger.On("Error", mock.Anything, mock.Anything).Return()
+		cfg := testlib.ConfigMockup{}
+		cfg.On("BackendHTTPAPIProxy").Return("")
 		client, err := backend.NewClient(server.URL(), cfg, logger)
 		g.Expect(err).NotTo(HaveOccurred())
 
@@ -152,6 +154,11 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 	loginRes.Status = true
 	server.AppendHandlers(ghttp.RespondWithJSONEncoded(http.StatusOK, loginRes))
 
+	logger := testlib.LoggerMockup{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
+	logger.On("Debugf", mock.Anything, mock.Anything).Return()
+	cfg := testlib.ConfigMockup{}
+	cfg.On("BackendHTTPAPIProxy").Return("")
 	client, err := backend.NewClient(server.URL(), cfg, logger)
 	if err != nil {
 		panic(err)
@@ -235,6 +242,8 @@ func testProxy(t *testing.T, envVar string) {
 	defer os.Unsetenv(envVar)
 	require.Equal(t, os.Getenv(envVar), proxy.URL())
 
+	logger := testlib.LoggerMockup{}
+	cfg := config.New(logger)
 	// The new client should take the proxy into account.
 	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
 	require.Equal(t, err, nil)
