@@ -1,3 +1,7 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 // Implementation of simple logging interfaces efficient in production
 // environments, aiming at being as fast as possible when disabled. The trick
 // consists in changing the underlying implementation pointer with a disabled
