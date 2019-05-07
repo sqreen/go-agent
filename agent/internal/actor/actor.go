@@ -43,10 +43,8 @@ type Store struct {
 	logger *plog.Logger
 }
 
-func NewStore(logger *plog.Logger) *Store {
-	return &Store{
-		logger: plog.NewLogger("actors", logger),
-	}
+func NewStore() *Store {
+	return &Store{}
 }
 
 // SetCIDRWhitelist creates a new whitelist store and then replaces the current
@@ -168,7 +166,6 @@ func (s *Store) FindUser(userID map[string]string) (action Action, exists bool) 
 func (s *Store) SetActions(actions []api.ActionsPackResponse_Action) error {
 	store, err := newActionStore(actions)
 	if err != nil {
-		s.logger.Error(err)
 		return err
 	}
 	s.setActionStore(store)

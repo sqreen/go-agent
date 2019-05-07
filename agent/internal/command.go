@@ -1,3 +1,7 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package internal
 
 import (
@@ -6,11 +10,9 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
-	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
 type CommandManager struct {
-	logger   *plog.Logger
 	agent    CommandManagerAgent
 	handlers map[string]CommandHandler
 }
@@ -28,10 +30,9 @@ type CommandManagerAgent interface {
 	SetCIDRWhitelist([]string) error
 }
 
-func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
+func NewCommandManager(agent CommandManagerAgent) *CommandManager {
 	mng := &CommandManager{
-		agent:  agent,
-		logger: plog.NewLogger("command", logger),
+		agent: agent,
 	}
 
 	// Note: using Go's reflection to call methods would be slower.

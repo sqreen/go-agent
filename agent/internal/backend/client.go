@@ -22,13 +22,21 @@ import (
 type Client struct {
 	client     *http.Client
 	backendURL string
-	logger     *plog.Logger
+	logger     Logger
 	session    string
 }
 
-func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Client, error) {
-	logger = plog.NewLogger("client", logger)
+type Logger interface {
+	plog.InfoLogger
+	plog.DebugLogger
+}
 
+// Config is the configuration interface expected by this package.
+type Config interface {
+	BackendHTTPAPIProxy() string
+}
+
+func NewClient(backendURL string, cfg Config, logger Logger) (*Client, error) {
 	var transport *http.Transport
 	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy
@@ -148,16 +156,12 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	req.Body = ioutil.NopCloser(&buf)
 	req.ContentLength = int64(buf.Len())
 
-	dumpReq, _ := httputil.DumpRequestOut(req, true)
-	c.logger.Debugf("sending request\n%s", dumpReq)
-
+	c.logger.Debugf("sending request\n%s\n", (*requestStringer)(req))
 	res, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
-
-	dumpRes, _ := httputil.DumpResponse(res, true)
-	c.logger.Debugf("received response\n%s", dumpRes)
+	c.logger.Debugf("received response\n%s\n", (*responseStringer)(res))
 
 	// As documented (https://golang.org/pkg/net/http/#Response), connections are
 	// reused iif the response body was fully drained. The following chunk thus
@@ -199,4 +203,24 @@ func (c *Client) newRequest(descriptor *config.HTTPAPIEndpoint) (*http.Request, 
 	req.Header.Set("Accept", "application/json")
 
 	return req, nil
+}
+
+// requestStringer implements `fmt.Stringer` interface in order to be able to
+// print a request as a string, but also to lazily print it only when loggers
+// are enabled.
+type requestStringer http.Request
+
+func (r *requestStringer) String() string {
+	str, _ := httputil.DumpRequestOut((*http.Request)(r), true)
+	return string(str)
+}
+
+// responseStringer implements `fmt.Stringer` interface in order to be able to
+// print a response as a string, but also to lazily print it only when loggers
+// are enabled.
+type responseStringer http.Response
+
+func (r *responseStringer) String() string {
+	str, _ := httputil.DumpResponse((*http.Response)(r), true)
+	return string(str)
 }

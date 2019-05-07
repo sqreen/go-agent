@@ -12,7 +12,6 @@ import (
 	"github.com/sqreen/go-agent/agent/internal"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
-	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -20,8 +19,7 @@ import (
 
 func TestCommandManager(t *testing.T) {
 	var agent agentMockup
-	logger := plog.NewLogger("test", nil)
-	mng := internal.NewCommandManager(&agent, logger)
+	mng := internal.NewCommandManager(&agent)
 	require.NotNil(t, mng)
 
 	t.Run("nil command list", func(t *testing.T) {

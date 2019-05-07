@@ -208,9 +208,7 @@ const (
 	configDefaultLogLevel              = `warn`
 )
 
-func New(logger *plog.Logger) *Config {
-	logger = plog.NewLogger("agent/config", logger)
-
+func New(logger plog.ErrorLogger) *Config {
 	manager := viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()
