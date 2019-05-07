@@ -2,26 +2,26 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package safe_test
+package sqsafe_test
 
 import (
 	"testing"
 
-	"github.com/sqreen/go-agent/agent/sqlib"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 )
 
 func TestCall(t *testing.T) {
 	t.Run("without error", func(t *testing.T) {
-		err := sqlib.Call(func() error {
+		err := sqsafe.Call(func() error {
 			return nil
 		})
 		require.NoError(t, err)
 	})
 
 	t.Run("with a regular error", func(t *testing.T) {
-		err := sqlib.Call(func() error {
+		err := sqsafe.Call(func() error {
 			return xerrors.New("oops")
 		})
 		require.Error(t, err)
@@ -29,43 +29,43 @@ func TestCall(t *testing.T) {
 	})
 
 	t.Run("with a panic string error", func(t *testing.T) {
-		err := sqlib.Call(func() error {
+		err := sqsafe.Call(func() error {
 			panic("oops")
 			return nil
 		})
 		require.Error(t, err)
-		var panicErr *sqlib.PanicError
+		var panicErr *sqsafe.PanicError
 		require.Error(t, err)
 		require.True(t, xerrors.As(err, &panicErr))
 		require.Equal(t, "oops", panicErr.Err.Error())
 	})
 
 	t.Run("with a panic error", func(t *testing.T) {
-		err := sqlib.Call(func() error {
+		err := sqsafe.Call(func() error {
 			panic(xerrors.New("oops"))
 			return nil
 		})
 		require.Error(t, err)
-		var panicErr *sqlib.PanicError
+		var panicErr *sqsafe.PanicError
 		require.Error(t, err)
 		require.True(t, xerrors.As(err, &panicErr))
 		require.Equal(t, "oops", panicErr.Err.Error())
 	})
 
 	t.Run("with another panic argument type", func(t *testing.T) {
-		err := sqlib.Call(func() error {
+		err := sqsafe.Call(func() error {
 			panic(33.7)
 			return nil
 		})
 		require.Error(t, err)
-		var panicErr *sqlib.PanicError
+		var panicErr *sqsafe.PanicError
 		require.Error(t, err)
 		require.True(t, xerrors.As(err, &panicErr))
 		require.Equal(t, "33.7", panicErr.Err.Error())
 	})
 
 	t.Run("with a nil panic argument value", func(t *testing.T) {
-		err := sqlib.Call(func() error {
+		err := sqsafe.Call(func() error {
 			// This case cannot be differentiated yet.
 			panic(nil)
 			return xerrors.New("oops")

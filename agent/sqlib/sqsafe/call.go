@@ -2,7 +2,7 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package safe
+package sqsafe
 
 import (
 	"fmt"

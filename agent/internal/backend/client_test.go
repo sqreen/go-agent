@@ -45,8 +45,7 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
 		defer server.Close()
 
-		client, err := backend.NewClient(server.URL(), cfg, logger)
-		g.Expect(err).NotTo(HaveOccurred())
+		client := backend.NewClient(server.URL(), cfg, logger)
 
 		res, err := client.AppLogin(request, token, appName)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -152,14 +151,11 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 	loginRes.Status = true
 	server.AppendHandlers(ghttp.RespondWithJSONEncoded(http.StatusOK, loginRes))
 
-	client, err := backend.NewClient(server.URL(), cfg, logger)
-	if err != nil {
-		panic(err)
-	}
+	client = backend.NewClient(server.URL(), cfg, logger)
 
 	token := testlib.RandString(2, 50)
 	appName := testlib.RandString(2, 50)
-	_, err = client.AppLogin(loginReq, token, appName)
+	_, err := client.AppLogin(loginReq, token, appName)
 	if err != nil {
 		panic(err)
 	}
@@ -236,11 +232,11 @@ func testProxy(t *testing.T, envVar string) {
 	require.Equal(t, os.Getenv(envVar), proxy.URL())
 
 	// The new client should take the proxy into account.
-	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
-	require.Equal(t, err, nil)
+	client := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
 	// Perform a request that should go through the proxy.
 	request := NewRandomAppLoginRequest()
-	_, err = client.AppLogin(request, "my-token", "my-app")
+	_, err := client.AppLogin(request, "my-token", "my-app")
+	require.NoError(t, err)
 	// A request has been received:
 	//require.NotEqual(t, len(back.ReceivedRequests()), 0, "0 request received")
 	require.NotEqual(t, len(proxy.ReceivedRequests()), 0, "0 request received")

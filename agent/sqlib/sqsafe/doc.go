@@ -10,4 +10,4 @@
 // function that may panic and its goroutine equivalent. That way, any function
 // can be safely called and any panic will be returned as a regular function
 // error.
-package safe
+package sqsafe

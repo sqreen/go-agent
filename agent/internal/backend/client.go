@@ -22,7 +22,7 @@ type Client struct {
 	session    string
 }
 
-func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Client, error) {
+func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Client {
 	logger = plog.NewLogger("client", logger)
 
 	var transport *http.Transport
@@ -56,7 +56,7 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Cli
 		logger:     logger,
 	}
 
-	return client, nil
+	return client
 }
 
 func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string) (*api.AppLoginResponse, error) {
