@@ -2,7 +2,7 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package safe
+package sqsafe
 
 // Go mimics the `go` goroutine built-in to execute function `f` in a goroutine
 // but with the ability to safely recover from any panic occurring while it

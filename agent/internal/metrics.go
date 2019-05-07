@@ -13,6 +13,7 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 )
 
 type metricsManager struct {
@@ -59,10 +60,11 @@ func (m *metricsManager) get(name string) *metricsStore {
 	actual, _ := m.metrics.LoadOrStore(name, store)
 	store = actual.(*metricsStore)
 	store.once.Do(func() {
-		go func() {
+		_ = sqsafe.Go(func() error {
 			m.logger.Debug("bookkeeping metrics ", name, " with period ", store.period)
 			store.monitor(m.ctx, time.Now())
-		}()
+			return nil
+		})
 	})
 
 	return store

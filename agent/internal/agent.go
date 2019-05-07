@@ -1,7 +1,3 @@
-// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
-// Please refer to our terms for more information:
-// https://www.sqreen.io/terms.html
-
 package internal
 
 import (
@@ -17,9 +13,107 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
+	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
 	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
+	"golang.org/x/xerrors"
 )
+
+// Start the agent when enabled and back-off restart it when unhandled errors
+// or panics occur.
+//
+// The algorithm is based on multiple levels of try/catch equivalents called
+// here "safe calls":
+// - Level 1: a safe goroutine loop retrying the agent in case of unhandled
+//   error or panic.
+// - Level 2: a safe call to the agent initialization.
+// - Level 3: a safe call to the agent main loop.
+// - Level 4, implicit here: internal agent errors that can be directly
+//   handled by the agent without having to stop it.
+//
+// Each level catches unhandled errors or panics of lower levels:
+// - When the agent's main loop fails, it is caught and returned to the upper
+//   level to try to send it in a separate safe call, as the agent is no
+//   longer considered reliable.
+// - If a panic occurs in this overall agent error handling, everything is
+//   considered unreliable and therefore aborted.
+// - Otherwise, the overall agent initialization and main loop is re-executed
+//   with a backoff sleep.
+// - If this backoff-retry loop fails, the outer-most safe goroutine captures
+//   it an silently return.
+func Start() {
+	_ = sqsafe.Go(func() error {
+		// Level 1
+		// Backoff-sleep loop to retry starting the agent
+		// To properly work, this level relies on:
+		//   - the backoff.
+		//   - the logger.
+		//   - the correctness of sub-level error handling (ie. they don't panic).
+		// Any panics from these would stop the execution of this level.
+		backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
+		logger := plog.NewLogger("agent", nil)
+		logger.SetLevel(plog.Error)
+		logger.SetOutput(os.Stderr)
+		for {
+			err := sqsafe.Call(func() error {
+				// Level 2
+				// Agent initialization and serve loop.
+				// To properly work, this level relies on:
+				//   - the user configuration initialization.
+				//   - the agent initialization.
+				// Any panics from these would stop the execution and would be returned
+				// to the outer level.
+				cfg := config.New(logger)
+				agent := New(cfg)
+				if agent == nil {
+					return nil
+				}
+				// Level 3 returns unhandled agent errors or panics
+				err := sqsafe.Call(agent.Serve)
+				if err == nil {
+					return nil
+				}
+				// Error ignored here
+				_ = sqsafe.Call(func() error {
+					// TODO: try to send the error with a direct bare HTTP POST call not
+					//  using the agent but relying on the configuration in order to get
+					//  the token.
+					return nil
+				})
+
+				if panicErr, ok := err.(*sqsafe.PanicError); ok {
+					// agent.Serve() panic-ed: return the wrapped error in order to retry
+					return panicErr.Unwrap()
+				}
+				return err
+			})
+
+			// No error: regular exit case of the agent.
+			if err == nil {
+				return nil
+			}
+
+			if _, ok := err.(*sqsafe.PanicError); ok {
+				// Unexpected level 2 panic from its requirements: stop retrying as it
+				// is no longer reliable.
+				logger.Errorf("%+v", err)
+				return err
+			}
+
+			// An unhandled error was returned: retry
+			logger.Errorf("sqreen: unexpected agent error: %+v", err)
+			d, max := backoff.Next()
+			if max {
+				logger.Error("sqreen: maximum retries reached")
+				break
+			}
+			logger.Errorf("sqreen: restarting the agent in %s", d)
+			time.Sleep(d)
+		}
+		return nil
+	})
+}
 
 type Agent struct {
 	logger     *plog.Logger
@@ -34,14 +128,10 @@ type Agent struct {
 	actors     *actor.Store
 }
 
-func New() *Agent {
-	// Only print errors while early processing the configuration
-	logger := plog.NewLogger(plog.Error, os.Stderr)
-	// Read the configuration
-	cfg := config.New(logger)
-	// Now create a logger with the configured log level
-	level := plog.ParseLogLevel(cfg.LogLevel())
-	logger = plog.NewLogger(level, os.Stderr)
+func New(cfg *config.Config) *Agent {
+	logger := plog.NewLogger("agent", nil)
+	logger.SetOutput(os.Stderr)
+	logger.SetLevel(plog.ParseLogLevel(cfg.LogLevel()))
 
 	if cfg.Disable() {
 		return nil
@@ -49,13 +139,6 @@ func New() *Agent {
 
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
-
-	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
-	if err != nil {
-		logger.Error(err)
-		return nil
-	}
-
 	return &Agent{
 		logger:     logger,
 		isDone:     make(chan struct{}),
@@ -64,55 +147,38 @@ func New() *Agent {
 		cancel:     cancel,
 		config:     cfg,
 		appInfo:    app.NewInfo(logger),
-		client:     client,
-		actors:     actor.NewStore(),
+		client:     backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
+		actors:     actor.NewStore(logger),
 	}
-}
-
-func (a *Agent) Start() {
-	go a.start()
 }
 
 func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
-	clientIP := getClientIP(req, a.config)
-	whitelisted, matched, err := a.actors.IsIPWhitelisted(clientIP)
-	if err != nil {
-		a.logger.Error(err)
-		whitelisted = false
-	}
-	if whitelisted {
-		a.addWhitelistEvent(matched)
-		return &WhitelistedHTTPRequestRecord{
-		}
-	}
 	return &HTTPRequestRecord{
-		request:  req,
-		agent:    a,
-		clientIP: clientIP,
+		request: req,
+		agent:   a,
 	}
 }
 
-func (a *Agent) start() {
+func (a *Agent) Serve() error {
 	defer func() {
-		err := recover()
-		if err != nil {
-			a.logger.Error("agent stopped: ", err)
-		} else {
-			a.logger.Info("agent successfully stopped")
-		}
 		// Signal we are done
 		close(a.isDone)
+		a.logger.Info("agent successfully stopped")
 	}()
 
 	token := a.config.BackendHTTPAPIToken()
 	appName := a.config.AppName()
 	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo)
-	if checkErr(err, a.logger) {
-		return
+	if err != nil {
+		if xerrors.Is(err, context.Canceled) {
+			return nil
+		}
+		// TODO: add the error into the event batch
+		return err
 	}
 
 	// Create the command manager to process backend commands
-	commandMng := NewCommandManager(a)
+	commandMng := NewCommandManager(a, a.logger)
 	// Process commands that may have been received on login.
 	commandResults := commandMng.Do(appLoginRes.Commands)
 
@@ -136,7 +202,10 @@ func (a *Agent) start() {
 
 	// Start the event manager's loop
 	a.eventMng = newEventManager(a, rulespackId, batchSize, maxStaleness)
-	go a.eventMng.Loop(a.ctx, a.client)
+	eventMngErrChan := sqsafe.Go(func() error {
+		a.eventMng.Loop(a.ctx, a.client)
+		return nil
+	})
 
 	// Start the heartbeat's loop
 	for {
@@ -165,10 +234,14 @@ func (a *Agent) start() {
 			err := a.client.AppLogout()
 			if err != nil {
 				a.logger.Error("logout failed: ", err)
-				return
+				return nil
 			}
 			a.logger.Debug("successfully logged out")
-			return
+			return nil
+
+		case err := <-eventMngErrChan:
+			// TODO: add the error to the error batch
+			return err
 		}
 	}
 }
@@ -196,10 +269,6 @@ func (a *Agent) ActionsReload() error {
 	}
 
 	return a.actors.SetActions(actions.Actions)
-}
-
-func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
-	return a.actors.SetCIDRWhitelist(cidrs)
 }
 
 func (a *Agent) GracefulStop() {
@@ -263,7 +332,8 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 				m.agent.logger.Debug("batching event data for ", m.maxStaleness)
 				isFull = make(chan struct{})
 				isSent = make(chan struct{}, 1)
-				go func() {
+				// FIXME: get rid of this goroutine
+				_ = sqsafe.Go(func() error {
 					select {
 					case <-ctx.Done():
 					case <-time.After(m.maxStaleness):
@@ -274,7 +344,8 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 					m.send(client)
 					m.agent.logger.Debug("event batch sent")
 					close(isSent)
-				}()
+					return nil
+				})
 			} else if batchLen >= m.count {
 				// No more room in the batch
 				close(isFull)
@@ -305,16 +376,4 @@ func (a *Agent) addRecord(r *httpRequestRecord) {
 		return
 	}
 	a.eventMng.add(r)
-}
-
-// Helper function returning true when having to exit the agent and panic-ing
-// when the error is something else than context cancelation.
-func checkErr(err error, logger *plog.Logger) (exit bool) {
-	if err != nil {
-		if err != context.Canceled {
-			logger.Panic(err)
-		}
-		return true
-	}
-	return false
 }
