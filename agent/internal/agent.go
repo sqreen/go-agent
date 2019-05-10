@@ -115,24 +115,29 @@ func Start() {
 }
 
 type Agent struct {
-	logger     *plog.Logger
-	eventMng   *eventManager
-	metricsMng *metricsManager
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isDone     chan struct{}
-	config     *config.Config
-	appInfo    *app.Info
-	client     *backend.Client
-	actors     *actor.Store
+	logger      *plog.Logger
+	eventMng    *eventManager
+	metricsMng  *metricsManager
+	ctx         context.Context
+	cancel      context.CancelFunc
+	isDone      chan struct{}
+	config      *config.Config
+	appInfo     *app.Info
+	client      *backend.Client
+	actors      *actor.Store
+	rulespackId string
 }
 
+// Error channel buffer length.
+const errorChanBufferLength = 256
+
 func New(cfg *config.Config) *Agent {
+	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, errorChanBufferLength)
+
 	if cfg.Disable() {
+		logger.Info("agent disabled by configuration")
 		return nil
 	}
-
-	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, 0)
 
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -187,7 +192,7 @@ func (a *Agent) Serve() error {
 	a.logger.Info("up and running - heartbeat set to ", heartbeat)
 	ticker := time.Tick(heartbeat)
 
-	rulespackId := appLoginRes.PackId
+	a.rulespackId = appLoginRes.PackId
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
 		batchSize = config.MaxEventsPerHeatbeat
@@ -198,7 +203,7 @@ func (a *Agent) Serve() error {
 	}
 
 	// Start the event manager's loop
-	a.eventMng = newEventManager(a, rulespackId, batchSize, maxStaleness)
+	a.eventMng = newEventManager(a, a.RulespackID(), batchSize, maxStaleness)
 	eventMngErrChan := sqsafe.Go(func() error {
 		a.eventMng.Loop(a.ctx, a.client)
 		return nil
@@ -237,8 +242,13 @@ func (a *Agent) Serve() error {
 			return nil
 
 		case err := <-eventMngErrChan:
-			// TODO: add the error to the error batch
+			// Unexpected error from the event manager's loop as it should stop
+			// when the agent stops.
 			return err
+
+		case err := <-a.logger.ErrChan():
+			// Unhandled errors that were logged.
+			a.AddExceptionEvent(NewExceptionEvent(err, a.RulespackID()))
 		}
 	}
 }
@@ -281,7 +291,7 @@ type eventManager struct {
 	req          api.BatchRequest
 	rulespackID  string
 	count        int
-	eventsChan   chan (*httpRequestRecord)
+	eventsChan   chan Event
 	reqLock      sync.Mutex
 	maxStaleness time.Duration
 }
@@ -289,14 +299,14 @@ type eventManager struct {
 func newEventManager(agent *Agent, rulespackID string, count int, maxStaleness time.Duration) *eventManager {
 	return &eventManager{
 		agent:        agent,
-		eventsChan:   make(chan (*httpRequestRecord), count),
+		eventsChan:   make(chan Event, count),
 		count:        count,
 		rulespackID:  rulespackID,
 		maxStaleness: maxStaleness,
 	}
 }
 
-func (m *eventManager) add(r *httpRequestRecord) {
+func (m *eventManager) add(r Event) {
 	select {
 	case m.eventsChan <- r:
 		return
@@ -312,9 +322,10 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 		select {
 		case <-ctx.Done():
 			return
-		case event := <-m.eventsChan:
+		case e := <-m.eventsChan:
+			event := e.(*HTTPRequestRecordEvent)
+			// TODO: handle ExceptionEvents
 			m.agent.logger.Debug("new event")
-			event.SetRulespackId(m.rulespackID)
 			m.reqLock.Lock()
 			m.req.Batch = append(m.req.Batch, api.BatchRequest_Event{
 				EventType: "request_record",
@@ -367,10 +378,22 @@ func (m *eventManager) send(client *backend.Client) {
 	m.req.Batch = m.req.Batch[0:0]
 }
 
-func (a *Agent) addRecord(r *httpRequestRecord) {
+func (a *Agent) AddHTTPRequestRecordEvent(e *HTTPRequestRecordEvent) {
 	if a.config.Disable() || a.eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
-	a.eventMng.add(r)
+	a.eventMng.add(e)
+}
+
+func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {
+	if a.config.Disable() || a.eventMng == nil {
+		// Disabled or not yet initialized agent
+		return
+	}
+	a.eventMng.add(e)
+}
+
+func (a *Agent) RulespackID() string {
+	return a.rulespackId
 }

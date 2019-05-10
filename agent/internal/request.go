@@ -217,7 +217,7 @@ func (ctx *HTTPRequestRecord) Close() {
 		return
 	}
 
-	ctx.agent.addRecord(newHTTPRequestRecord(ctx))
+	ctx.agent.AddHTTPRequestRecordEvent(NewHTTPRequestRecordEvent(ctx, ctx.agent.RulespackID()))
 }
 
 func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
@@ -300,31 +300,32 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 	return &api.Struct{e.userIdentifiers}
 }
 
-type httpRequestRecord struct {
-	ctx         *HTTPRequestRecord
+type HTTPRequestRecordEvent struct {
+	rr          *HTTPRequestRecord
 	rulespackID string
 }
 
-func newHTTPRequestRecord(event *HTTPRequestRecord) *httpRequestRecord {
-	return &httpRequestRecord{
-		ctx: event,
+func NewHTTPRequestRecordEvent(rr *HTTPRequestRecord, rulespackID string) *HTTPRequestRecordEvent {
+	return &HTTPRequestRecordEvent{
+		rr:          rr,
+		rulespackID: rulespackID,
 	}
 }
 
-func (r *httpRequestRecord) GetVersion() string {
+func (r *HTTPRequestRecordEvent) GetVersion() string {
 	return api.RequestRecordVersion
 }
 
-func (r *httpRequestRecord) GetRulespackId() string {
+func (r *HTTPRequestRecordEvent) GetRulespackId() string {
 	return r.rulespackID
 }
 
-func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
+func (r *HTTPRequestRecordEvent) SetRulespackId(rulespackId string) {
 	r.rulespackID = rulespackId
 }
 
-func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request, r.ctx.agent.config).String()
+func (r *HTTPRequestRecordEvent) GetClientIp() string {
+	return getClientIP(r.rr.request, r.rr.agent.config).String()
 }
 
 type getClientIPConfigFace interface {
@@ -421,11 +422,11 @@ func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
 	}
 }
 
-func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
-	req := r.ctx.request
+func (r *HTTPRequestRecordEvent) GetRequest() api.RequestRecord_Request {
+	req := r.rr.request
 
 	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := r.ctx.agent.config.HTTPClientIPHeader(); extraHeader != "" {
+	if extraHeader := r.rr.agent.config.HTTPClientIPHeader(); extraHeader != "" {
 		trackedHeaders = append(trackedHeaders, extraHeader)
 	}
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
@@ -453,14 +454,14 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 		uuid, err := uuid.NewRandom()
 		if err != nil {
 			// Log the error and continue.
-			r.ctx.agent.logger.Error(errors.Wrap(err, "could not generate a request id "))
+			r.rr.agent.logger.Error(errors.Wrap(err, "could not generate a request id "))
 			requestId = ""
 		}
 		requestId = hex.EncodeToString(uuid[:])
 	}
 
 	var referer string
-	if !r.ctx.agent.config.StripHTTPReferer() {
+	if !r.rr.agent.config.StripHTTPReferer() {
 		referer = req.Referer()
 	}
 
@@ -481,13 +482,13 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	}
 }
 
-func (r *httpRequestRecord) GetResponse() api.RequestRecord_Response {
+func (r *HTTPRequestRecordEvent) GetResponse() api.RequestRecord_Response {
 	return api.RequestRecord_Response{}
 }
 
-func (r *httpRequestRecord) GetObserved() api.RequestRecord_Observed {
-	events := make([]*api.RequestRecord_Observed_SDKEvent, 0, len(r.ctx.events))
-	for _, event := range r.ctx.events {
+func (r *HTTPRequestRecordEvent) GetObserved() api.RequestRecord_Observed {
+	events := make([]*api.RequestRecord_Observed_SDKEvent, 0, len(r.rr.events))
+	for _, event := range r.rr.events {
 		events = append(events, api.NewRequestRecord_Observed_SDKEventFromFace(event))
 	}
 
