@@ -71,13 +71,13 @@ func (m *metricsManager) addObservations(name string, start, finish time.Time, o
 	observations.Range(func(k, v interface{}) bool {
 		key, ok := k.(string)
 		if !ok {
-			m.logger.Panic(errors.New("unexpected metric key type"))
+			m.logger.Error(errors.New("unexpected metric key type"))
 			return true
 		}
 
 		value, ok := v.(*uint64)
 		if !ok {
-			m.logger.Panic(errors.New("unexpected metric value type"))
+			m.logger.Error(errors.New("unexpected metric value type"))
 			return true
 		}
 

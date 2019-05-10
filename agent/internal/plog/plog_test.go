@@ -1,7 +1,6 @@
 package plog_test
 
 import (
-	"errors"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -104,20 +103,6 @@ var _ = Describe("plog", func() {
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
 						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
 						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "error")))
-					})
-				})
-
-				Context("to panic level", func() {
-					BeforeEach(func() {
-						level = plog.Panic
-					})
-
-					It("should log", func() {
-						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "debug")))
-						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "info")))
-						Expect(output).ShouldNot(gbytes.Say(fmt.Sprintf(re, "error")))
-						Expect(func() { logger.Panic(errors.New("panic"), "panic") }).To(Panic())
-						Expect(output).Should(gbytes.Say(fmt.Sprintf(re, "panic")))
 					})
 				})
 			})
