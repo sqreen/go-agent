@@ -52,9 +52,7 @@ func Start() {
 		//   - the correctness of sub-level error handling (ie. they don't panic).
 		// Any panics from these would stop the execution of this level.
 		backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-		logger := plog.NewLogger("agent", nil)
-		logger.SetLevel(plog.Error)
-		logger.SetOutput(os.Stderr)
+		logger := plog.NewLogger(plog.Debug, os.Stderr)
 		for {
 			err := sqsafe.Call(func() error {
 				// Level 2
@@ -129,13 +127,11 @@ type Agent struct {
 }
 
 func New(cfg *config.Config) *Agent {
-	logger := plog.NewLogger("agent", nil)
-	logger.SetOutput(os.Stderr)
-	logger.SetLevel(plog.ParseLogLevel(cfg.LogLevel()))
-
 	if cfg.Disable() {
 		return nil
 	}
+
+	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr)
 
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())

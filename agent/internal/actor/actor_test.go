@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ import (
 )
 
 var (
-	logger = plog.NewLogger("test", nil)
+	logger = plog.NewLogger(plog.Debug, os.Stderr)
 	fuzzer = fuzz.New().NilChance(0)
 )
 

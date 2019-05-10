@@ -205,8 +205,6 @@ const (
 )
 
 func New(logger *plog.Logger) *Config {
-	logger = plog.NewLogger("agent/config", logger)
-
 	manager := viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()

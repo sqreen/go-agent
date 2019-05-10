@@ -23,8 +23,6 @@ type Client struct {
 }
 
 func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Client {
-	logger = plog.NewLogger("client", logger)
-
 	var transport *http.Transport
 	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy

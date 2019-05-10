@@ -2,6 +2,7 @@ package internal_test
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/sqreen/go-agent/agent/internal"
@@ -15,7 +16,7 @@ import (
 
 func TestCommandManager(t *testing.T) {
 	var agent agentMockup
-	logger := plog.NewLogger("test", nil)
+	logger := plog.NewLogger(plog.Debug, os.Stderr)
 	mng := internal.NewCommandManager(&agent, logger)
 	require.NotNil(t, mng)
 

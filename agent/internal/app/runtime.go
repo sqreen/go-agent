@@ -19,7 +19,6 @@ type Info struct {
 }
 
 func NewInfo(logger *plog.Logger) *Info {
-	logger = plog.NewLogger("app/info", logger)
 	return &Info{
 		logger: logger,
 		processInfo: ProcessInfo{
@@ -111,7 +110,11 @@ func (i *Info) Dependencies() ([]*Dependency, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer exe.Close()
+	defer func() {
+		if err := exe.Close(); err != nil {
+			i.logger.Error(err)
+		}
+	}()
 
 	var pclndat []byte
 	if sec := exe.Section(".gopclntab"); sec != nil {

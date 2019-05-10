@@ -9,8 +9,8 @@ package plog
 import (
 	"fmt"
 	"io"
-	"log"
 	"strings"
+	"time"
 )
 
 // LogLevel represents the log level. Higher levels include lowers.
@@ -54,67 +54,45 @@ type Logger struct {
 	ErrorLogger
 	InfoLogger
 	DebugLogger
-
-	output    io.Writer
-	namespace string
-	cache     struct {
-		error, info, debug logger
-	}
 }
 
 type ErrorLogger interface {
 	Error(v ...interface{})
 	Errorf(format string, v ...interface{})
-	OutputSetter
 }
 
 type InfoLogger interface {
 	Info(v ...interface{})
 	Infof(format string, v ...interface{})
-	OutputSetter
 }
 
 type DebugLogger interface {
 	Debug(v ...interface{})
 	Debugf(format string, v ...interface{})
-	OutputSetter
-}
-
-type OutputSetter interface {
-	SetOutput(output io.Writer)
 }
 
 // NewLogger returns a Logger instance wrapping one logger instance per level.
 // They can thus be individually enabled or disabled.
-func NewLogger(namespace string, parent *Logger) *Logger {
+func NewLogger(level LogLevel, output io.Writer) *Logger {
+	disabled := disabledLogger{}
 	logger := &Logger{
-		ErrorLogger: disabledLogger{},
-		InfoLogger:  disabledLogger{},
-		DebugLogger: disabledLogger{},
-		namespace:   namespace,
+		ErrorLogger: disabled,
+		InfoLogger:  disabled,
+		DebugLogger: disabled,
 	}
-
-	if parent == nil {
-		namespace = "sqreen/" + namespace
-	} else {
-		namespace = parent.namespace + "/" + namespace
-		logger.SetLevel(parent.getLevel())
-		logger.SetOutput(parent.output)
+	enabled := enabledLogger{output}
+	switch level {
+	case Debug:
+		logger.DebugLogger = enabled
+		fallthrough
+	case Info:
+		logger.InfoLogger = enabled
+		fallthrough
+	case Error:
+		logger.ErrorLogger = enabled
+		break
 	}
 	return logger
-}
-
-// SetOutput sets the output of the logger. When `nil`, the logger is disabled
-// and equivalent to `SetLevel(Disabled)`.
-func (l *Logger) SetOutput(output io.Writer) {
-	l.output = output
-	if output == nil {
-		l.SetLevel(Disabled)
-		return
-	}
-	l.ErrorLogger.SetOutput(output)
-	l.InfoLogger.SetOutput(output)
-	l.DebugLogger.SetOutput(output)
 }
 
 // ParseLogLevel returns the logger level corresponding to the string
@@ -132,114 +110,40 @@ func ParseLogLevel(level string) LogLevel {
 	}
 }
 
-// SetLevel changes the level of the logger to `level`, possibly disabling it
-// when `Disabled` is passed.
-func (l *Logger) getLevel() LogLevel {
-	if _, disabled := l.DebugLogger.(disabledLogger); !disabled {
-		return Debug
-	}
-
-	if _, disabled := l.InfoLogger.(disabledLogger); !disabled {
-		return Info
-	}
-
-	if _, disabled := l.ErrorLogger.(disabledLogger); !disabled {
-		return Error
-	}
-
-	return Disabled
-}
-
-// SetLevel changes the level of the logger to `level`, possibly disabling it
-// when `Disabled` is passed.
-func (l *Logger) SetLevel(level LogLevel) {
-	switch level {
-	case Disabled:
-		l.DebugLogger = disabledLogger{}
-		l.InfoLogger = disabledLogger{}
-		l.ErrorLogger = disabledLogger{}
-		break
-	case Debug:
-		l.DebugLogger = l.getLogger(Debug)
-		l.InfoLogger = l.getLogger(Info)
-		l.ErrorLogger = l.getLogger(Error)
-		break
-	case Info:
-		l.DebugLogger = disabledLogger{}
-		l.InfoLogger = l.getLogger(Info)
-		l.ErrorLogger = l.getLogger(Error)
-		break
-	case Error:
-		l.DebugLogger = disabledLogger{}
-		l.InfoLogger = disabledLogger{}
-		l.ErrorLogger = l.getLogger(Error)
-		break
-	}
-}
-
-// *log.Logger format prefix: UTC time, date of the day and time with microseconds.
-const flags = log.LUTC | log.Ldate | log.Lmicroseconds
-
 // Enabled logger instance.
-type logger struct {
-	logger *log.Logger
+type enabledLogger struct {
+	io.Writer
 }
 
-// Return the logger instance. Create a new one if first time.
-func (l *Logger) getLogger(level LogLevel) logger {
-	cache := l.getCachedLogger(level)
-	if cache.logger == nil {
-		*cache = newLogger(l.namespace, level, l.output)
-	} else {
-		cache.SetOutput(l.output)
-	}
-	return *cache
+func (l enabledLogger) Debug(v ...interface{}) {
+	_, _ = l.Write(formatLog(Debug, time.Now(), fmt.Sprint(v...)))
 }
 
-// Return a new logger.
-func newLogger(namespace string, level LogLevel, output io.Writer) logger {
-	return logger{log.New(output, namespace+":"+level.String()+": ", flags)}
+func (l enabledLogger) Debugf(format string, v ...interface{}) {
+	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
 }
 
-// Return the pointer to the cache entry.
-func (l *Logger) getCachedLogger(level LogLevel) *logger {
-	switch level {
-	case Debug:
-		return &l.cache.debug
-	case Info:
-		return &l.cache.info
-	case Error:
-		return &l.cache.error
-	}
-	return nil
+func (l enabledLogger) Info(v ...interface{}) {
+	_, _ = l.Write(formatLog(Info, time.Now(), fmt.Sprint(v...)))
 }
 
-func (l logger) Debug(v ...interface{}) {
-	l.logger.Output(3, fmt.Sprint(v...))
+func (l enabledLogger) Infof(format string, v ...interface{}) {
+	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
 }
 
-func (l logger) Debugf(format string, v ...interface{}) {
-	l.logger.Output(3, fmt.Sprintf(format, v...))
+func (l enabledLogger) Error(v ...interface{}) {
+	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprint(v...)))
 }
 
-func (l logger) Info(v ...interface{}) {
-	l.logger.Output(3, fmt.Sprint(v...))
+func (l enabledLogger) Errorf(format string, v ...interface{}) {
+	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
 }
 
-func (l logger) Infof(format string, v ...interface{}) {
-	l.logger.Output(3, fmt.Sprintf(format, v...))
-}
+// Time formatting layout with microsecond precision.
+const TimestampLayout = "2006-01-02T15:04:05.999999"
 
-func (l logger) Error(v ...interface{}) {
-	l.logger.Output(3, fmt.Sprint(v...))
-}
-
-func (l logger) Errorf(format string, v ...interface{}) {
-	l.logger.Output(3, fmt.Sprintf(format, v...))
-}
-
-func (l logger) SetOutput(output io.Writer) {
-	l.logger.SetOutput(output)
+func formatLog(level LogLevel, now time.Time, message string) []byte {
+	return []byte(fmt.Sprintf("sqreen/%s - %s - %s\n", level.String(), now.Format(TimestampLayout), message))
 }
 
 type disabledLogger struct {
@@ -256,6 +160,4 @@ func (_ disabledLogger) Infof(_ string, _ ...interface{}) {
 func (_ disabledLogger) Debug(_ ...interface{}) {
 }
 func (_ disabledLogger) Debugf(_ string, _ ...interface{}) {
-}
-func (_ disabledLogger) SetOutput(_ io.Writer) {
 }
