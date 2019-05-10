@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/app"
 	"github.com/sqreen/go-agent/agent/internal/backend"
@@ -52,7 +53,7 @@ func Start() {
 		//   - the correctness of sub-level error handling (ie. they don't panic).
 		// Any panics from these would stop the execution of this level.
 		backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-		logger := plog.NewLogger(plog.Debug, os.Stderr)
+		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
 		for {
 			err := sqsafe.Call(func() error {
 				// Level 2
@@ -95,18 +96,18 @@ func Start() {
 			if _, ok := err.(*sqsafe.PanicError); ok {
 				// Unexpected level 2 panic from its requirements: stop retrying as it
 				// is no longer reliable.
-				logger.Errorf("%+v", err)
+				logger.Error(err)
 				return err
 			}
 
 			// An unhandled error was returned: retry
-			logger.Errorf("sqreen: unexpected agent error: %+v", err)
+			logger.Error(errors.Wrap(err, "unexpected agent error"))
 			d, max := backoff.Next()
 			if max {
-				logger.Error("sqreen: maximum retries reached")
+				logger.Error(errors.New("agent stopped: maximum agent retries reached"))
 				break
 			}
-			logger.Errorf("sqreen: restarting the agent in %s", d)
+			logger.Error(errors.Errorf("retrying to start the agent in %s", d))
 			time.Sleep(d)
 		}
 		return nil
@@ -131,7 +132,7 @@ func New(cfg *config.Config) *Agent {
 		return nil
 	}
 
-	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr)
+	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, 0)
 
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -217,7 +218,7 @@ func (a *Agent) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(&appBeatReq)
 			if err != nil {
-				a.logger.Error("heartbeat failed: ", err)
+				a.logger.Debug("heartbeat failed: ", err)
 				continue
 			}
 
@@ -229,7 +230,7 @@ func (a *Agent) Serve() error {
 			// return.
 			err := a.client.AppLogout()
 			if err != nil {
-				a.logger.Error("logout failed: ", err)
+				a.logger.Debug("logout failed: ", err)
 				return nil
 			}
 			a.logger.Debug("successfully logged out")
@@ -360,8 +361,8 @@ func (m *eventManager) send(client *backend.Client) {
 	defer m.reqLock.Unlock()
 	// Send the batch.
 	if err := client.Batch(&m.req); err != nil {
-		m.agent.logger.Error("could not send an event batch: ", err)
-		// drop it
+		// Log the error and drop the batch
+		m.agent.logger.Error(errors.Wrap(err, "could not send an event batch"))
 	}
 	m.req.Batch = m.req.Batch[0:0]
 }

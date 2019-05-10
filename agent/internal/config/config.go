@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 
 	"github.com/spf13/viper"
@@ -224,7 +225,7 @@ func New(logger *plog.Logger) *Config {
 		// 2. Executable path
 		exec, err := os.Executable()
 		if err != nil {
-			logger.Error("could not read the executable file path: ", err)
+			logger.Error(errors.Wrap(err, "could not read the executable file path"))
 		} else {
 			manager.AddConfigPath(filepath.Dir(exec))
 		}
@@ -241,7 +242,7 @@ func New(logger *plog.Logger) *Config {
 
 	err := manager.ReadInConfig()
 	if err != nil {
-		logger.Error("could not read the configuration file: ", err)
+		logger.Error(errors.Wrap(err, "could not read the configuration file"))
 	}
 
 	return &Config{manager}

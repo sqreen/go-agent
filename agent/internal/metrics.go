@@ -2,11 +2,11 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
@@ -118,7 +118,8 @@ func (s *metricsStore) add(e metricEntry) {
 	var n uint64 = 1
 	key, err := e.bucketID()
 	if err != nil {
-		s.logger.Error("could not compute the bucket id of the metric key:", err)
+		// Log the error and continue.
+		s.logger.Error(errors.Wrap(err, "could not compute the bucket id of the metric key"))
 		return
 	}
 	actual, loaded := s.entries.LoadOrStore(key, &n)

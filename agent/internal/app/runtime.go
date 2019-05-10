@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 )
 
@@ -120,8 +121,7 @@ func (i *Info) Dependencies() ([]*Dependency, error) {
 	if sec := exe.Section(".gopclntab"); sec != nil {
 		pclndat, err = sec.Data()
 		if err != nil {
-			i.logger.Error("cannot read .gopclntab section: ", err)
-			return nil, err
+			return nil, errors.Wrap(err, "could not read .gopclntab section")
 		}
 	}
 
@@ -133,8 +133,7 @@ func (i *Info) Dependencies() ([]*Dependency, error) {
 	pcln := gosym.NewLineTable(pclndat, exe.Section(".text").Addr)
 	symTab, err := gosym.NewTable(symTabRaw, pcln)
 	if err != nil {
-		i.logger.Error("cannot create the Go synbol table: ", err)
-		return nil, err
+		return nil, errors.Wrap(err, "cannot create the Go symbol table")
 	}
 
 	dependencies := make(map[string]struct{})
@@ -190,7 +189,8 @@ func packageName(symbol string) string {
 func executable(logger *plog.Logger) string {
 	name, err := os.Executable()
 	if err != nil {
-		logger.Error("could not read the executable name ", err)
+		// Log it and continue without it
+		logger.Error(errors.Wrap(err, "could not read the executable name"))
 		return ""
 	}
 	return name

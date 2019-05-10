@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	logger = plog.NewLogger(plog.Debug, os.Stderr)
+	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
 	cfg    = config.New(logger)
 	fuzzer = fuzz.New().Funcs(FuzzStruct)
 )

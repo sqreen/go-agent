@@ -27,26 +27,40 @@ const (
 	Debug
 )
 
+// String representations of log levels.
 const (
-	// Error logs.
-	ErrorString = "error"
-	// Info to Error logs.
-	InfoString = "info"
-	// Debug to Error logs.
-	DebugString = "debug"
+	DisabledString = "disabled"
+	ErrorString    = "error"
+	InfoString     = "info"
+	DebugString    = "debug"
 )
 
 // LogLevel type stringer.
 func (l LogLevel) String() string {
 	switch l {
 	case Error:
-		return "error"
+		return ErrorString
 	case Info:
-		return "info"
+		return InfoString
 	case Debug:
-		return "debug"
+		return DebugString
 	}
-	return ""
+	return DisabledString
+}
+
+// ParseLogLevel returns the logger level corresponding to the string
+// representation `level`. The returned LogLevel is Disabled when none matches.
+func ParseLogLevel(level string) LogLevel {
+	switch strings.TrimSpace(strings.ToLower(level)) {
+	case DebugString:
+		return Debug
+	case InfoString:
+		return Info
+	case ErrorString:
+		return Error
+	default:
+		return Disabled
+	}
 }
 
 // Logger structure wrapping logger interfaces, one per level.
@@ -54,11 +68,12 @@ type Logger struct {
 	ErrorLogger
 	InfoLogger
 	DebugLogger
+	// Channel of logged errors, no matter if it is disabled.
+	errChan chan error
 }
 
 type ErrorLogger interface {
-	Error(v ...interface{})
-	Errorf(format string, v ...interface{})
+	Error(err error)
 }
 
 type InfoLogger interface {
@@ -73,12 +88,17 @@ type DebugLogger interface {
 
 // NewLogger returns a Logger instance wrapping one logger instance per level.
 // They can thus be individually enabled or disabled.
-func NewLogger(level LogLevel, output io.Writer) *Logger {
+func NewLogger(level LogLevel, output io.Writer, errChanBufferLen int) *Logger {
 	disabled := disabledLogger{}
+	var errChan chan error
+	if errChanBufferLen > 0 {
+		errChan = make(chan error, errChanBufferLen)
+	}
 	logger := &Logger{
 		ErrorLogger: disabled,
 		InfoLogger:  disabled,
 		DebugLogger: disabled,
+		errChan:     errChan,
 	}
 	enabled := enabledLogger{output}
 	switch level {
@@ -95,19 +115,21 @@ func NewLogger(level LogLevel, output io.Writer) *Logger {
 	return logger
 }
 
-// ParseLogLevel returns the logger level corresponding to the string
-// representation `level`. The returned LogLevel is Disabled when none matches.
-func ParseLogLevel(level string) LogLevel {
-	switch strings.TrimSpace(strings.ToLower(level)) {
-	case DebugString:
-		return Debug
-	case InfoString:
-		return Info
-	case ErrorString:
-		return Error
+// ErrChan returns the error channel. When Error logs are produced, the logged
+// error is sent into the channel.
+func (l *Logger) ErrChan() <-chan error {
+	return l.errChan
+}
+
+// Error logs the error and send it into the error channel. If the channel is
+// full, the send operation is dropped but the logging is still produced.
+func (l *Logger) Error(err error) {
+	// Non-blocking send into the error channel
+	select {
+	case l.errChan <- err:
 	default:
-		return Disabled
 	}
+	l.ErrorLogger.Error(err)
 }
 
 // Enabled logger instance.
@@ -131,12 +153,9 @@ func (l enabledLogger) Infof(format string, v ...interface{}) {
 	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
 }
 
-func (l enabledLogger) Error(v ...interface{}) {
-	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprint(v...)))
-}
-
-func (l enabledLogger) Errorf(format string, v ...interface{}) {
-	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
+func (l enabledLogger) Error(err error) {
+	// Most detailed error format, including stacktrace when available.
+	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf("%+v", err)))
 }
 
 // Time formatting layout with microsecond precision.
@@ -149,15 +168,8 @@ func formatLog(level LogLevel, now time.Time, message string) []byte {
 type disabledLogger struct {
 }
 
-func (_ disabledLogger) Error(_ ...interface{}) {
-}
-func (_ disabledLogger) Errorf(_ string, _ ...interface{}) {
-}
-func (_ disabledLogger) Info(_ ...interface{}) {
-}
-func (_ disabledLogger) Infof(_ string, _ ...interface{}) {
-}
-func (_ disabledLogger) Debug(_ ...interface{}) {
-}
-func (_ disabledLogger) Debugf(_ string, _ ...interface{}) {
-}
+func (_ disabledLogger) Error(error)                       {}
+func (_ disabledLogger) Info(_ ...interface{})             {}
+func (_ disabledLogger) Infof(_ string, _ ...interface{})  {}
+func (_ disabledLogger) Debug(_ ...interface{})            {}
+func (_ disabledLogger) Debugf(_ string, _ ...interface{}) {}

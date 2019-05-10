@@ -452,7 +452,8 @@ func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
 	if requestId == "" {
 		uuid, err := uuid.NewRandom()
 		if err != nil {
-			r.ctx.agent.logger.Error("could not generate a request id ", err)
+			// Log the error and continue.
+			r.ctx.agent.logger.Error(errors.Wrap(err, "could not generate a request id "))
 			requestId = ""
 		}
 		requestId = hex.EncodeToString(uuid[:])
