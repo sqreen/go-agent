@@ -9,7 +9,8 @@ import (
 	"reflect"
 	"runtime"
 
-	"golang.org/x/xerrors"
+	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
 // PanicError is an error type wrapping a recovered panic value that happened
@@ -24,20 +25,26 @@ type PanicError struct {
 func NewPanicError(in func() error, err error) *PanicError {
 	return &PanicError{
 		In:  in,
-		Err: err,
+		Err: errors.WithStack(err),
 	}
 }
 
-func (e PanicError) Unwrap() error {
+func (e *PanicError) Unwrap() error {
+	// TODO: not precise until the new go 1.13 error interface is integrated into
+	//  package errors.
+	return errors.Cause(e.Err)
+}
+
+func (e *PanicError) Cause() error {
 	return e.Err
 }
 
-func (e PanicError) inName() string {
+func (e *PanicError) inName() string {
 	return runtime.FuncForPC(reflect.ValueOf(e.In).Pointer()).Name()
 }
 
-func (e PanicError) Error() string {
-	return fmt.Sprintf("panic while executing %s: %s", e.inName(), e.Err)
+func (e *PanicError) Error() string {
+	return fmt.Sprintf("panic while executing %s: %v", e.inName(), e.Err)
 }
 
 // Call calls function `f` and recovers from any panic occurring while it
@@ -54,9 +61,9 @@ func Call(f func() error) (err error) {
 		case error:
 			err = actual
 		case string:
-			err = xerrors.New(actual)
+			err = sqerrors.New(actual)
 		default:
-			err = xerrors.Errorf("%v", r)
+			err = sqerrors.New(fmt.Sprint(r))
 		}
 
 		err = NewPanicError(f, err)
