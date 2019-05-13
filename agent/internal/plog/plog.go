@@ -142,7 +142,7 @@ func (l enabledLogger) Debug(v ...interface{}) {
 }
 
 func (l enabledLogger) Debugf(format string, v ...interface{}) {
-	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
+	_, _ = l.Write(formatLog(Debug, time.Now(), fmt.Sprintf(format, v...)))
 }
 
 func (l enabledLogger) Info(v ...interface{}) {
@@ -150,7 +150,7 @@ func (l enabledLogger) Info(v ...interface{}) {
 }
 
 func (l enabledLogger) Infof(format string, v ...interface{}) {
-	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, v...)))
+	_, _ = l.Write(formatLog(Info, time.Now(), fmt.Sprintf(format, v...)))
 }
 
 func (l enabledLogger) Error(err error) {
