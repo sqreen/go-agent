@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -203,7 +202,7 @@ func (a *Agent) Serve() error {
 	}
 
 	// Start the event manager's loop
-	a.eventMng = newEventManager(a, a.RulespackID(), batchSize, maxStaleness)
+	a.eventMng = newEventManager(a, batchSize, maxStaleness)
 	eventMngErrChan := sqsafe.Go(func() error {
 		a.eventMng.Loop(a.ctx, a.client)
 		return nil
@@ -288,20 +287,16 @@ func (a *Agent) GracefulStop() {
 
 type eventManager struct {
 	agent        *Agent
-	req          api.BatchRequest
-	rulespackID  string
 	count        int
 	eventsChan   chan Event
-	reqLock      sync.Mutex
 	maxStaleness time.Duration
 }
 
-func newEventManager(agent *Agent, rulespackID string, count int, maxStaleness time.Duration) *eventManager {
+func newEventManager(agent *Agent, count int, maxStaleness time.Duration) *eventManager {
 	return &eventManager{
 		agent:        agent,
-		eventsChan:   make(chan Event, count),
+		eventsChan:   make(chan Event, count*10),
 		count:        count,
-		rulespackID:  rulespackID,
 		maxStaleness: maxStaleness,
 	}
 }
@@ -318,22 +313,17 @@ func (m *eventManager) add(r Event) {
 
 func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	var isFull, isSent chan struct{}
+	var batch = make([]Event, 0, m.count)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case e := <-m.eventsChan:
-			event := e.(*HTTPRequestRecordEvent)
-			// TODO: handle ExceptionEvents
-			m.agent.logger.Debug("new event")
-			m.reqLock.Lock()
-			m.req.Batch = append(m.req.Batch, api.BatchRequest_Event{
-				EventType: "request_record",
-				Event:     api.Struct{api.NewRequestRecordFromFace(event)},
-			})
-			batchLen := len(m.req.Batch)
-			m.reqLock.Unlock()
-			if batchLen == 1 {
+		case event := <-m.eventsChan:
+			batch = append(batch, event)
+			m.agent.logger.Debug("new event added to the event batch")
+			if batchLen := len(batch); batchLen == 1 {
+				ready := batch
+				batch = make([]Event, 0, m.count)
 				// First event of this batch.
 				// Given the amount of external events, it is easier to create a
 				// goroutine to select{} one of them.
@@ -349,7 +339,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 					case <-isFull:
 						m.agent.logger.Debug("event batch is full")
 					}
-					m.send(client)
+					m.send(client, ready)
 					m.agent.logger.Debug("event batch sent")
 					close(isSent)
 					return nil
@@ -367,15 +357,27 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	}
 }
 
-func (m *eventManager) send(client *backend.Client) {
-	m.reqLock.Lock()
-	defer m.reqLock.Unlock()
-	// Send the batch.
-	if err := client.Batch(&m.req); err != nil {
-		// Log the error and drop the batch
-		m.agent.logger.Error(errors.Wrap(err, "could not send an event batch"))
+func (m *eventManager) send(client *backend.Client, batch []Event) {
+	req := api.BatchRequest{
+		Batch: make([]api.BatchRequest_Event, 0, len(batch)),
 	}
-	m.req.Batch = m.req.Batch[0:0]
+
+	for _, e := range batch {
+		var event api.BatchRequest_EventFace
+		switch actual := e.(type) {
+		case *HTTPRequestRecordEvent:
+			event = (*api.RequestRecordEvent)(api.NewRequestRecordFromFace(actual))
+		case *ExceptionEvent:
+			event = api.NewExceptionEventFromFace(actual)
+		}
+		req.Batch = append(req.Batch, *api.NewBatchRequest_EventFromFace(event))
+	}
+
+	// Send the batch.
+	if err := client.Batch(&req); err != nil {
+		// Log the error and drop the batch
+		m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
+	}
 }
 
 func (a *Agent) AddHTTPRequestRecordEvent(e *HTTPRequestRecordEvent) {
