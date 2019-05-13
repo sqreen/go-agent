@@ -33,6 +33,7 @@ type AppLoginRequest_VariousInfos struct {
 }
 
 type AppLoginResponse struct {
+	Error     string                   `json:"error"`
 	SessionId string                   `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id"`
 	Status    bool                     `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
 	Commands  []CommandRequest         `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands"`

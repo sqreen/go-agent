@@ -74,9 +74,10 @@ func Start() {
 				}
 				// Error ignored here
 				_ = sqsafe.Call(func() error {
-					// TODO: try to send the error with a direct bare HTTP POST call not
-					//  using the agent but relying on the configuration in order to get
-					//  the token.
+					// Send the error with a direct HTTP POST call without using the
+					// failed agent, but rather using the standard library's default
+					// HTTP client.
+					TrySendAppException(logger, cfg, err)
 					return nil
 				})
 
@@ -164,7 +165,7 @@ func (a *Agent) Serve() error {
 	defer func() {
 		// Signal we are done
 		close(a.isDone)
-		a.logger.Info("agent successfully stopped")
+		a.logger.Info("agent stopped")
 	}()
 
 	token := a.config.BackendHTTPAPIToken()
@@ -172,9 +173,13 @@ func (a *Agent) Serve() error {
 	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo)
 	if err != nil {
 		if xerrors.Is(err, context.Canceled) {
+			a.logger.Debug(err)
 			return nil
 		}
-		// TODO: add the error into the event batch
+		if xerrors.As(err, &LoginError{}) {
+			a.logger.Info(err)
+			return nil
+		}
 		return err
 	}
 
@@ -222,7 +227,7 @@ func (a *Agent) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(&appBeatReq)
 			if err != nil {
-				a.logger.Debug("heartbeat failed: ", err)
+				a.logger.Error(errors.Wrap(err, "heartbeat failed"))
 				continue
 			}
 

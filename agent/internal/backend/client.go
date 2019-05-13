@@ -68,7 +68,9 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 	}
 	res := new(api.AppLoginResponse)
 	if err := c.Do(httpReq, req, res); err != nil {
-		return nil, err
+		// Return res which, depending on the error value, may contain the
+		// backend error message.
+		return res, err
 	}
 
 	c.session = res.SessionId
@@ -142,16 +144,12 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	req.Body = ioutil.NopCloser(&buf)
 	req.ContentLength = int64(buf.Len())
 
-	dumpReq, _ := httputil.DumpRequestOut(req, true)
-	c.logger.Debugf("sending request\n%s", dumpReq)
-
+	c.logger.Debugf("sending request\n%s\n", (*HTTPRequestStringer)(req))
 	res, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
-
-	dumpRes, _ := httputil.DumpResponse(res, true)
-	c.logger.Debugf("received response\n%s", dumpRes)
+	c.logger.Debugf("received response\n%s\n", (*HTTPResponseStringer)(res))
 
 	// As documented (https://golang.org/pkg/net/http/#Response), connections are
 	// reused iif the response body was fully drained. The following chunk thus
@@ -160,14 +158,9 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	// json parsers may stop before.
 	// See also: https://github.com/google/go-github/pull/317
 	defer func() {
-		// FIXME: log when n > 00
 		io.CopyN(ioutil.Discard, res.Body, 1)
 		res.Body.Close()
 	}()
-
-	if res.StatusCode != http.StatusOK {
-		return NewStatusError(res.StatusCode)
-	}
 
 	if len(pbs) >= 2 && pbs[1] != nil {
 		pbUnmarshaler := json.NewDecoder(res.Body)
@@ -177,7 +170,24 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 		}
 	}
 
+	if res.StatusCode != http.StatusOK {
+		return NewStatusError(res.StatusCode)
+	}
 	return nil
+}
+
+type HTTPRequestStringer http.Request
+
+func (r *HTTPRequestStringer) String() string {
+	dump, _ := httputil.DumpRequestOut((*http.Request)(r), true)
+	return string(dump)
+}
+
+type HTTPResponseStringer http.Response
+
+func (r *HTTPResponseStringer) String() string {
+	dump, _ := httputil.DumpResponse((*http.Response)(r), true)
+	return string(dump)
 }
 
 // Helper method to build an API endpoint request structure.
