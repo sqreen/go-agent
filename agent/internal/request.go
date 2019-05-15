@@ -5,7 +5,6 @@
 package internal
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -14,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
@@ -217,7 +215,7 @@ func (ctx *HTTPRequestRecord) Close() {
 		return
 	}
 
-	ctx.agent.addRecord(newHTTPRequestRecord(ctx))
+	ctx.agent.AddHTTPRequestRecordEvent(NewHTTPRequestRecordEvent(ctx, ctx.agent.RulespackID()))
 }
 
 func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
@@ -298,33 +296,6 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 		return nil
 	}
 	return &api.Struct{e.userIdentifiers}
-}
-
-type httpRequestRecord struct {
-	ctx         *HTTPRequestRecord
-	rulespackID string
-}
-
-func newHTTPRequestRecord(event *HTTPRequestRecord) *httpRequestRecord {
-	return &httpRequestRecord{
-		ctx: event,
-	}
-}
-
-func (r *httpRequestRecord) GetVersion() string {
-	return api.RequestRecordVersion
-}
-
-func (r *httpRequestRecord) GetRulespackId() string {
-	return r.rulespackID
-}
-
-func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
-	r.rulespackID = rulespackId
-}
-
-func (r *httpRequestRecord) GetClientIp() string {
-	return getClientIP(r.ctx.request, r.ctx.agent.config).String()
 }
 
 type getClientIPConfigFace interface {
@@ -418,81 +389,6 @@ func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
 		return net.IP(clientIPBuf).String(), nil
 	default:
 		return "", errors.Errorf("unexpected IP address value `%s`", clientIPBuf)
-	}
-}
-
-func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
-	req := r.ctx.request
-
-	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := r.ctx.agent.config.HTTPClientIPHeader(); extraHeader != "" {
-		trackedHeaders = append(trackedHeaders, extraHeader)
-	}
-	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
-	for _, header := range trackedHeaders {
-		if value := req.Header.Get(header); value != "" {
-			headers = append(headers, api.RequestRecord_Request_Header{
-				Key:   header,
-				Value: value,
-			})
-		}
-	}
-
-	remoteIP, remotePort := splitHostPort(req.RemoteAddr)
-	_, hostPort := splitHostPort(req.Host)
-
-	var scheme string
-	if req.TLS != nil {
-		scheme = "https"
-	} else {
-		scheme = "http"
-	}
-
-	requestId := req.Header.Get("X-Request-Id")
-	if requestId == "" {
-		uuid, err := uuid.NewRandom()
-		if err != nil {
-			// Log the error and continue.
-			r.ctx.agent.logger.Error(errors.Wrap(err, "could not generate a request id "))
-			requestId = ""
-		}
-		requestId = hex.EncodeToString(uuid[:])
-	}
-
-	var referer string
-	if !r.ctx.agent.config.StripHTTPReferer() {
-		referer = req.Referer()
-	}
-
-	// FIXME: create it from an interface for compile-time error-checking.
-	return api.RequestRecord_Request{
-		Rid:        requestId,
-		Headers:    headers,
-		Verb:       req.Method,
-		RawPath:    req.RequestURI,
-		Path:       req.URL.Path,
-		Host:       req.Host,
-		Port:       hostPort,
-		RemoteIp:   remoteIP,
-		RemotePort: remotePort,
-		Scheme:     scheme,
-		UserAgent:  req.UserAgent(),
-		Referer:    referer,
-	}
-}
-
-func (r *httpRequestRecord) GetResponse() api.RequestRecord_Response {
-	return api.RequestRecord_Response{}
-}
-
-func (r *httpRequestRecord) GetObserved() api.RequestRecord_Observed {
-	events := make([]*api.RequestRecord_Observed_SDKEvent, 0, len(r.ctx.events))
-	for _, event := range r.ctx.events {
-		events = append(events, api.NewRequestRecord_Observed_SDKEventFromFace(event))
-	}
-
-	return api.RequestRecord_Observed{
-		Sdk: events,
 	}
 }
 

@@ -33,6 +33,7 @@ type AppLoginRequest_VariousInfos struct {
 }
 
 type AppLoginResponse struct {
+	Error     string                   `json:"error"`
 	SessionId string                   `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id"`
 	Status    bool                     `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
 	Commands  []CommandRequest         `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands"`
@@ -76,7 +77,82 @@ type AppBeatResponse struct {
 }
 
 type BatchRequest struct {
-	Batch []BatchRequest_Event `protobuf:"bytes,1,rep,name=batch,proto3" json:"batch"`
+	Batch []BatchRequest_Event `json:"batch"`
+}
+
+type RequestRecordEvent RequestRecord
+
+func (*RequestRecordEvent) GetEventType() string {
+	return "request_record"
+}
+
+func (e *RequestRecordEvent) GetEvent() Struct {
+	return Struct{e}
+}
+
+type ExceptionEvent struct {
+	Time        time.Time        `json:"time"`
+	Klass       string           `json:"klass"`
+	Message     string           `json:"message"`
+	RulespackID string           `json:"rulespack_id"`
+	Context     ExceptionContext `json:"context"`
+}
+
+type ExceptionEventFace interface {
+	GetTime() time.Time
+	GetKlass() string
+	GetMessage() string
+	GetRulespackID() string
+	GetContext() ExceptionContext
+}
+
+func NewExceptionEventFromFace(e ExceptionEventFace) *ExceptionEvent {
+	return &ExceptionEvent{
+		Time:        e.GetTime(),
+		Klass:       e.GetKlass(),
+		Message:     e.GetMessage(),
+		Context:     e.GetContext(),
+		RulespackID: e.GetRulespackID(),
+	}
+}
+
+func (*ExceptionEvent) GetEventType() string {
+	return "sqreen_exception"
+}
+
+func (e *ExceptionEvent) GetEvent() Struct {
+	return Struct{e}
+}
+
+type ExceptionContext struct {
+	Backtrace []StackFrame `json:"backtrace,omitempty"`
+}
+
+type ExceptionContextFace interface {
+	GetBacktrace() []StackFrame
+}
+
+func NewExceptionContextFromFace(c ExceptionContextFace) *ExceptionContext {
+	return &ExceptionContext{Backtrace: c.GetBacktrace()}
+}
+
+type StackFrame struct {
+	Method     string `json:"method"`
+	File       string `json:"file"`
+	LineNumber uint32 `json:"line_number"`
+}
+
+type StackFrameFace interface {
+	GetMethod() string
+	GetFile() string
+	GetLineNumber() uint32
+}
+
+func NewStackFrameFromFace(e StackFrameFace) *StackFrame {
+	return &StackFrame{
+		Method:     e.GetMethod(),
+		File:       e.GetFile(),
+		LineNumber: e.GetLineNumber()}
 }
 
 type BatchRequest_Event struct {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -75,9 +74,10 @@ func Start() {
 				}
 				// Error ignored here
 				_ = sqsafe.Call(func() error {
-					// TODO: try to send the error with a direct bare HTTP POST call not
-					//  using the agent but relying on the configuration in order to get
-					//  the token.
+					// Send the error with a direct HTTP POST call without using the
+					// failed agent, but rather using the standard library's default
+					// HTTP client.
+					TrySendAppException(logger, cfg, err)
 					return nil
 				})
 
@@ -115,24 +115,29 @@ func Start() {
 }
 
 type Agent struct {
-	logger     *plog.Logger
-	eventMng   *eventManager
-	metricsMng *metricsManager
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isDone     chan struct{}
-	config     *config.Config
-	appInfo    *app.Info
-	client     *backend.Client
-	actors     *actor.Store
+	logger      *plog.Logger
+	eventMng    *eventManager
+	metricsMng  *metricsManager
+	ctx         context.Context
+	cancel      context.CancelFunc
+	isDone      chan struct{}
+	config      *config.Config
+	appInfo     *app.Info
+	client      *backend.Client
+	actors      *actor.Store
+	rulespackId string
 }
 
+// Error channel buffer length.
+const errorChanBufferLength = 256
+
 func New(cfg *config.Config) *Agent {
+	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, errorChanBufferLength)
+
 	if cfg.Disable() {
+		logger.Info("agent disabled by configuration")
 		return nil
 	}
-
-	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, 0)
 
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -160,7 +165,7 @@ func (a *Agent) Serve() error {
 	defer func() {
 		// Signal we are done
 		close(a.isDone)
-		a.logger.Info("agent successfully stopped")
+		a.logger.Info("agent stopped")
 	}()
 
 	token := a.config.BackendHTTPAPIToken()
@@ -168,9 +173,13 @@ func (a *Agent) Serve() error {
 	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo)
 	if err != nil {
 		if xerrors.Is(err, context.Canceled) {
+			a.logger.Debug(err)
 			return nil
 		}
-		// TODO: add the error into the event batch
+		if xerrors.As(err, &LoginError{}) {
+			a.logger.Info(err)
+			return nil
+		}
 		return err
 	}
 
@@ -187,7 +196,7 @@ func (a *Agent) Serve() error {
 	a.logger.Info("up and running - heartbeat set to ", heartbeat)
 	ticker := time.Tick(heartbeat)
 
-	rulespackId := appLoginRes.PackId
+	a.rulespackId = appLoginRes.PackId
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
 		batchSize = config.MaxEventsPerHeatbeat
@@ -198,7 +207,7 @@ func (a *Agent) Serve() error {
 	}
 
 	// Start the event manager's loop
-	a.eventMng = newEventManager(a, rulespackId, batchSize, maxStaleness)
+	a.eventMng = newEventManager(a, batchSize, maxStaleness)
 	eventMngErrChan := sqsafe.Go(func() error {
 		a.eventMng.Loop(a.ctx, a.client)
 		return nil
@@ -218,7 +227,7 @@ func (a *Agent) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(&appBeatReq)
 			if err != nil {
-				a.logger.Debug("heartbeat failed: ", err)
+				a.logger.Error(errors.Wrap(err, "heartbeat failed"))
 				continue
 			}
 
@@ -237,8 +246,13 @@ func (a *Agent) Serve() error {
 			return nil
 
 		case err := <-eventMngErrChan:
-			// TODO: add the error to the error batch
+			// Unexpected error from the event manager's loop as it should stop
+			// when the agent stops.
 			return err
+
+		case err := <-a.logger.ErrChan():
+			// Unhandled errors that were logged.
+			a.AddExceptionEvent(NewExceptionEvent(err, a.RulespackID()))
 		}
 	}
 }
@@ -278,25 +292,21 @@ func (a *Agent) GracefulStop() {
 
 type eventManager struct {
 	agent        *Agent
-	req          api.BatchRequest
-	rulespackID  string
 	count        int
-	eventsChan   chan (*httpRequestRecord)
-	reqLock      sync.Mutex
+	eventsChan   chan Event
 	maxStaleness time.Duration
 }
 
-func newEventManager(agent *Agent, rulespackID string, count int, maxStaleness time.Duration) *eventManager {
+func newEventManager(agent *Agent, count int, maxStaleness time.Duration) *eventManager {
 	return &eventManager{
 		agent:        agent,
-		eventsChan:   make(chan (*httpRequestRecord), count),
+		eventsChan:   make(chan Event, count*10),
 		count:        count,
-		rulespackID:  rulespackID,
 		maxStaleness: maxStaleness,
 	}
 }
 
-func (m *eventManager) add(r *httpRequestRecord) {
+func (m *eventManager) add(r Event) {
 	select {
 	case m.eventsChan <- r:
 		return
@@ -308,21 +318,17 @@ func (m *eventManager) add(r *httpRequestRecord) {
 
 func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	var isFull, isSent chan struct{}
+	var batch = make([]Event, 0, m.count)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-m.eventsChan:
-			m.agent.logger.Debug("new event")
-			event.SetRulespackId(m.rulespackID)
-			m.reqLock.Lock()
-			m.req.Batch = append(m.req.Batch, api.BatchRequest_Event{
-				EventType: "request_record",
-				Event:     api.Struct{api.NewRequestRecordFromFace(event)},
-			})
-			batchLen := len(m.req.Batch)
-			m.reqLock.Unlock()
-			if batchLen == 1 {
+			batch = append(batch, event)
+			m.agent.logger.Debug("new event added to the event batch")
+			if batchLen := len(batch); batchLen == 1 {
+				ready := batch
+				batch = make([]Event, 0, m.count)
 				// First event of this batch.
 				// Given the amount of external events, it is easier to create a
 				// goroutine to select{} one of them.
@@ -338,7 +344,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 					case <-isFull:
 						m.agent.logger.Debug("event batch is full")
 					}
-					m.send(client)
+					m.send(client, ready)
 					m.agent.logger.Debug("event batch sent")
 					close(isSent)
 					return nil
@@ -356,21 +362,45 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	}
 }
 
-func (m *eventManager) send(client *backend.Client) {
-	m.reqLock.Lock()
-	defer m.reqLock.Unlock()
-	// Send the batch.
-	if err := client.Batch(&m.req); err != nil {
-		// Log the error and drop the batch
-		m.agent.logger.Error(errors.Wrap(err, "could not send an event batch"))
+func (m *eventManager) send(client *backend.Client, batch []Event) {
+	req := api.BatchRequest{
+		Batch: make([]api.BatchRequest_Event, 0, len(batch)),
 	}
-	m.req.Batch = m.req.Batch[0:0]
+
+	for _, e := range batch {
+		var event api.BatchRequest_EventFace
+		switch actual := e.(type) {
+		case *HTTPRequestRecordEvent:
+			event = (*api.RequestRecordEvent)(api.NewRequestRecordFromFace(actual))
+		case *ExceptionEvent:
+			event = api.NewExceptionEventFromFace(actual)
+		}
+		req.Batch = append(req.Batch, *api.NewBatchRequest_EventFromFace(event))
+	}
+
+	// Send the batch.
+	if err := client.Batch(&req); err != nil {
+		// Log the error and drop the batch
+		m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
+	}
 }
 
-func (a *Agent) addRecord(r *httpRequestRecord) {
+func (a *Agent) AddHTTPRequestRecordEvent(e *HTTPRequestRecordEvent) {
 	if a.config.Disable() || a.eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
-	a.eventMng.add(r)
+	a.eventMng.add(e)
+}
+
+func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {
+	if a.config.Disable() || a.eventMng == nil {
+		// Disabled or not yet initialized agent
+		return
+	}
+	a.eventMng.add(e)
+}
+
+func (a *Agent) RulespackID() string {
+	return a.rulespackId
 }
