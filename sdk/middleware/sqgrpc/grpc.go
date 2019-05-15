@@ -13,8 +13,11 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
 	"github.com/sqreen/go-agent/sdk"
+	"golang.org/x/xerrors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 // UnaryServerInterceptor is Sqreen's middleware function for unary RPCs to
@@ -43,29 +46,75 @@ import (
 //
 func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Create a new request record
-		sqreen := sdk.NewHTTPRequestRecord(requestFromMD(ctx))
-		defer sqreen.Close()
+		// Create a new sqreen request wrapper.
+		ctx, sqreened := newRequestFromMD(ctx)
+		defer sqreened.Close()
 
-		// Store it into the context.
-		contextKey := sdk.HTTPRequestRecordContextKey
-		newCtx := context.WithValue(ctx, contextKey, sqreen)
-		return handler(newCtx, req)
+		// Check if an early security action is already required such as based on
+		// the request IP address.
+		if handler := sqreened.SecurityResponse(); handler != nil {
+			// TODO: better interface for non-standard HTTP packages to avoid this
+			//  noopHTTPResponseWriter hack just to send the block event.
+			handler.ServeHTTP(noopHTTPResponseWriter{}, sqreened.Request())
+			return nil, status.Error(codes.Aborted, "aborted by sqreen security action")
+		}
+
+		res, err := handler(ctx, req)
+		if err != nil && !xerrors.As(err, &sdk.SecurityResponseMatch{}) {
+			// The error is not a security response match
+			return res, err
+		}
+
+		// Check if a security response should be applied now after having used
+		// `Identify()` and `MatchSecurityResponse()`.
+		if handler := sqreened.UserSecurityResponse(); handler != nil {
+			// TODO: same as before
+			handler.ServeHTTP(noopHTTPResponseWriter{}, sqreened.Request())
+			return nil, status.Error(codes.Aborted, "aborted by a sqreen user action")
+		}
+
+		return res, nil
 	}
 }
 
 func StreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		ctx := stream.Context()
-		sqreen := sdk.NewHTTPRequestRecord(requestFromMD(ctx))
-		defer sqreen.Close()
+		ctx, sqreened := newRequestFromMD(stream.Context())
+		defer sqreened.Close()
 
-		// Store it into the stream context.
-		contextKey := sdk.HTTPRequestRecordContextKey
-		newCtx := context.WithValue(ctx, contextKey, sqreen)
+		// Check if an early security action is already required such as based on
+		// the request IP address.
+		if handler := sqreened.SecurityResponse(); handler != nil {
+			// TODO: better interface for non-standard HTTP packages to avoid this
+			//  noopHTTPResponseWriter hack just to send the block event.
+			handler.ServeHTTP(noopHTTPResponseWriter{}, sqreened.Request())
+			return status.Error(codes.Aborted, "aborted by a sqreen security action")
+		}
+
 		wrapped := grpc_middleware.WrapServerStream(stream)
-		wrapped.WrappedContext = newCtx
-		return handler(srv, wrapped)
+		wrapped.WrappedContext = ctx
+		err := handler(srv, wrapped)
+		if err != nil && !xerrors.As(err, &sdk.SecurityResponseMatch{}) {
+			// The error is not a security response match
+			return err
+		}
+
+		// Check if a security response should be applied now after having used
+		// `Identify()` and `MatchSecurityResponse()`.
+		if handler := sqreened.UserSecurityResponse(); handler != nil {
+			// TODO: same as before
+			handler.ServeHTTP(noopHTTPResponseWriter{}, sqreened.Request())
+			return status.Error(codes.Aborted, "aborted by a sqreen user action")
+		}
+
+		// Note that we do not control the result's payload here. So users need
+		// to use the SDK in order to check the user security response and avoid
+		// sending messages. A slower solution would be wrapping the stream's
+		// Recv() and Send() methods in order to check for the security response
+		// every time a message is received/sent, so that the connection can
+		// be aborted.
+
+		return nil
 	}
 }
 
@@ -109,7 +158,7 @@ func (r http2Request) getHeader() http.Header {
 	return h
 }
 
-func requestFromMD(ctx context.Context) *http.Request {
+func newRequestFromMD(ctx context.Context) (context.Context, *sdk.HTTPRequest) {
 	// gRPC stores headers into the metadata object.
 	r := http2Request(metautils.ExtractIncoming(ctx))
 	p, ok := peer.FromContext(ctx)
@@ -117,7 +166,7 @@ func requestFromMD(ctx context.Context) *http.Request {
 	if ok {
 		remoteAddr = p.Addr.String()
 	}
-	return &http.Request{
+	req := &http.Request{
 		Method:        r.getMethod(),
 		URL:           r.getURL(),
 		Proto:         "HTTP/2",
@@ -128,4 +177,18 @@ func requestFromMD(ctx context.Context) *http.Request {
 		RemoteAddr:    remoteAddr,
 		RequestURI:    r.getRequestURI(),
 	}
+	req = req.WithContext(ctx)
+
+	// Create a new sqreened request.
+	sqreened := sdk.NewHTTPRequest(req)
+	// Get the new request context which includes the request record pointer.
+	ctx = sqreened.Request().Context()
+
+	return ctx, sqreened
 }
+
+type noopHTTPResponseWriter struct{}
+
+func (noopHTTPResponseWriter) Header() http.Header         { return nil }
+func (noopHTTPResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (noopHTTPResponseWriter) WriteHeader(statusCode int)  {}
