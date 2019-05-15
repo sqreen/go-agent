@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 
 	"github.com/spf13/viper"
@@ -47,13 +48,14 @@ var (
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
-		AppLogin, AppLogout, AppBeat, Batch, ActionsPack HTTPAPIEndpoint
+		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack HTTPAPIEndpoint
 	}{
-		AppLogin:    HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
-		AppLogout:   HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
-		AppBeat:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
-		Batch:       HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
-		ActionsPack: HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
+		AppLogin:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
+		AppLogout:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
+		AppBeat:      HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
+		AppException: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_sqreen_exception"},
+		Batch:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
+		ActionsPack:  HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
 	}
 
 	// Header name of the API token.
@@ -209,8 +211,6 @@ const (
 )
 
 func New(logger *plog.Logger) *Config {
-	logger = plog.NewLogger("agent/config", logger)
-
 	manager := viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()
@@ -230,7 +230,7 @@ func New(logger *plog.Logger) *Config {
 		// 2. Executable path
 		exec, err := os.Executable()
 		if err != nil {
-			logger.Error("could not read the executable file path: ", err)
+			logger.Error(errors.Wrap(err, "could not read the executable file path"))
 		} else {
 			manager.AddConfigPath(filepath.Dir(exec))
 		}
@@ -247,7 +247,7 @@ func New(logger *plog.Logger) *Config {
 
 	err := manager.ReadInConfig()
 	if err != nil {
-		logger.Error("could not read the configuration file: ", err)
+		logger.Error(errors.Wrap(err, "could not read the configuration file"))
 	}
 
 	return &Config{manager}

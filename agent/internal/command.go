@@ -31,7 +31,7 @@ type CommandManagerAgent interface {
 func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
 	mng := &CommandManager{
 		agent:  agent,
-		logger: plog.NewLogger("command", logger),
+		logger: logger,
 	}
 
 	// Note: using Go's reflection to call methods would be slower.

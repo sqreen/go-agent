@@ -16,7 +16,7 @@ import (
 )
 
 func TestUserConfig(t *testing.T) {
-	logger := plog.NewLogger("test", nil)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
 	cfg := New(logger)
 
 	stringValueTests := []struct {

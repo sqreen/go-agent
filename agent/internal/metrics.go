@@ -6,13 +6,14 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 )
 
 type metricsManager struct {
@@ -59,10 +60,11 @@ func (m *metricsManager) get(name string) *metricsStore {
 	actual, _ := m.metrics.LoadOrStore(name, store)
 	store = actual.(*metricsStore)
 	store.once.Do(func() {
-		go func() {
+		_ = sqsafe.Go(func() error {
 			m.logger.Debug("bookkeeping metrics ", name, " with period ", store.period)
 			store.monitor(m.ctx, time.Now())
-		}()
+			return nil
+		})
 	})
 
 	return store
@@ -73,13 +75,13 @@ func (m *metricsManager) addObservations(name string, start, finish time.Time, o
 	observations.Range(func(k, v interface{}) bool {
 		key, ok := k.(string)
 		if !ok {
-			m.logger.Panic(errors.New("unexpected metric key type"))
+			m.logger.Error(errors.New("unexpected metric key type"))
 			return true
 		}
 
 		value, ok := v.(*uint64)
 		if !ok {
-			m.logger.Panic(errors.New("unexpected metric value type"))
+			m.logger.Error(errors.New("unexpected metric value type"))
 			return true
 		}
 
@@ -120,7 +122,8 @@ func (s *metricsStore) add(e metricEntry) {
 	var n uint64 = 1
 	key, err := e.bucketID()
 	if err != nil {
-		s.logger.Error("could not compute the bucket id of the metric key:", err)
+		// Log the error and continue.
+		s.logger.Error(errors.Wrap(err, "could not compute the bucket id of the metric key"))
 		return
 	}
 	actual, loaded := s.entries.LoadOrStore(key, &n)

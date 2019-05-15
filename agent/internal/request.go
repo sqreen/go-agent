@@ -5,7 +5,6 @@
 package internal
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -14,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
@@ -183,7 +181,7 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 
 func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
 	if len(id) == 0 {
-		ctx.agent.logger.Warn("TrackAuth(): user id is nil or empty")
+		ctx.agent.logger.Info("TrackAuth(): user id is nil or empty")
 		return
 	}
 
@@ -200,7 +198,7 @@ func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess boo
 
 func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
 	if len(id) == 0 {
-		ctx.agent.logger.Warn("TrackSignup(): user id is nil or empty")
+		ctx.agent.logger.Info("TrackSignup(): user id is nil or empty")
 		return
 	}
 
@@ -219,7 +217,7 @@ func (ctx *HTTPRequestRecord) Close() {
 		return
 	}
 
-	ctx.agent.addRecord(newHTTPRequestRecord(ctx))
+	ctx.agent.AddHTTPRequestRecordEvent(NewHTTPRequestRecordEvent(ctx, ctx.agent.RulespackID()))
 }
 
 func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
@@ -452,80 +450,6 @@ func parseClientIPHeaderHeaderValue(format, value string) (string, error) {
 		return net.IP(clientIPBuf).String(), nil
 	default:
 		return "", errors.Errorf("unexpected IP address value `%s`", clientIPBuf)
-	}
-}
-
-func (r *httpRequestRecord) GetRequest() api.RequestRecord_Request {
-	req := r.ctx.request
-
-	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := r.ctx.agent.config.HTTPClientIPHeader(); extraHeader != "" {
-		trackedHeaders = append(trackedHeaders, extraHeader)
-	}
-	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
-	for _, header := range trackedHeaders {
-		if value := req.Header.Get(header); value != "" {
-			headers = append(headers, api.RequestRecord_Request_Header{
-				Key:   header,
-				Value: value,
-			})
-		}
-	}
-
-	remoteIP, remotePort := splitHostPort(req.RemoteAddr)
-	_, hostPort := splitHostPort(req.Host)
-
-	var scheme string
-	if req.TLS != nil {
-		scheme = "https"
-	} else {
-		scheme = "http"
-	}
-
-	requestId := req.Header.Get("X-Request-Id")
-	if requestId == "" {
-		uuid, err := uuid.NewRandom()
-		if err != nil {
-			r.ctx.agent.logger.Error("could not generate a request id ", err)
-			requestId = ""
-		}
-		requestId = hex.EncodeToString(uuid[:])
-	}
-
-	var referer string
-	if !r.ctx.agent.config.StripHTTPReferer() {
-		referer = req.Referer()
-	}
-
-	// FIXME: create it from an interface for compile-time error-checking.
-	return api.RequestRecord_Request{
-		Rid:        requestId,
-		Headers:    headers,
-		Verb:       req.Method,
-		RawPath:    req.RequestURI,
-		Path:       req.URL.Path,
-		Host:       req.Host,
-		Port:       hostPort,
-		RemoteIp:   remoteIP,
-		RemotePort: remotePort,
-		Scheme:     scheme,
-		UserAgent:  req.UserAgent(),
-		Referer:    referer,
-	}
-}
-
-func (r *httpRequestRecord) GetResponse() api.RequestRecord_Response {
-	return api.RequestRecord_Response{}
-}
-
-func (r *httpRequestRecord) GetObserved() api.RequestRecord_Observed {
-	events := make([]*api.RequestRecord_Observed_SDKEvent, 0, len(r.ctx.events))
-	for _, event := range r.ctx.events {
-		events = append(events, api.NewRequestRecord_Observed_SDKEventFromFace(event))
-	}
-
-	return api.RequestRecord_Observed{
-		Sdk: events,
 	}
 }
 

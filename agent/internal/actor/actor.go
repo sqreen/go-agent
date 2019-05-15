@@ -45,7 +45,7 @@ type Store struct {
 
 func NewStore(logger *plog.Logger) *Store {
 	return &Store{
-		logger: plog.NewLogger("actors", logger),
+		logger: logger,
 	}
 }
 
