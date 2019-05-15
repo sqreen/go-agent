@@ -76,32 +76,32 @@ $(agent/library/static): $(needs-dev-container) $(needs-protobufs) $(needs-vendo
 
 .PHONY: test
 test: $(needs-dev-container) $(needs-protobufs)
-	$(call dockerize, go test -v $(test/options) $(test/packages))
+	$(call dockerize, go test $(test/options) $(test/packages))
 help += test
 
 .PHONY: test-coverage
 test-coverage: $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
-	$(call dockerize, go test -v -cover -coverprofile=coverage.txt $(test/options) $(test/packages))
+	$(call dockerize, go test -cover -coverprofile=coverage.txt $(test/options) $(test/packages))
 help += test-coverage
 
 .PHONY: test-race
 test-race: $(needs-dev-container) $(needs-protobufs)
-	$(call dockerize, go test -v -race $(test/options) $(test/packages))
+	$(call dockerize, go test -race $(test/options) $(test/packages))
 help += test-race
 
 .PHONY: benchmark
 benchmark: $(needs-dev-container) $(needs-protobufs)
-	$(call dockerize, go test -v -run=notests -bench=$(benchmark) $(test/options) $(test/packages))
+	$(call dockerize, go test -run=notests -bench=$(benchmark) $(test/options) $(test/packages))
 help += benchmark
 
 .PHONY: benchmark-result
 benchmark-result: $(benchmark/result)
-	$(call dockerize, go test -v -run=notests -bench=$(benchmark) $(test/options) $(test/packages/everything) | tee $(benchmark/result))
+	$(call dockerize, go test -run=notests -bench=$(benchmark) $(test/options) $(test/packages/everything) | tee $(benchmark/result))
 help += benchmark-result
 
 $(benchmark/result): $(needs-dev-container) $(needs-vendors) $(needs-protobufs)
 	mkdir -p $(@D) && touch $@
-	$(call dockerize, go test -v -run=notests -bench=. $(test/packages) | tee $@)
+	$(call dockerize, go test -run=notests -bench=. $(test/packages) | tee $@)
 
 #-----------------------------------------------------------------------------
 # Vendor directory
