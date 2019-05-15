@@ -19,7 +19,9 @@ import (
 func TestCIDRWhitelistStore(t *testing.T) {
 	t.Run("Random addresses", func(t *testing.T) {
 		var cidrs []string
-		for i := 0; i < 10000; i++ {
+		// 4000 because the race detector cannot work with more than 8192
+		// goroutines - we have here two entries per loop = 8000 values here
+		for i := 0; i < 4000; i++ {
 			cidrs = append(cidrs, RandIPv4().String())
 			cidrs = append(cidrs, RandIPv6().String())
 		}
