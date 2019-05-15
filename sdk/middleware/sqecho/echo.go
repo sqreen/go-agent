@@ -12,8 +12,8 @@ import (
 
 // Middleware is Sqreen's middleware function for Echo to monitor and protect
 // the requests Echo receives. In protection mode, it can block and redirect
-// requests according to its IP address or identified user using `Identify()`
-// and `MatchSecurityResponse()` methods from the request handler.
+// requests according to their IP addresses or identified users using
+// Identify()` and `MatchSecurityResponse()` methods.
 //
 // SDK methods can be called from request handlers by using the request event
 // record. It can be accessed using `sdk.FromContext()` on a request context or
