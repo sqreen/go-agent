@@ -165,7 +165,27 @@ func (a *Agent) addUserEvent(event userEventFace) {
 		}
 	case *signupUserEvent:
 		store = a.metricsMng.get("sdk-signup")
+	default:
+		return
 	}
 
 	store.add(event)
+}
+
+type WhitelistedIP struct {
+	MatchedWhitelistEntry string
+}
+
+func (m WhitelistedIP) bucketID() (string, error) {
+	return m.MatchedWhitelistEntry, nil
+}
+
+func (a *Agent) addWhitelistEvent(matchedWhitelistEntry string) {
+	if a.config.Disable() || a.metricsMng == nil {
+		// Agent is disabled or not yet initialized
+		return
+	}
+	a.metricsMng.get("whitelisted").add(WhitelistedIP{
+		MatchedWhitelistEntry: matchedWhitelistEntry,
+	})
 }
