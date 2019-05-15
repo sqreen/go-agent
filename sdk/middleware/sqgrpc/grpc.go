@@ -12,33 +12,32 @@
 //
 // Usage example:
 //
-//		// Add the interceptor options to your gRPC server.
-// 		myServer := grpc.NewServer(
-//			grpc.StreamInterceptor(sqgrpc.StreamServerInterceptor()),
-//  		grpc.UnaryInterceptor(sqgrpc.UnaryServerInterceptor()),
-//  	)
+// 	myServer := grpc.NewServer(
+// 		grpc.StreamInterceptor(sqgrpc.StreamServerInterceptor()),
+// 		grpc.UnaryInterceptor(sqgrpc.UnaryServerInterceptor()),
+// 	)
 //
-// 		// Example of a unary RPC doing a custom event.
-// 		func (s *MyService) MyUnaryRPC(ctx context.Context, req *pb.MyRequest) (*pb.MyResponse, error) {
-//			sdk.FromContext(ctx).TrackEvent("my.event")
-//			// ...
-//		}
+// 	// Example of a unary RPC doing a custom event.
+// 	func (s *MyService) MyUnaryRPC(ctx context.Context, req *pb.MyRequest) (*pb.MyResponse, error) {
+// 		sdk.FromContext(ctx).TrackEvent("my.event")
+// 		// ...
+// 	}
 //
-// 		// Example of a streaming RPC identifying a user and checking if it should
-// 		// be blocked.
-// 		func (s *MyService) MyStreamRPC(req *pb.MyRequest, stream pb.MyService_MyStreamRPCServer) error {
-//			// Example of globally identifying a user and checking if the request
-//			// should be aborted.
-//			uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-//			sqUser := sdk.FromContext(stream.Ctx).ForUser(uid)
-//			sqUser.Identify() // Globally associate this user to the current request
-//			if _, err := sqUser.MatchSecurityResponse(); err != nil {
-//				// Return this error to stop further handling the request and let
-//				// Sqreen's	middleware apply and abort the request.
-//				return err
-//			}
-//			// ... not blocked ...
-//		}
+// 	// Example of a streaming RPC identifying a user and checking if it should
+// 	// be blocked.
+// 	func (s *MyService) MyStreamRPC(req *pb.MyRequest, stream pb.MyService_MyStreamRPCServer) error {
+// 		// Example of globally identifying a user and checking if the request
+// 		// should be aborted.
+// 		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+// 		sqUser := sdk.FromContext(stream.Ctx).ForUser(uid)
+// 		sqUser.Identify() // Globally associate this user to the current request
+// 		if _, err := sqUser.MatchSecurityResponse(); err != nil {
+// 			// Return this error to stop further handling the request and let
+// 			// Sqreen's	middleware apply and abort the request.
+// 			return err
+// 		}
+// 		// ... not blocked ...
+// 	}
 //
 package sqgrpc
 
@@ -175,10 +174,10 @@ func (r http2Request) getHeader() http.Header {
 }
 
 // newRequestFromMD returns the context including the SDK request record along
-// with the SDK request handle. For now, it maps gRPC's metdata to a Go-standard
-// HTTP request in order to be compatible with the current API. In the future,
-// a better abstraction should allow to not rely only on the standard Go
-// HTTP package only.
+// with the SDK request handle. For now, it maps gRPC's metadata to aGo-standard
+// HTTP request in order to be compatible with the current API. In the future, a
+// better abstraction should allow to not rely only on the standard Go HTTP
+// package only.
 func newRequestFromMD(ctx context.Context) (context.Context, *sdk.HTTPRequest) {
 	// gRPC stores headers into the metadata object.
 	r := http2Request(metautils.ExtractIncoming(ctx))
