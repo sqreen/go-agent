@@ -1,7 +1,45 @@
-// Package sqgrpc provides gRPC interceptors. The implementation is in early
-// stage with some limitations and for now expects gRPC over HTTP2, as specified
-// in https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md.
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
 
+// This package provides gRPC interceptors, which are Sqreen's middleware
+// functions for gRPC allowing to monitor and protect the received requests. In
+// protection mode, it can block and redirect requests according to their IP
+// addresses or identified users using `Identify()` and
+// `MatchSecurityResponse()` methods. SDK methods can be called from request
+// handlers by using the request event record, which can be accessed using
+// `sdk.FromContext()` on the request context.
+//
+// Usage example:
+//
+//		// Add the interceptor options to your gRPC server.
+// 		myServer := grpc.NewServer(
+//			grpc.StreamInterceptor(sqgrpc.StreamServerInterceptor()),
+//  		grpc.UnaryInterceptor(sqgrpc.UnaryServerInterceptor()),
+//  	)
+//
+// 		// Example of a unary RPC doing a custom event.
+// 		func (s *MyService) MyUnaryRPC(ctx context.Context, req *pb.MyRequest) (*pb.MyResponse, error) {
+//			sdk.FromContext(ctx).TrackEvent("my.event")
+//			// ...
+//		}
+//
+// 		// Example of a streaming RPC identifying a user and checking if it should
+// 		// be blocked.
+// 		func (s *MyService) MyStreamRPC(req *pb.MyRequest, stream pb.MyService_MyStreamRPCServer) error {
+//			// Example of globally identifying a user and checking if the request
+//			// should be aborted.
+//			uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+//			sqUser := sdk.FromContext(stream.Ctx).ForUser(uid)
+//			sqUser.Identify() // Globally associate this user to the current request
+//			if _, err := sqUser.MatchSecurityResponse(); err != nil {
+//				// Return this error to stop further handling the request and let
+//				// Sqreen's	middleware apply and abort the request.
+//				return err
+//			}
+//			// ... not blocked ...
+//		}
+//
 package sqgrpc
 
 import (
@@ -20,30 +58,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// UnaryServerInterceptor is Sqreen's middleware function for unary RPCs to
-// monitor and protect the requests gRPC receives. It creates and stores the
-// HTTP2 request record both into the gRPC context so that it can be later
-// accessed from handlers using `sdk.FromContext()` to perform SDK calls.
-//
-// Simple add Sqreen's interceptors to your gRPC server options:
-//
-//  myServer := grpc.NewServer(
-//  	grpc.StreamInterceptor(sqgrpc.StreamServerInterceptor()),
-//  	grpc.UnaryInterceptor(sqgrpc.UnaryServerInterceptor()),
-//  )
-//
-// And access the SDK from the RPC endpoints:
-//
-//	func (s *MyService) MyUnaryRPC(ctx context.Context, req *pb.MyRequest) (*pb.MyResponse, error) {
-//		sdk.FromContext(ctx).TrackEvent("my.event")
-//		// ...
-//	}
-//
-//	func (s *MyService) MyStreamRPC(req *pb.MyRequest, stream pb.MyService_MyStreamRPCServer) error {
-//		sdk.FromContext(stream.ctx).TrackEvent("my.event")
-//		// ...
-//	}
-//
 func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		// Create a new sqreen request wrapper.
@@ -118,6 +132,8 @@ func StreamServerInterceptor() grpc.StreamServerInterceptor {
 	}
 }
 
+// http2Request is a convenience type to get HTTP2 header values from gRPC's
+// metadata map. This metadata map contains every HTTP2 header.
 type http2Request metautils.NiceMD
 
 func (r http2Request) getMethod() string {
@@ -158,6 +174,11 @@ func (r http2Request) getHeader() http.Header {
 	return h
 }
 
+// newRequestFromMD returns the context including the SDK request record along
+// with the SDK request handle. For now, it maps gRPC's metdata to a Go-standard
+// HTTP request in order to be compatible with the current API. In the future,
+// a better abstraction should allow to not rely only on the standard Go
+// HTTP package only.
 func newRequestFromMD(ctx context.Context) (context.Context, *sdk.HTTPRequest) {
 	// gRPC stores headers into the metadata object.
 	r := http2Request(metautils.ExtractIncoming(ctx))
@@ -187,7 +208,13 @@ func newRequestFromMD(ctx context.Context) (context.Context, *sdk.HTTPRequest) {
 	return ctx, sqreened
 }
 
+// TODO: agent interfaces should not require this hack.
+
+// noopHTTPResponseWriter allows to call the security response handler so that
+// it performs its event.
 type noopHTTPResponseWriter struct{}
+
+// TODO: agent interfaces should not require this hack.
 
 func (noopHTTPResponseWriter) Header() http.Header         { return nil }
 func (noopHTTPResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
