@@ -7,9 +7,6 @@ package api
 import (
 	"encoding/json"
 	"time"
-	//	_ "github.com/gogo/protobuf/gogoproto"
-	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
-	//	_ "github.com/gogo/protobuf/types"
 )
 
 type AppLoginRequest struct {
@@ -389,7 +386,6 @@ func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
 }
 
 type AppLoginResponse_FeatureFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
 	GetBatchSize() uint32
 	GetMaxStaleness() uint32
 	GetHeartbeatDelay() uint32
@@ -404,7 +400,6 @@ func NewAppLoginResponse_FeatureFromFace(that AppLoginResponse_FeatureFace) *App
 }
 
 type CommandResultFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
 	GetOutput() string
 	GetStatus() bool
 }
@@ -417,7 +412,6 @@ func NewCommandResultFromFace(that CommandResultFace) *CommandResult {
 }
 
 type MetricResponseFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
 	GetName() string
 	GetStart() time.Time
 	GetFinish() time.Time

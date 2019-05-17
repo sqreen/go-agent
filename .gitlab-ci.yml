@@ -36,5 +36,5 @@ coverage:
     - mkdir -p $(dirname $GO_PACKAGE_PATH_WITHOUT_GOMODULES)
     - ln -s $CI_PROJECT_DIR $GO_PACKAGE_PATH_WITHOUT_GOMODULES
     - cd $GO_PACKAGE_PATH_WITHOUT_GOMODULES
-    # Download dependencies, including thos required by the tests
+    # Download dependencies, including those required by the tests
     - go get -t -d -v ./...
