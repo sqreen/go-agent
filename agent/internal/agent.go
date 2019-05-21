@@ -345,7 +345,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 			return
 		case event := <-m.eventsChan:
 			batch = append(batch, event)
-			m.agent.logger.Debug("new event added to the event batch")
+			m.agent.logger.Debugf("new event `%T` added to the event batch", event)
 			if batchLen := len(batch); batchLen == 1 {
 				ready := batch
 				batch = make([]Event, 0, m.count)
