@@ -70,13 +70,13 @@ type MetricResponse struct {
 }
 
 type AppBeatRequest struct {
-	CommandResults map[string]CommandResult `protobuf:"bytes,1,rep,name=command_results,json=commandResults,proto3" json:"command_results,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Metrics        []MetricResponse         `protobuf:"bytes,2,rep,name=metrics,proto3" json:"metrics"`
+	CommandResults map[string]CommandResult `json:"command_results,omitempty"`
+	Metrics        []MetricResponse         `json:"metrics,omitempty"`
 }
 
 type AppBeatResponse struct {
-	Commands []CommandRequest `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands"`
-	Status   bool             `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
+	Commands []CommandRequest `json:"commands,omitempty"`
+	Status   bool             `json:"status"`
 }
 
 type BatchRequest struct {
