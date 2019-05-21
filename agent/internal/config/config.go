@@ -207,7 +207,7 @@ const (
 // User configuration's default values.
 const (
 	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
-	configDefaultLogLevel              = `warn`
+	configDefaultLogLevel              = `info`
 )
 
 func New(logger *plog.Logger) *Config {
