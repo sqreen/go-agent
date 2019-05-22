@@ -6,11 +6,11 @@ package backend
 
 import "fmt"
 
-type StatusError struct {
+type HTTPStatusError struct {
 	StatusCode int
 }
 
-func NewStatusError(code int) *StatusError { return &StatusError{StatusCode: code} }
-func (e *StatusError) Error() string {
+func NewStatusError(code int) HTTPStatusError { return HTTPStatusError{StatusCode: code} }
+func (e HTTPStatusError) Error() string {
 	return fmt.Sprintf("http status error %d", e.StatusCode)
 }

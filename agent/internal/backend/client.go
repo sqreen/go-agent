@@ -7,8 +7,10 @@ package backend
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -16,7 +18,9 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/xerrors"
 )
 
 type Client struct {
@@ -72,8 +76,11 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 	}
 	res := new(api.AppLoginResponse)
 	if err := c.Do(httpReq, req, res); err != nil {
-		// Return res which, depending on the error value, may contain the
-		// backend error message.
+		// Keep the result when it's a HTTP status error as it may contain error
+		// reasons sent by the backend
+		if !xerrors.As(err, &HTTPStatusError{}) {
+			return nil, err
+		}
 		return res, err
 	}
 
@@ -137,12 +144,12 @@ func (c *Client) ActionsPack() (*api.ActionsPackResponse, error) {
 // the cases request case.
 func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	var buf bytes.Buffer
-	pbMarshaler := json.NewEncoder(&buf)
 
 	if len(pbs) >= 1 && pbs[0] != nil {
+		pbMarshaler := json.NewEncoder(&buf)
 		err := pbMarshaler.Encode(pbs[0])
 		if err != nil {
-			return err
+			return sqerrors.Wrap(err, "json marshal")
 		}
 	}
 	req.Body = ioutil.NopCloser(&buf)
@@ -179,7 +186,7 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 		pbUnmarshaler := json.NewDecoder(res.Body)
 		err = pbUnmarshaler.Decode(pbs[1])
 		if err != nil && err != io.EOF {
-			return err
+			return sqerrors.Wrap(err, "json unmarshal")
 		}
 	}
 
