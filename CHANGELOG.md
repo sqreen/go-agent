@@ -16,7 +16,7 @@
 
 ## Minor Change
 
-- Internal event batch improvments:
+- Internal event batch improvements:
   - Increased batch buffer capacity from 60 to 6000 entries in order to be able
     to handle more events, sent by batches of 60 events per heartbeat.
   - Remove the batch bookkeeping goroutine and include its logic into the main
