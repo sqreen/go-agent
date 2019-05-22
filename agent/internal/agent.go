@@ -17,6 +17,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
 	"github.com/sqreen/go-agent/agent/types"
@@ -243,7 +244,7 @@ func (a *Agent) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(&appBeatReq)
 			if err != nil {
-				a.logger.Error(errors.Wrap(err, "heartbeat failed"))
+				a.logger.Error(sqerrors.Wrap(err, "heartbeat failed"))
 				continue
 			}
 
