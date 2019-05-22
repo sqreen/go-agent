@@ -151,6 +151,15 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	c.logger.Debugf("sending request\n%s\n", (*HTTPRequestStringer)(req))
 	res, err := c.client.Do(req)
 	if err != nil {
+		// Try to unwrap the error to get the stable message part, excluding
+		// involved ip addresses
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				// TODO: update the api to pass these dropped extra details (involved
+				//  ip addresses) as error metadata
+				err = sqerrors.Wrap(netErr.Err, fmt.Sprintf("%s %s", urlErr.Op, urlErr.URL))
+			}
+		}
 		return err
 	}
 	c.logger.Debugf("received response\n%s\n", (*HTTPResponseStringer)(res))
