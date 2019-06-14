@@ -1,10 +1,16 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package backend
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,7 +18,9 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/xerrors"
 )
 
 type Client struct {
@@ -22,9 +30,7 @@ type Client struct {
 	session    string
 }
 
-func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Client, error) {
-	logger = plog.NewLogger("client", logger)
-
+func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Client {
 	var transport *http.Transport
 	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy
@@ -56,7 +62,7 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) (*Cli
 		logger:     logger,
 	}
 
-	return client, nil
+	return client
 }
 
 func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string) (*api.AppLoginResponse, error) {
@@ -70,7 +76,12 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 	}
 	res := new(api.AppLoginResponse)
 	if err := c.Do(httpReq, req, res); err != nil {
-		return nil, err
+		// Keep the result when it's a HTTP status error as it may contain error
+		// reasons sent by the backend
+		if !xerrors.As(err, &HTTPStatusError{}) {
+			return nil, err
+		}
+		return res, err
 	}
 
 	c.session = res.SessionId
@@ -133,27 +144,32 @@ func (c *Client) ActionsPack() (*api.ActionsPackResponse, error) {
 // the cases request case.
 func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	var buf bytes.Buffer
-	pbMarshaler := json.NewEncoder(&buf)
 
 	if len(pbs) >= 1 && pbs[0] != nil {
+		pbMarshaler := json.NewEncoder(&buf)
 		err := pbMarshaler.Encode(pbs[0])
 		if err != nil {
-			return err
+			return sqerrors.Wrap(err, "json marshal")
 		}
 	}
 	req.Body = ioutil.NopCloser(&buf)
 	req.ContentLength = int64(buf.Len())
 
-	dumpReq, _ := httputil.DumpRequestOut(req, true)
-	c.logger.Debugf("sending request\n%s", dumpReq)
-
+	c.logger.Debugf("sending request\n%s\n", (*HTTPRequestStringer)(req))
 	res, err := c.client.Do(req)
 	if err != nil {
+		// Try to unwrap the error to get the stable message part, excluding
+		// involved ip addresses
+		if urlErr, ok := err.(*url.Error); ok {
+			if netErr, ok := urlErr.Err.(*net.OpError); ok {
+				// TODO: update the api to pass these dropped extra details (involved
+				//  ip addresses) as error metadata
+				err = sqerrors.Wrap(netErr.Err, fmt.Sprintf("%s %s", urlErr.Op, urlErr.URL))
+			}
+		}
 		return err
 	}
-
-	dumpRes, _ := httputil.DumpResponse(res, true)
-	c.logger.Debugf("received response\n%s", dumpRes)
+	c.logger.Debugf("received response\n%s\n", (*HTTPResponseStringer)(res))
 
 	// As documented (https://golang.org/pkg/net/http/#Response), connections are
 	// reused iif the response body was fully drained. The following chunk thus
@@ -162,24 +178,36 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 	// json parsers may stop before.
 	// See also: https://github.com/google/go-github/pull/317
 	defer func() {
-		// FIXME: log when n > 00
 		io.CopyN(ioutil.Discard, res.Body, 1)
 		res.Body.Close()
 	}()
-
-	if res.StatusCode != http.StatusOK {
-		return NewStatusError(res.StatusCode)
-	}
 
 	if len(pbs) >= 2 && pbs[1] != nil {
 		pbUnmarshaler := json.NewDecoder(res.Body)
 		err = pbUnmarshaler.Decode(pbs[1])
 		if err != nil && err != io.EOF {
-			return err
+			return sqerrors.Wrap(err, "json unmarshal")
 		}
 	}
 
+	if res.StatusCode != http.StatusOK {
+		return NewStatusError(res.StatusCode)
+	}
 	return nil
+}
+
+type HTTPRequestStringer http.Request
+
+func (r *HTTPRequestStringer) String() string {
+	dump, _ := httputil.DumpRequestOut((*http.Request)(r), true)
+	return string(dump)
+}
+
+type HTTPResponseStringer http.Response
+
+func (r *HTTPResponseStringer) String() string {
+	dump, _ := httputil.DumpResponse((*http.Response)(r), true)
+	return string(dump)
 }
 
 // Helper method to build an API endpoint request structure.

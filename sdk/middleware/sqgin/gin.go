@@ -1,3 +1,7 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package sqgin
 
 import (
@@ -7,8 +11,8 @@ import (
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
 // requests Gin receives. In protection mode, it can block and redirect requests
-// according to its IP address or identified user using `Identify()` and
-// `MatchSecurityResponse()` methods from the request handler.
+// according to their IP addresses or identified users using `Identify()` and
+// `MatchSecurityResponse()` methods.
 //
 // SDK methods can be called from request handlers by using the request event
 // record. It can be accessed using `sdk.FromContext()` on a request context or
@@ -34,8 +38,8 @@ import (
 //	}
 //
 //	router.GET("/", func(c *gin.Context) {
-//		// Globally identifying a user and checking if the request should be
-//		// aborted.
+//		// Example of globally identifying a user and checking if the request
+//		// should be aborted.
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sdk.FromContext(c).ForUser(uid)
 //		sqUser.Identify() // Globally associate this user to the current request

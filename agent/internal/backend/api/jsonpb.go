@@ -1,8 +1,12 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package api
 
 import (
 	"encoding/json"
-	fmt "fmt"
+	"fmt"
 )
 
 var RequestRecordVersion = "20171208"
@@ -54,10 +58,6 @@ func (s Struct) String() string {
 	return fmt.Sprintf("%+v", s.Value)
 }
 
-func (s *Struct) Reset() {
-	s.Value = nil
-}
-
 func (e *BatchRequest_Event) MarshalJSON() ([]byte, error) {
 	buf, err := e.Event.MarshalJSON()
 	if err != nil {
@@ -76,7 +76,7 @@ func (e *BatchRequest_Event) MarshalJSON() ([]byte, error) {
 
 func (e *RequestRecord_Observed_SDKEvent_Args) MarshalJSON() ([]byte, error) {
 	var args json.Marshaler
-	switch actual := e.GetArgs().(type) {
+	switch actual := e.Args.(type) {
 	case *RequestRecord_Observed_SDKEvent_Args_Track_:
 		args = actual.Track
 	case *RequestRecord_Observed_SDKEvent_Args_Identify_:
@@ -88,9 +88,9 @@ func (e *RequestRecord_Observed_SDKEvent_Args) MarshalJSON() ([]byte, error) {
 func (track *RequestRecord_Observed_SDKEvent_Args_Track) MarshalJSON() ([]byte, error) {
 	var args ListValue
 	if track != nil {
-		args = append(args, track.GetEvent())
+		args = append(args, track.Event)
 
-		if options := track.GetOptions(); options != nil {
+		if options := track.Options; options != nil {
 			args = append(args, options)
 		}
 	}
@@ -100,7 +100,7 @@ func (track *RequestRecord_Observed_SDKEvent_Args_Track) MarshalJSON() ([]byte, 
 func (identify *RequestRecord_Observed_SDKEvent_Args_Identify) MarshalJSON() ([]byte, error) {
 	var args ListValue
 	if identify != nil {
-		args = append(args, identify.GetUserIdentifiers())
+		args = append(args, identify.UserIdentifiers)
 	}
 	return args.MarshalJSON()
 }

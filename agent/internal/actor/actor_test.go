@@ -1,9 +1,14 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package actor_test
 
 import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -17,7 +22,7 @@ import (
 )
 
 var (
-	logger = plog.NewLogger("test", nil)
+	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
 	fuzzer = fuzz.New().NilChance(0)
 )
 

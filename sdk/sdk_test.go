@@ -1,3 +1,7 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package sdk_test
 
 import (
@@ -8,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/mock"
@@ -50,9 +55,9 @@ func TestTrackEvent(t *testing.T) {
 	sdk.SetAgent(agent)
 	record := &testlib.HTTPRequestRecordMockup{}
 	defer record.AssertExpectations(t)
-	req := newTestRequest()
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
 
+	req := newTestRequest()
 	sqReq := sdk.NewHTTPRequest(req)
 	require.NotNil(t, sqReq)
 	req = sqReq.Request()
@@ -246,11 +251,22 @@ func TestForUser(t *testing.T) {
 	})
 }
 
-func TestDisabled(t *testing.T) {
-	require := require.New(t)
-	sdk.SetAgent(nil)
+type whitelistedRecord struct{}
 
-	useTheSDK := func(sqreen *sdk.HTTPRequestRecord) func() {
+func (r whitelistedRecord) NewCustomEvent(event string) types.CustomEvent { return r }
+func (whitelistedRecord) NewUserSignup(id map[string]string)              {}
+func (whitelistedRecord) NewUserAuth(id map[string]string, success bool)  {}
+func (whitelistedRecord) Identify(id map[string]string)                   {}
+func (whitelistedRecord) SecurityResponse() http.Handler                  { return nil }
+func (whitelistedRecord) UserSecurityResponse() http.Handler              { return nil }
+func (whitelistedRecord) Close()                                          {}
+func (whitelistedRecord) WithTimestamp(t time.Time)                       {}
+func (whitelistedRecord) WithProperties(props types.EventProperties)      {}
+func (whitelistedRecord) WithUserIdentifiers(id map[string]string)        {}
+
+// Using the SDK shouldn't fail when disabled.
+func TestDisabled(t *testing.T) {
+	useTheSDK := func(t *testing.T, sqreen *sdk.HTTPRequestRecord) func() {
 		return func() {
 			event := sqreen.TrackEvent(testlib.RandString(0, 50))
 			event = event.WithTimestamp(time.Now())
@@ -266,8 +282,8 @@ func TestDisabled(t *testing.T) {
 			sqUser = sqUser.TrackAuthFailure()
 			sqUser = sqUser.Identify()
 			match, err := sqUser.MatchSecurityResponse()
-			require.False(match)
-			require.NoError(err)
+			require.False(t, match)
+			require.NoError(t, err)
 			sqUserEvent := sqUser.TrackEvent(testlib.RandString(0, 50))
 			sqUserEvent = sqUserEvent.WithProperties(props)
 			sqUserEvent = sqUserEvent.WithTimestamp(time.Now())
@@ -275,25 +291,50 @@ func TestDisabled(t *testing.T) {
 		}
 	}
 
-	// Using the SDK shouldn't fail.
+	t.Run("with a disabled agent", func(t *testing.T) {
+		sdk.SetAgent(nil)
+		// When getting the SDK context out of a bare Go context, ie. without sqreen's
+		// middleware modifications.
+		sqreen := sdk.FromContext(context.Background())
+		require.NotPanics(t, useTheSDK(t, sqreen))
 
-	// When getting the SDK context out of a bare Go context, ie. without sqreen's
-	// middleware modifications.
-	sqreen := sdk.FromContext(context.Background())
-	require.NotPanics(useTheSDK(sqreen))
+		// When not even following the proper SDK usage (middlewares, etc.).
+		require.NotPanics(t, useTheSDK(t, nil))
 
-	// When not even following the proper SDK usage (middlewares, etc.).
-	require.NotPanics(useTheSDK(nil))
+		// When getting the SDK context out of the request wrapper.
+		req := sdk.NewHTTPRequest(newTestRequest())
+		record := req.Record()
+		require.NotPanics(t, useTheSDK(t, record))
 
-	// When getting the SDK context out of the request wrapper.
-	req := sdk.NewHTTPRequest(newTestRequest())
-	record := req.Record()
-	require.NotPanics(useTheSDK(record))
+		// Other methods
+		req.SecurityResponse()
+		req.UserSecurityResponse()
+		req.Close()
+		sdk.GracefulStop()
+	})
 
-	// Other methods
-	req.SecurityResponse()
-	req.Close()
-	sdk.GracefulStop()
+	t.Run("with a whitelisted request", func(t *testing.T) {
+		agent := &testlib.AgentMockup{}
+		defer agent.AssertExpectations(t)
+		sdk.SetAgent(agent)
+
+		record := whitelistedRecord{}
+		agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
+
+		req := newTestRequest()
+		sqReq := sdk.NewHTTPRequest(req)
+		require.NotNil(t, sqReq)
+		req = sqReq.Request()
+		require.NotNil(t, req)
+
+		// When getting the SDK context out of the request wrapper.
+		require.NotPanics(t, useTheSDK(t, sqReq.Record()))
+
+		// Other methods
+		sqReq.SecurityResponse()
+		sqReq.UserSecurityResponse()
+		sqReq.Close()
+	})
 }
 
 func TestEventPropertyMap(t *testing.T) {

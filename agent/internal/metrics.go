@@ -1,14 +1,19 @@
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Please refer to our terms for more information:
+// https://www.sqreen.io/terms.html
+
 package internal
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 )
 
 type metricsManager struct {
@@ -47,7 +52,7 @@ func (m *metricsManager) get(name string) *metricsStore {
 		period: time.Minute,
 		done: func(start, finish time.Time, observations sync.Map) {
 			m.metrics.Delete(name)
-			m.logger.Debug("metrics ", name, " ready")
+			m.logger.Debug("metrics `", name, "` ready")
 			m.addObservations(name, start, finish, observations)
 		},
 	}
@@ -55,10 +60,11 @@ func (m *metricsManager) get(name string) *metricsStore {
 	actual, _ := m.metrics.LoadOrStore(name, store)
 	store = actual.(*metricsStore)
 	store.once.Do(func() {
-		go func() {
-			m.logger.Debug("bookkeeping metrics ", name, " with period ", store.period)
+		_ = sqsafe.Go(func() error {
+			m.logger.Debug("bookkeeping metrics `", name, "` with period `", store.period, "`")
 			store.monitor(m.ctx, time.Now())
-		}()
+			return nil
+		})
 	})
 
 	return store
@@ -69,13 +75,13 @@ func (m *metricsManager) addObservations(name string, start, finish time.Time, o
 	observations.Range(func(k, v interface{}) bool {
 		key, ok := k.(string)
 		if !ok {
-			m.logger.Panic(errors.New("unexpected metric key type"))
+			m.logger.Error(errors.New("unexpected metric key type"))
 			return true
 		}
 
 		value, ok := v.(*uint64)
 		if !ok {
-			m.logger.Panic(errors.New("unexpected metric value type"))
+			m.logger.Error(errors.New("unexpected metric value type"))
 			return true
 		}
 
@@ -116,15 +122,16 @@ func (s *metricsStore) add(e metricEntry) {
 	var n uint64 = 1
 	key, err := e.bucketID()
 	if err != nil {
-		s.logger.Error("could not compute the bucket id of the metric key:", err)
+		// Log the error and continue.
+		s.logger.Error(errors.Wrap(err, "could not compute the bucket id of the metric key"))
 		return
 	}
 	actual, loaded := s.entries.LoadOrStore(key, &n)
 	if loaded {
 		newVal := atomic.AddUint64(actual.(*uint64), 1)
-		s.logger.Debug("metric store ", key, " set to ", newVal)
+		s.logger.Debug("metric store value of `", key, "` set to ", newVal)
 	} else {
-		s.logger.Debug("metric store ", key, " set to ", n)
+		s.logger.Debug("metric store value of `", key, "` set to ", n)
 	}
 }
 
@@ -161,7 +168,27 @@ func (a *Agent) addUserEvent(event userEventFace) {
 		}
 	case *signupUserEvent:
 		store = a.metricsMng.get("sdk-signup")
+	default:
+		return
 	}
 
 	store.add(event)
+}
+
+type WhitelistedIP struct {
+	MatchedWhitelistEntry string
+}
+
+func (m WhitelistedIP) bucketID() (string, error) {
+	return m.MatchedWhitelistEntry, nil
+}
+
+func (a *Agent) addWhitelistEvent(matchedWhitelistEntry string) {
+	if a.config.Disable() || a.metricsMng == nil {
+		// Agent is disabled or not yet initialized
+		return
+	}
+	a.metricsMng.get("whitelisted").add(WhitelistedIP{
+		MatchedWhitelistEntry: matchedWhitelistEntry,
+	})
 }

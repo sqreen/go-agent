@@ -1,3 +1,29 @@
+# v0.1.0-beta.5
+
+## New Features
+
+- Middleware functions, called interceptors, for gRPC over HTTP2. More details
+  on how to use it at
+  https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgrpc. (#23)
+
+- [IP whitelist](https://my.sqreen.com/application/goto/settings/whitelist)
+  support to make the agent completely ignore requests whose IP addresses are
+  whitelisted. Everything related to Sqreen, including events, will be ignored.
+  (#69)
+
+- Agent fail-safe catching errors and panics in order to prevent the host Go
+  app to fail. The fail-safe mechanism either tries to restart the agent or
+  ultimately stops it. (#67)
+
+## Minor Change
+
+- Internal event batch improvements:
+  - Increased batch buffer capacity from 60 to 6000 entries in order to be able
+    to handle more events, sent by batches of 60 events per heartbeat.
+  - Remove a bookkeeping goroutine and include its logic into the main event
+    processing loop.
+
+
 # v0.1.0-beta.4
 
 This release adds the ability to block IP addresses or users into your Go web

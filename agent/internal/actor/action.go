@@ -1,13 +1,7 @@
-// Copyright 2019 Sqreen. All Rights Reserved.
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-// Security Actions
-//
-// Security actions are stored using structures implementing the Action
-// interface. Actions can have a time duration by implementing the Timed
-// interface.
-//
 package actor
 
 import (
@@ -36,13 +30,13 @@ type blockAction struct {
 	ID string
 }
 
-func newBlockAction(id string) *blockAction {
-	return &blockAction{
+func newBlockAction(id string) blockAction {
+	return blockAction{
 		ID: id,
 	}
 }
 
-func (a *blockAction) ActionID() string {
+func (a blockAction) ActionID() string {
 	return a.ID
 }
 
@@ -66,4 +60,19 @@ func withDuration(action Action, duration time.Duration) *timedAction {
 func (a *timedAction) Expired() bool {
 	// Is the current time after the deadline?
 	return time.Now().After(a.deadline)
+}
+
+type whitelistAction struct {
+	// The CIDR is used as action ID
+	CIDR string
+}
+
+func newWhitelistAction(cidr string) whitelistAction {
+	return whitelistAction{
+		CIDR: cidr,
+	}
+}
+
+func (a whitelistAction) ActionID() string {
+	return a.CIDR
 }

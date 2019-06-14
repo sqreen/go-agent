@@ -1,16 +1,7 @@
-// Copyright 2019 Sqreen. All Rights Reserved.
+// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-// Actor store
-//
-// The actor store is a central agent store associating actor IP addresses and
-// user identifiers to security actions provided by the backend. Since it is
-// used in HTTP request handlers, it is designed to be as efficient as possible
-// to avoid slowing down requests. An important design constraint is the fact
-// that the sooner a request is handled, the sooner its memory is released
-// (goroutines and memory they used). So time-efficiency is considered as a
-// better general memory-efficiency here.
 package actor
 
 import (
@@ -31,49 +22,91 @@ import (
 // memory- and cpu-efficient data-structures, and provides the API the agent
 // expects. It is designed to have the shortest possible lookup time from HTTP
 // request handlers while providing the ability the load other security actions
-// concurrently, without locking the store operations. To do so, when a new set
-// of actions is received, a new store is created while still using the current
-// one, and only the access to the store pointer is synchronized using a
-// reader/writer mutex (mutual-exclusion of readers and writers with 1 writer
-// and N readers at a time). This operation is therefore limited to the time to
-// modify the store pointer, hence the smallest possible locking time.
+// concurrently, without locking the actionStore operations. To do so, when a
+// new set of actions is received, a new actionStore is created while still
+// using the current one, and only the access to the actionStore pointer is
+// synchronized using a reader/writer mutex (mutual-exclusion of readers and
+// writers with 1 writer and N readers at a time). This operation is therefore
+// limited to the time to modify the actionStore pointer, hence the smallest
+// possible locking time.
 type Store struct {
-	// Mutex for RW accesses to the store pointer. By design, a store can be
-	// replaced while it is being used by other requests. It allows to have the
-	// shortest concurrent access times to the store by avoiding blocking the
-	// entire store methods.
-	lock  sync.RWMutex
-	store *store
-
+	actionStore struct {
+		// Store pointer access RW lock.
+		lock  sync.RWMutex
+		store *actionStore
+	}
+	whitelistStore struct {
+		// Store pointer access RW lock.
+		lock  sync.RWMutex
+		store *CIDRWhitelistStore
+	}
 	logger *plog.Logger
 }
 
 func NewStore(logger *plog.Logger) *Store {
 	return &Store{
-		logger: plog.NewLogger("actors", logger),
+		logger: logger,
 	}
 }
 
-// getStore is a thread-safe store pointer getter.
-func (s *Store) getStore() (store *store) {
-	s.lock.RLock()
-	store = s.store
-	s.lock.RUnlock()
+// SetCIDRWhitelist creates a new whitelist store and then replaces the current
+// one. The new store is built while allowing accesses to the current one.
+func (s *Store) SetCIDRWhitelist(cidrs []string) error {
+	store, err := NewCIDRWhitelistStore(cidrs)
+	if err != nil {
+		s.logger.Error(err)
+		return err
+	}
+	s.setCIDRWhitelistStore(store)
+	return nil
+}
+
+// getCIDRWhitelistStore is a thread-safe cidrWhitelistStore pointer getter.
+func (s *Store) getCIDRWhitelistStore() (store *CIDRWhitelistStore) {
+	s.whitelistStore.lock.RLock()
+	store = s.whitelistStore.store
+	s.whitelistStore.lock.RUnlock()
 	return
 }
 
-// setStore is a thread-safe store pointer setter.
-func (s *Store) setStore(store *store) {
-	s.lock.Lock()
-	s.store = store
-	s.lock.Unlock()
+// setCIDRWhitelistStore is a thread-safe cidrWhitelistStore pointer setter.
+func (s *Store) setCIDRWhitelistStore(store *CIDRWhitelistStore) {
+	s.whitelistStore.lock.Lock()
+	s.whitelistStore.store = store
+	s.whitelistStore.lock.Unlock()
+}
+
+// IsIPWhitelisted returns true when the given IP address matched a whitelist
+// entry. This matched whitelist entry is also returned. The error is non-nil
+// when an internal error occurred.
+func (s *Store) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
+	whitelist := s.getCIDRWhitelistStore()
+	if whitelist == nil {
+		return false, "", nil
+	}
+	return whitelist.Find(ip)
+}
+
+// getActionStore is a thread-safe actionStore pointer getter.
+func (s *Store) getActionStore() (store *actionStore) {
+	s.actionStore.lock.RLock()
+	store = s.actionStore.store
+	s.actionStore.lock.RUnlock()
+	return
+}
+
+// setActionStore is a thread-safe actionStore pointer setter.
+func (s *Store) setActionStore(store *actionStore) {
+	s.actionStore.lock.Lock()
+	s.actionStore.store = store
+	s.actionStore.lock.Unlock()
 }
 
 // FindIP returns the security action of the given IP v4/v6 address. The
-// returned boolean `exists` is `false` when it is not present in the store,
-// `true` otherwise.
+// returned boolean `exists` is `false` when it is not present in the
+// actionStore, `true` otherwise.
 func (s *Store) FindIP(ip net.IP) (action Action, exists bool, err error) {
-	store := s.getStore()
+	store := s.getActionStore()
 	if store == nil {
 		return nil, false, nil
 	}
@@ -106,10 +139,10 @@ func (s *Store) FindIP(ip net.IP) (action Action, exists bool, err error) {
 }
 
 // FindUser returns the security action of the given userID map. The returned
-// boolean `exists` is `false` when it is not present in the store, `true`
+// boolean `exists` is `false` when it is not present in the actionStore, `true`
 // otherwise.
 func (s *Store) FindUser(userID map[string]string) (action Action, exists bool) {
-	store := s.getStore()
+	store := s.getActionStore()
 	if store == nil {
 		return nil, false
 	}
@@ -131,37 +164,36 @@ func (s *Store) FindUser(userID map[string]string) (action Action, exists bool) 
 }
 
 // SetActions creates a new action store and then replaces the current one. The
-// new store is being built while still performing store methods on the current
-// one.
+// new store is built while allowing accesses to the current one.
 func (s *Store) SetActions(actions []api.ActionsPackResponse_Action) error {
-	store, err := newStore(actions)
+	store, err := newActionStore(actions)
 	if err != nil {
 		s.logger.Error(err)
 		return err
 	}
-	s.setStore(store)
+	s.setActionStore(store)
 	return nil
 }
 
-// store is the set of data-structures the actor store can use at run time.
-// Locking in the data-structure methods is avoided by not having concurrent
-// insertions and lookups, and therefore a second store can be created when a
-// new one needs to be created. Only the store pointer swapping needs to be
-// thread-safe.
-type store struct {
-	treeV4 *treeV4
-	treeV6 *treeV6
+// actionStore is the set of data-structures the actor actionStore can use at
+// run time. Locking in the data-structure methods is avoided by not having
+// concurrent insertions and lookups, and therefore a second actionStore can be
+// created when a new one needs to be created. Only the actionStore pointer
+// swapping needs to be thread-safe.
+type actionStore struct {
+	treeV4 *actionTreeV4
+	treeV6 *actionTreeV6
 	users  userActionMap
 }
 
 type userActionMap map[UserIdentifiersHash]Action
 
-func newStore(actions []api.ActionsPackResponse_Action) (*store, error) {
+func newActionStore(actions []api.ActionsPackResponse_Action) (*actionStore, error) {
 	if len(actions) == 0 {
 		return nil, nil
 	}
 
-	store := new(store)
+	store := new(actionStore)
 
 	for _, action := range actions {
 		err := store.addAction(action)
@@ -173,7 +205,7 @@ func newStore(actions []api.ActionsPackResponse_Action) (*store, error) {
 	return store, nil
 }
 
-func (s *store) addAction(action api.ActionsPackResponse_Action) (err error) {
+func (s *actionStore) addAction(action api.ActionsPackResponse_Action) (err error) {
 	switch action.Action {
 	case actionKind_BlockIP:
 		err = s.addBlockIPAction(action)
@@ -183,7 +215,7 @@ func (s *store) addAction(action api.ActionsPackResponse_Action) (err error) {
 	return err
 }
 
-func (s *store) addBlockIPAction(action api.ActionsPackResponse_Action) error {
+func (s *actionStore) addBlockIPAction(action api.ActionsPackResponse_Action) error {
 	duration, err := float64ToDuration(action.Duration)
 	if err != nil {
 		return err
@@ -207,7 +239,7 @@ func float64ToDuration(duration float64) (time.Duration, error) {
 	return time.Duration(duration) * time.Second, nil
 }
 
-func (s *store) addCIDRList(cidrs []string, action Action) error {
+func (s *actionStore) addCIDRList(cidrs []string, action Action) error {
 	for _, cidr := range cidrs {
 		ip4, ip6, err := patricia.ParseIPFromString(cidr)
 		if err != nil {
@@ -226,22 +258,21 @@ func (s *store) addCIDRList(cidrs []string, action Action) error {
 	return nil
 }
 
-func (s *store) addCIDRv4(ip *patricia.IPv4Address, action Action) error {
+func (s *actionStore) addCIDRv4(ip *patricia.IPv4Address, action Action) error {
 	if s.treeV4 == nil {
-		s.treeV4 = newTreeV4(maxStoreActions)
+		s.treeV4 = newActionTreeV4(maxStoreActions)
 	}
-
 	return s.treeV4.addAction(ip, action)
 }
 
-func (s *store) addCIDRv6(ip *patricia.IPv6Address, action Action) error {
+func (s *actionStore) addCIDRv6(ip *patricia.IPv6Address, action Action) error {
 	if s.treeV6 == nil {
-		s.treeV6 = newTreeV6(maxStoreActions)
+		s.treeV6 = newActionTreeV6(maxStoreActions)
 	}
 	return s.treeV6.addAction(ip, action)
 }
 
-func (s *store) addBlockUserAction(action api.ActionsPackResponse_Action) error {
+func (s *actionStore) addBlockUserAction(action api.ActionsPackResponse_Action) error {
 	duration, err := float64ToDuration(action.Duration)
 	if err != nil {
 		return err
@@ -257,7 +288,7 @@ func (s *store) addBlockUserAction(action api.ActionsPackResponse_Action) error 
 	return s.addUserList(users, blockUser)
 }
 
-func (s *store) addUserList(users []map[string]string, action Action) error {
+func (s *actionStore) addUserList(users []map[string]string, action Action) error {
 	if len(s.users)+len(users) >= maxStoreActions {
 		return errors.Errorf("number of actions `%d` exceeds `%d`", len(users), maxStoreActions)
 	}
@@ -271,7 +302,7 @@ func (s *store) addUserList(users []map[string]string, action Action) error {
 	return nil
 }
 
-func (s *store) addUser(identifiers map[string]string, action Action) {
+func (s *actionStore) addUser(identifiers map[string]string, action Action) {
 	hash := NewUserIdentifiersHash(identifiers)
 	s.users[hash] = action
 }

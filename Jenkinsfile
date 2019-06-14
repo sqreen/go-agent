@@ -1,47 +1,34 @@
 @Library('sqreen-pipeline-library')
-import io.sqreen.pipeline.kubernetes.PodTemplate;
-import io.sqreen.pipeline.scm.GitHubSCM;
-import io.sqreen.pipeline.tools.Codecov;
+import io.sqreen.pipeline.tools.*
 
-def templates = new PodTemplate();
-def gitHub = new GitHubSCM();
-def codecov = new Codecov();
+def DOCKER_IMAGE = 'golang:1'
+def GIT_REPO = 'github.com/sqreen/go-agent'
+def GO_PACKAGE_PATH_WITHOUT_GOMODULES = '/go/src/${GIT_REPO}'
 
-String label = 'docker';
+BuildJob buildJob = new BuildJob(this)
+Gradle gradle = new Gradle(this)
+Git git = new Git(this)
 
-templates.dockerTemplate(label) {
-    node(label) {
-        container('docker') {
-            stage('Checkout') {
-                gitHub.checkoutWithSubModules()
-            }
+def projectVersion
+def isReleaseBuild
 
-            sh 'docker info'
-            def devImage = docker.build("sqreen/go-agent-dev", "-f ./tools/docker/dev/Dockerfile .")
-                devImage.inside("--name go-agent-dev -e GO111MODULE=on -e GOPATH=$WORKSPACE/.cache/go -e GOCACHE=$WORKSPACE/.cache") {
-                stage('Vendoring') {
-                    sh 'make vendor'
-                }
+stage('Init') {
+    buildJob.setDefaultProperties()
+}
 
-                stage('Tests') {
-                    parallel([
-                        'Regular': {
-                            sh 'go env'
-                            sh 'make test'
-                        },
-                        'With coverage': {
-                            sh 'make test-coverage'
-                            codecov.analyze('codecov-agent-go-token')
-                        },
-                        'With race detection': {
-                            sh 'make test-race'
-                        },
-                        'Benchmarks': {
-                            sh 'make benchmark'
-                        }
-                    ])
-                }
-            }
-        }
+node('docker_build') {
+
+    stage('Checkout') {
+        // checkout with submodules
+        git.checkout()
     }
+
+    stage('Test') {
+
+        docker.image(DOCKER_IMAGE).inside {
+            sh 'make test test-race benchmark'
+        }
+
+    }
+
 }

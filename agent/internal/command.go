@@ -1,6 +1,10 @@
 package internal
 
 import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
@@ -12,7 +16,9 @@ type CommandManager struct {
 	handlers map[string]CommandHandler
 }
 
-type CommandHandler func() api.CommandResult
+// CommandHandler is a function pointer type to a command handler.
+// Command arguments need to be validated by the handler itself.
+type CommandHandler func(args []json.RawMessage) error
 
 // CommandManagerAgent defines the expected agent SDK and allows to easily
 // implement functional tests by mocking it up.
@@ -20,12 +26,13 @@ type CommandManagerAgent interface {
 	InstrumentationEnable() error
 	InstrumentationDisable() error
 	ActionsReload() error
+	SetCIDRWhitelist([]string) error
 }
 
 func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
 	mng := &CommandManager{
 		agent:  agent,
-		logger: plog.NewLogger("command", logger),
+		logger: logger,
 	}
 
 	// Note: using Go's reflection to call methods would be slower.
@@ -33,6 +40,7 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 		"instrumentation_enable": mng.InstrumentationEnable,
 		"instrumentation_remove": mng.InstrumentationRemove,
 		"actions_reload":         mng.ActionsReload,
+		"ips_whitelist":          mng.IPSWhitelist,
 	}
 
 	return mng
@@ -50,9 +58,10 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 		var result api.CommandResult
 		if exists {
 			if lastUuid := done[cmd.Name]; lastUuid == "" {
-				// The command has not been done
-				result = handler()
-				// Set this command as done by storing the uuid that performed it
+				// This command has not been done yet in this list of commands
+				err := handler(cmd.Params)
+				result = commandResult(m.logger, err)
+				// Set it as done by storing the uuid that performed it
 				done[cmd.Name] = cmd.Uuid
 			} else {
 				// The command is already done and appears several times in the list of
@@ -69,30 +78,37 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 		results[cmd.Uuid] = result
 	}
 
-	if len(results) == 0 {
-		return nil
-	}
 	return results
 }
 
-func (m *CommandManager) InstrumentationEnable() api.CommandResult {
-	err := m.agent.InstrumentationEnable()
-	return commandResult(err)
+func (m *CommandManager) InstrumentationEnable([]json.RawMessage) error {
+	return m.agent.InstrumentationEnable()
 }
 
-func (m *CommandManager) InstrumentationRemove() api.CommandResult {
-	err := m.agent.InstrumentationDisable()
-	return commandResult(err)
+func (m *CommandManager) InstrumentationRemove([]json.RawMessage) error {
+	return m.agent.InstrumentationDisable()
 }
 
-func (m *CommandManager) ActionsReload() api.CommandResult {
-	err := m.agent.ActionsReload()
-	return commandResult(err)
+func (m *CommandManager) ActionsReload([]json.RawMessage) error {
+	return m.agent.ActionsReload()
+}
+
+func (m *CommandManager) IPSWhitelist(args []json.RawMessage) error {
+	if argc := len(args); argc != 1 {
+		return fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
+	}
+	var cidrs []string
+	arg0 := args[0]
+	if err := json.Unmarshal(arg0, &cidrs); err != nil {
+		return err
+	}
+	return m.agent.SetCIDRWhitelist(cidrs)
 }
 
 // commandResult converts an error to a command result API object.
-func commandResult(err error) api.CommandResult {
+func commandResult(logger *plog.Logger, err error) api.CommandResult {
 	if err != nil {
+		logger.Error(errors.Wrap(err, "command error"))
 		return api.CommandResult{
 			Status: false,
 			Output: err.Error(),
