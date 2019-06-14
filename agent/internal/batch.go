@@ -7,6 +7,7 @@ package internal
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,14 @@ func (e *ExceptionEvent) GetTime() time.Time {
 }
 
 func (e *ExceptionEvent) GetKlass() string {
+	// By convention, the error identifier is not the error type but rather the
+	// first part of the string representation, up to `:`,
+	// such as `my error: details`
+	str := e.err.Error()
+	if i := strings.IndexByte(str, ':'); i != -1 {
+		return str[:i]
+	}
+	// Fallback to the type name
 	return fmt.Sprintf("%T", e.err)
 }
 

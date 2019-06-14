@@ -17,6 +17,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
 	"github.com/sqreen/go-agent/agent/types"
@@ -243,7 +244,7 @@ func (a *Agent) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(&appBeatReq)
 			if err != nil {
-				a.logger.Error(errors.Wrap(err, "heartbeat failed"))
+				a.logger.Error(sqerrors.Wrap(err, "heartbeat failed"))
 				continue
 			}
 
@@ -320,7 +321,7 @@ type eventManager struct {
 func newEventManager(agent *Agent, count int, maxStaleness time.Duration) *eventManager {
 	return &eventManager{
 		agent:        agent,
-		eventsChan:   make(chan Event, count*10),
+		eventsChan:   make(chan Event, count*100),
 		count:        count,
 		maxStaleness: maxStaleness,
 	}
@@ -336,47 +337,50 @@ func (m *eventManager) add(r Event) {
 	}
 }
 
+func stopTimer(t *time.Timer) {
+	if !t.Stop() {
+		<-t.C
+	}
+}
+
 func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
-	var isFull, isSent chan struct{}
-	var batch = make([]Event, 0, m.count)
+	var (
+		stalenessTimer = time.NewTimer(m.maxStaleness)
+		stalenessChan  <-chan time.Time
+	)
+	defer stopTimer(stalenessTimer)
+	stopTimer(stalenessTimer)
+
+	batch := make([]Event, 0, m.count)
 	for {
 		select {
 		case <-ctx.Done():
 			return
+
+		case <-stalenessChan:
+			m.agent.logger.Debug("event batch data staleness reached")
+			m.send(client, batch)
+			batch = batch[0:0]
+			stalenessChan = nil
+
 		case event := <-m.eventsChan:
 			batch = append(batch, event)
-			m.agent.logger.Debug("new event added to the event batch")
-			if batchLen := len(batch); batchLen == 1 {
-				ready := batch
-				batch = make([]Event, 0, m.count)
-				// First event of this batch.
-				// Given the amount of external events, it is easier to create a
-				// goroutine to select{} one of them.
-				m.agent.logger.Debug("batching event data for ", m.maxStaleness)
-				isFull = make(chan struct{})
-				isSent = make(chan struct{}, 1)
-				// FIXME: get rid of this goroutine
-				_ = sqsafe.Go(func() error {
-					select {
-					case <-ctx.Done():
-					case <-time.After(m.maxStaleness):
-						m.agent.logger.Debug("event batch data staleness reached")
-					case <-isFull:
-						m.agent.logger.Debug("event batch is full")
-					}
-					m.send(client, ready)
-					m.agent.logger.Debug("event batch sent")
-					close(isSent)
-					return nil
-				})
-			} else if batchLen >= m.count {
+			m.agent.logger.Debugf("new event `%T` added to the event batch", event)
+
+			batchLen := len(batch)
+			switch {
+			case batchLen == 1:
+				stalenessTimer.Reset(m.maxStaleness)
+				stalenessChan = stalenessTimer.C
+				m.agent.logger.Debug("batching events for ", m.maxStaleness)
+
+			case batchLen >= m.count:
 				// No more room in the batch
-				close(isFull)
-				<-isSent
-				// Block until it is sent. There are many reasons to this, but it is
-				// mainly to avoid running this loop and the sender goroutines
-				// concurrently. For example, it allows to make sure the previous
-				// len(m.req.Batch) == 1 to be observable.
+				m.agent.logger.Debugf("sending the batch of %d events", batchLen)
+				m.send(client, batch)
+				batch = batch[0:0]
+				stalenessChan = nil
+				stopTimer(stalenessTimer)
 			}
 		}
 	}

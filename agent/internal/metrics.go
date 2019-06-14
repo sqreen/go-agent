@@ -52,7 +52,7 @@ func (m *metricsManager) get(name string) *metricsStore {
 		period: time.Minute,
 		done: func(start, finish time.Time, observations sync.Map) {
 			m.metrics.Delete(name)
-			m.logger.Debug("metrics ", name, " ready")
+			m.logger.Debug("metrics `", name, "` ready")
 			m.addObservations(name, start, finish, observations)
 		},
 	}
@@ -61,7 +61,7 @@ func (m *metricsManager) get(name string) *metricsStore {
 	store = actual.(*metricsStore)
 	store.once.Do(func() {
 		_ = sqsafe.Go(func() error {
-			m.logger.Debug("bookkeeping metrics ", name, " with period ", store.period)
+			m.logger.Debug("bookkeeping metrics `", name, "` with period `", store.period, "`")
 			store.monitor(m.ctx, time.Now())
 			return nil
 		})
@@ -129,9 +129,9 @@ func (s *metricsStore) add(e metricEntry) {
 	actual, loaded := s.entries.LoadOrStore(key, &n)
 	if loaded {
 		newVal := atomic.AddUint64(actual.(*uint64), 1)
-		s.logger.Debug("metric store ", key, " set to ", newVal)
+		s.logger.Debug("metric store value of `", key, "` set to ", newVal)
 	} else {
-		s.logger.Debug("metric store ", key, " set to ", n)
+		s.logger.Debug("metric store value of `", key, "` set to ", n)
 	}
 }
 

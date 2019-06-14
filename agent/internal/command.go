@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
@@ -59,7 +60,7 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 			if lastUuid := done[cmd.Name]; lastUuid == "" {
 				// This command has not been done yet in this list of commands
 				err := handler(cmd.Params)
-				result = commandResult(err)
+				result = commandResult(m.logger, err)
 				// Set it as done by storing the uuid that performed it
 				done[cmd.Name] = cmd.Uuid
 			} else {
@@ -105,8 +106,9 @@ func (m *CommandManager) IPSWhitelist(args []json.RawMessage) error {
 }
 
 // commandResult converts an error to a command result API object.
-func commandResult(err error) api.CommandResult {
+func commandResult(logger *plog.Logger, err error) api.CommandResult {
 	if err != nil {
+		logger.Error(errors.Wrap(err, "command error"))
 		return api.CommandResult{
 			Status: false,
 			Output: err.Error(),

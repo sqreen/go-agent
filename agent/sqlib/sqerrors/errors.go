@@ -5,6 +5,7 @@
 package sqerrors
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -47,6 +48,14 @@ func (e *withTimestamp) Unwrap() error {
 
 func (e *withTimestamp) Cause() error {
 	return e.Unwrap()
+}
+
+func (e *withTimestamp) Format(f fmt.State, c rune) {
+	if formatter, ok := e.error.(fmt.Formatter); ok {
+		formatter.Format(f, c)
+	} else {
+		_, _ = fmt.Fprintf(f, "%v", e.error)
+	}
 }
 
 // New returns a new error annotated with a timestamp, a message and a stack

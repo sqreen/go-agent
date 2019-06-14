@@ -104,7 +104,7 @@ func NewLogger(level LogLevel, output io.Writer, errChanBufferLen int) *Logger {
 		DebugLogger: disabled,
 		errChan:     errChan,
 	}
-	enabled := enabledLogger{output}
+	enabled := enabledLogger{Writer: output, level: level}
 	switch level {
 	case Debug:
 		logger.DebugLogger = enabled
@@ -139,6 +139,7 @@ func (l *Logger) Error(err error) {
 // Enabled logger instance.
 type enabledLogger struct {
 	io.Writer
+	level LogLevel
 }
 
 func (l enabledLogger) Debug(v ...interface{}) {
@@ -159,7 +160,13 @@ func (l enabledLogger) Infof(format string, v ...interface{}) {
 
 func (l enabledLogger) Error(err error) {
 	// Most detailed error format, including stacktrace when available.
-	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf("%+v", err)))
+	var format string
+	if l.level == Debug {
+		format = "%+v"
+	} else {
+		format = "%v"
+	}
+	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, err)))
 }
 
 // Time formatting layout with microsecond precision.
@@ -169,11 +176,10 @@ func formatLog(level LogLevel, now time.Time, message string) []byte {
 	return []byte(fmt.Sprintf("sqreen/%s - %s - %s\n", level.String(), now.Format(TimestampLayout), message))
 }
 
-type disabledLogger struct {
-}
+type disabledLogger struct {}
 
-func (_ disabledLogger) Error(error)                       {}
-func (_ disabledLogger) Info(_ ...interface{})             {}
-func (_ disabledLogger) Infof(_ string, _ ...interface{})  {}
-func (_ disabledLogger) Debug(_ ...interface{})            {}
-func (_ disabledLogger) Debugf(_ string, _ ...interface{}) {}
+func (disabledLogger) Error(error)                   {}
+func (disabledLogger) Info(...interface{})           {}
+func (disabledLogger) Infof(string, ...interface{})  {}
+func (disabledLogger) Debug(...interface{})          {}
+func (disabledLogger) Debugf(string, ...interface{}) {}

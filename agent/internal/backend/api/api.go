@@ -7,9 +7,6 @@ package api
 import (
 	"encoding/json"
 	"time"
-	//	_ "github.com/gogo/protobuf/gogoproto"
-	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
-	//	_ "github.com/gogo/protobuf/types"
 )
 
 type AppLoginRequest struct {
@@ -73,13 +70,13 @@ type MetricResponse struct {
 }
 
 type AppBeatRequest struct {
-	CommandResults map[string]CommandResult `protobuf:"bytes,1,rep,name=command_results,json=commandResults,proto3" json:"command_results,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Metrics        []MetricResponse         `protobuf:"bytes,2,rep,name=metrics,proto3" json:"metrics"`
+	CommandResults map[string]CommandResult `json:"command_results,omitempty"`
+	Metrics        []MetricResponse         `json:"metrics,omitempty"`
 }
 
 type AppBeatResponse struct {
-	Commands []CommandRequest `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands"`
-	Status   bool             `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
+	Commands []CommandRequest `json:"commands,omitempty"`
+	Status   bool             `json:"status"`
 }
 
 type BatchRequest struct {
@@ -266,27 +263,6 @@ type RequestRecord_Observed_SDKEvent_Args_Identify_ struct {
 func (*RequestRecord_Observed_SDKEvent_Args_Track_) isRequestRecord_Observed_SDKEvent_Args_Args()    {}
 func (*RequestRecord_Observed_SDKEvent_Args_Identify_) isRequestRecord_Observed_SDKEvent_Args_Args() {}
 
-func (m *RequestRecord_Observed_SDKEvent_Args) GetArgs() isRequestRecord_Observed_SDKEvent_Args_Args {
-	if m != nil {
-		return m.Args
-	}
-	return nil
-}
-
-func (m *RequestRecord_Observed_SDKEvent_Args) GetTrack() *RequestRecord_Observed_SDKEvent_Args_Track {
-	if x, ok := m.GetArgs().(*RequestRecord_Observed_SDKEvent_Args_Track_); ok {
-		return x.Track
-	}
-	return nil
-}
-
-func (m *RequestRecord_Observed_SDKEvent_Args) GetIdentify() *RequestRecord_Observed_SDKEvent_Args_Identify {
-	if x, ok := m.GetArgs().(*RequestRecord_Observed_SDKEvent_Args_Identify_); ok {
-		return x.Identify
-	}
-	return nil
-}
-
 // Serialized into:
 // [
 //   "<name>",
@@ -349,50 +325,6 @@ type AppLoginRequestFace interface {
 	GetEnvironment() string
 }
 
-func (this *AppLoginRequest) GetBundleSignature() string {
-	return this.BundleSignature
-}
-
-func (this *AppLoginRequest) GetVariousInfos() AppLoginRequest_VariousInfos {
-	return this.VariousInfos
-}
-
-func (this *AppLoginRequest) GetAgentType() string {
-	return this.AgentType
-}
-
-func (this *AppLoginRequest) GetAgentVersion() string {
-	return this.AgentVersion
-}
-
-func (this *AppLoginRequest) GetOsType() string {
-	return this.OsType
-}
-
-func (this *AppLoginRequest) GetHostname() string {
-	return this.Hostname
-}
-
-func (this *AppLoginRequest) GetRuntimeType() string {
-	return this.RuntimeType
-}
-
-func (this *AppLoginRequest) GetRuntimeVersion() string {
-	return this.RuntimeVersion
-}
-
-func (this *AppLoginRequest) GetFrameworkType() string {
-	return this.FrameworkType
-}
-
-func (this *AppLoginRequest) GetFrameworkVersion() string {
-	return this.FrameworkVersion
-}
-
-func (this *AppLoginRequest) GetEnvironment() string {
-	return this.Environment
-}
-
 func NewAppLoginRequestFromFace(that AppLoginRequestFace) *AppLoginRequest {
 	this := &AppLoginRequest{}
 	this.BundleSignature = that.GetBundleSignature()
@@ -420,38 +352,6 @@ type AppLoginRequest_VariousInfosFace interface {
 	GetName() string
 }
 
-func (this *AppLoginRequest_VariousInfos) GetTime() time.Time {
-	return this.Time
-}
-
-func (this *AppLoginRequest_VariousInfos) GetPid() uint32 {
-	return this.Pid
-}
-
-func (this *AppLoginRequest_VariousInfos) GetPpid() uint32 {
-	return this.Ppid
-}
-
-func (this *AppLoginRequest_VariousInfos) GetEuid() uint32 {
-	return this.Euid
-}
-
-func (this *AppLoginRequest_VariousInfos) GetEgid() uint32 {
-	return this.Egid
-}
-
-func (this *AppLoginRequest_VariousInfos) GetUid() uint32 {
-	return this.Uid
-}
-
-func (this *AppLoginRequest_VariousInfos) GetGid() uint32 {
-	return this.Gid
-}
-
-func (this *AppLoginRequest_VariousInfos) GetName() string {
-	return this.Name
-}
-
 func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFace) *AppLoginRequest_VariousInfos {
 	this := &AppLoginRequest_VariousInfos{}
 	this.Time = that.GetTime()
@@ -474,30 +374,6 @@ type AppLoginResponseFace interface {
 	GetRules() []Rule
 }
 
-func (this *AppLoginResponse) GetSessionId() string {
-	return this.SessionId
-}
-
-func (this *AppLoginResponse) GetStatus() bool {
-	return this.Status
-}
-
-func (this *AppLoginResponse) GetCommands() []CommandRequest {
-	return this.Commands
-}
-
-func (this *AppLoginResponse) GetFeatures() AppLoginResponse_Feature {
-	return this.Features
-}
-
-func (this *AppLoginResponse) GetPackId() string {
-	return this.PackId
-}
-
-func (this *AppLoginResponse) GetRules() []Rule {
-	return this.Rules
-}
-
 func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
 	this := &AppLoginResponse{}
 	this.SessionId = that.GetSessionId()
@@ -510,22 +386,9 @@ func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
 }
 
 type AppLoginResponse_FeatureFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
 	GetBatchSize() uint32
 	GetMaxStaleness() uint32
 	GetHeartbeatDelay() uint32
-}
-
-func (this *AppLoginResponse_Feature) GetBatchSize() uint32 {
-	return this.BatchSize
-}
-
-func (this *AppLoginResponse_Feature) GetMaxStaleness() uint32 {
-	return this.MaxStaleness
-}
-
-func (this *AppLoginResponse_Feature) GetHeartbeatDelay() uint32 {
-	return this.HeartbeatDelay
 }
 
 func NewAppLoginResponse_FeatureFromFace(that AppLoginResponse_FeatureFace) *AppLoginResponse_Feature {
@@ -537,17 +400,8 @@ func NewAppLoginResponse_FeatureFromFace(that AppLoginResponse_FeatureFace) *App
 }
 
 type CommandResultFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
 	GetOutput() string
 	GetStatus() bool
-}
-
-func (this *CommandResult) GetOutput() string {
-	return this.Output
-}
-
-func (this *CommandResult) GetStatus() bool {
-	return this.Status
 }
 
 func NewCommandResultFromFace(that CommandResultFace) *CommandResult {
@@ -558,27 +412,10 @@ func NewCommandResultFromFace(that CommandResultFace) *CommandResult {
 }
 
 type MetricResponseFace interface {
-	Proto() github_com_gogo_protobuf_proto.Message
 	GetName() string
 	GetStart() time.Time
 	GetFinish() time.Time
 	GetObservation() Struct
-}
-
-func (this *MetricResponse) GetName() string {
-	return this.Name
-}
-
-func (this *MetricResponse) GetStart() time.Time {
-	return this.Start
-}
-
-func (this *MetricResponse) GetFinish() time.Time {
-	return this.Finish
-}
-
-func (this *MetricResponse) GetObservation() Struct {
-	return this.Observation
 }
 
 func NewMetricResponseFromFace(that MetricResponseFace) *MetricResponse {
@@ -595,14 +432,6 @@ type AppBeatRequestFace interface {
 	GetMetrics() []MetricResponse
 }
 
-func (this *AppBeatRequest) GetCommandResults() map[string]CommandResult {
-	return this.CommandResults
-}
-
-func (this *AppBeatRequest) GetMetrics() []MetricResponse {
-	return this.Metrics
-}
-
 func NewAppBeatRequestFromFace(that AppBeatRequestFace) *AppBeatRequest {
 	this := &AppBeatRequest{}
 	this.CommandResults = that.GetCommandResults()
@@ -613,14 +442,6 @@ func NewAppBeatRequestFromFace(that AppBeatRequestFace) *AppBeatRequest {
 type AppBeatResponseFace interface {
 	GetCommands() []CommandRequest
 	GetStatus() bool
-}
-
-func (this *AppBeatResponse) GetCommands() []CommandRequest {
-	return this.Commands
-}
-
-func (this *AppBeatResponse) GetStatus() bool {
-	return this.Status
 }
 
 func NewAppBeatResponseFromFace(that AppBeatResponseFace) *AppBeatResponse {
@@ -634,10 +455,6 @@ type BatchRequestFace interface {
 	GetBatch() []BatchRequest_Event
 }
 
-func (this *BatchRequest) GetBatch() []BatchRequest_Event {
-	return this.Batch
-}
-
 func NewBatchRequestFromFace(that BatchRequestFace) *BatchRequest {
 	this := &BatchRequest{}
 	this.Batch = that.GetBatch()
@@ -647,14 +464,6 @@ func NewBatchRequestFromFace(that BatchRequestFace) *BatchRequest {
 type BatchRequest_EventFace interface {
 	GetEventType() string
 	GetEvent() Struct
-}
-
-func (this *BatchRequest_Event) GetEventType() string {
-	return this.EventType
-}
-
-func (this *BatchRequest_Event) GetEvent() Struct {
-	return this.Event
 }
 
 func NewBatchRequest_EventFromFace(that BatchRequest_EventFace) *BatchRequest_Event {
@@ -671,22 +480,6 @@ type DependencyFace interface {
 	GetSource() *Dependency_Source
 }
 
-func (this *Dependency) GetName() string {
-	return this.Name
-}
-
-func (this *Dependency) GetVersion() string {
-	return this.Version
-}
-
-func (this *Dependency) GetHomepage() string {
-	return this.Homepage
-}
-
-func (this *Dependency) GetSource() *Dependency_Source {
-	return this.Source
-}
-
 func NewDependencyFromFace(that DependencyFace) *Dependency {
 	this := &Dependency{}
 	this.Name = that.GetName()
@@ -699,14 +492,6 @@ func NewDependencyFromFace(that DependencyFace) *Dependency {
 type Dependency_SourceFace interface {
 	GetName() string
 	GetRemotes() []string
-}
-
-func (this *Dependency_Source) GetName() string {
-	return this.Name
-}
-
-func (this *Dependency_Source) GetRemotes() []string {
-	return this.Remotes
 }
 
 func NewDependency_SourceFromFace(that Dependency_SourceFace) *Dependency_Source {
@@ -723,30 +508,6 @@ type RequestRecordFace interface {
 	GetRequest() RequestRecord_Request
 	GetResponse() RequestRecord_Response
 	GetObserved() RequestRecord_Observed
-}
-
-func (this *RequestRecord) GetVersion() string {
-	return this.Version
-}
-
-func (this *RequestRecord) GetRulespackId() string {
-	return this.RulespackId
-}
-
-func (this *RequestRecord) GetClientIp() string {
-	return this.ClientIp
-}
-
-func (this *RequestRecord) GetRequest() RequestRecord_Request {
-	return this.Request
-}
-
-func (this *RequestRecord) GetResponse() RequestRecord_Response {
-	return this.Response
-}
-
-func (this *RequestRecord) GetObserved() RequestRecord_Observed {
-	return this.Observed
 }
 
 func NewRequestRecordFromFace(that RequestRecordFace) *RequestRecord {
@@ -776,58 +537,6 @@ type RequestRecord_RequestFace interface {
 	GetParams() RequestRecord_Request_Params
 }
 
-func (this *RequestRecord_Request) GetRid() string {
-	return this.Rid
-}
-
-func (this *RequestRecord_Request) GetHeaders() []RequestRecord_Request_Header {
-	return this.Headers
-}
-
-func (this *RequestRecord_Request) GetVerb() string {
-	return this.Verb
-}
-
-func (this *RequestRecord_Request) GetPath() string {
-	return this.Path
-}
-
-func (this *RequestRecord_Request) GetRawPath() string {
-	return this.RawPath
-}
-
-func (this *RequestRecord_Request) GetHost() string {
-	return this.Host
-}
-
-func (this *RequestRecord_Request) GetPort() string {
-	return this.Port
-}
-
-func (this *RequestRecord_Request) GetRemoteIp() string {
-	return this.RemoteIp
-}
-
-func (this *RequestRecord_Request) GetRemotePort() string {
-	return this.RemotePort
-}
-
-func (this *RequestRecord_Request) GetScheme() string {
-	return this.Scheme
-}
-
-func (this *RequestRecord_Request) GetUserAgent() string {
-	return this.UserAgent
-}
-
-func (this *RequestRecord_Request) GetReferer() string {
-	return this.Referer
-}
-
-func (this *RequestRecord_Request) GetParams() RequestRecord_Request_Params {
-	return this.Params
-}
-
 func NewRequestRecord_RequestFromFace(that RequestRecord_RequestFace) *RequestRecord_Request {
 	this := &RequestRecord_Request{}
 	this.Rid = that.GetRid()
@@ -851,14 +560,6 @@ type RequestRecord_Request_HeaderFace interface {
 	GetValue() string
 }
 
-func (this *RequestRecord_Request_Header) GetKey() string {
-	return this.Key
-}
-
-func (this *RequestRecord_Request_Header) GetValue() string {
-	return this.Value
-}
-
 func NewRequestRecord_Request_HeaderFromFace(that RequestRecord_Request_HeaderFace) *RequestRecord_Request_Header {
 	this := &RequestRecord_Request_Header{}
 	this.Key = that.GetKey()
@@ -870,18 +571,6 @@ type RequestRecord_ResponseFace interface {
 	GetStatus() uint32
 	GetContentLength() uint32
 	GetContentType() string
-}
-
-func (this *RequestRecord_Response) GetStatus() uint32 {
-	return this.Status
-}
-
-func (this *RequestRecord_Response) GetContentLength() uint32 {
-	return this.ContentLength
-}
-
-func (this *RequestRecord_Response) GetContentType() string {
-	return this.ContentType
 }
 
 func NewRequestRecord_ResponseFromFace(that RequestRecord_ResponseFace) *RequestRecord_Response {
@@ -898,26 +587,6 @@ type RequestRecord_ObservedFace interface {
 	GetSqreenExceptions() []*RequestRecord_Observed_Exception
 	GetObservations() []*RequestRecord_Observed_Observation
 	GetDataPoints() []*RequestRecord_Observed_DataPoint
-}
-
-func (this *RequestRecord_Observed) GetAttacks() []*RequestRecord_Observed_Attack {
-	return this.Attacks
-}
-
-func (this *RequestRecord_Observed) GetSdk() []*RequestRecord_Observed_SDKEvent {
-	return this.Sdk
-}
-
-func (this *RequestRecord_Observed) GetSqreenExceptions() []*RequestRecord_Observed_Exception {
-	return this.SqreenExceptions
-}
-
-func (this *RequestRecord_Observed) GetObservations() []*RequestRecord_Observed_Observation {
-	return this.Observations
-}
-
-func (this *RequestRecord_Observed) GetDataPoints() []*RequestRecord_Observed_DataPoint {
-	return this.DataPoints
 }
 
 func NewRequestRecord_ObservedFromFace(that RequestRecord_ObservedFace) *RequestRecord_Observed {
@@ -939,30 +608,6 @@ type RequestRecord_Observed_AttackFace interface {
 	GetBlock() bool
 }
 
-func (this *RequestRecord_Observed_Attack) GetRuleName() string {
-	return this.RuleName
-}
-
-func (this *RequestRecord_Observed_Attack) GetTest() bool {
-	return this.Test
-}
-
-func (this *RequestRecord_Observed_Attack) GetInfos() string {
-	return this.Infos
-}
-
-func (this *RequestRecord_Observed_Attack) GetBacktrace() []string {
-	return this.Backtrace
-}
-
-func (this *RequestRecord_Observed_Attack) GetTime() time.Time {
-	return this.Time
-}
-
-func (this *RequestRecord_Observed_Attack) GetBlock() bool {
-	return this.Block
-}
-
 func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_AttackFace) *RequestRecord_Observed_Attack {
 	this := &RequestRecord_Observed_Attack{}
 	this.RuleName = that.GetRuleName()
@@ -980,18 +625,6 @@ type RequestRecord_Observed_SDKEventFace interface {
 	GetArgs() RequestRecord_Observed_SDKEvent_Args
 }
 
-func (this *RequestRecord_Observed_SDKEvent) GetTime() time.Time {
-	return this.Time
-}
-
-func (this *RequestRecord_Observed_SDKEvent) GetName() string {
-	return this.Name
-}
-
-func (this *RequestRecord_Observed_SDKEvent) GetArgs() RequestRecord_Observed_SDKEvent_Args {
-	return this.Args
-}
-
 func NewRequestRecord_Observed_SDKEventFromFace(that RequestRecord_Observed_SDKEventFace) *RequestRecord_Observed_SDKEvent {
 	this := &RequestRecord_Observed_SDKEvent{}
 	this.Time = that.GetTime()
@@ -1003,14 +636,6 @@ func NewRequestRecord_Observed_SDKEventFromFace(that RequestRecord_Observed_SDKE
 type RequestRecord_Observed_SDKEvent_Args_TrackFace interface {
 	GetEvent() string
 	GetOptions() *RequestRecord_Observed_SDKEvent_Args_Track_Options
-}
-
-func (this *RequestRecord_Observed_SDKEvent_Args_Track) GetEvent() string {
-	return this.Event
-}
-
-func (this *RequestRecord_Observed_SDKEvent_Args_Track) GetOptions() *RequestRecord_Observed_SDKEvent_Args_Track_Options {
-	return this.Options
 }
 
 func NewRequestRecord_Observed_SDKEvent_Args_TrackFromFace(that RequestRecord_Observed_SDKEvent_Args_TrackFace) *RequestRecord_Observed_SDKEvent_Args_Track {
@@ -1025,14 +650,6 @@ type RequestRecord_Observed_SDKEvent_Args_Track_OptionsFace interface {
 	GetUserIdentifiers() *Struct
 }
 
-func (this *RequestRecord_Observed_SDKEvent_Args_Track_Options) GetProperties() *Struct {
-	return this.Properties
-}
-
-func (this *RequestRecord_Observed_SDKEvent_Args_Track_Options) GetUserIdentifiers() *Struct {
-	return this.UserIdentifiers
-}
-
 func NewRequestRecord_Observed_SDKEvent_Args_Track_OptionsFromFace(that RequestRecord_Observed_SDKEvent_Args_Track_OptionsFace) *RequestRecord_Observed_SDKEvent_Args_Track_Options {
 	this := &RequestRecord_Observed_SDKEvent_Args_Track_Options{}
 	this.Properties = that.GetProperties()
@@ -1042,10 +659,6 @@ func NewRequestRecord_Observed_SDKEvent_Args_Track_OptionsFromFace(that RequestR
 
 type RequestRecord_Observed_SDKEvent_Args_IdentifyFace interface {
 	GetUserIdentifiers() *Struct
-}
-
-func (this *RequestRecord_Observed_SDKEvent_Args_Identify) GetUserIdentifiers() *Struct {
-	return this.UserIdentifiers
 }
 
 func NewRequestRecord_Observed_SDKEvent_Args_IdentifyFromFace(that RequestRecord_Observed_SDKEvent_Args_IdentifyFace) *RequestRecord_Observed_SDKEvent_Args_Identify {
@@ -1062,34 +675,6 @@ type RequestRecord_Observed_ExceptionFace interface {
 	GetInfos() string
 	GetBacktrace() []string
 	GetTime() time.Time
-}
-
-func (this *RequestRecord_Observed_Exception) GetMessage() string {
-	return this.Message
-}
-
-func (this *RequestRecord_Observed_Exception) GetKlass() string {
-	return this.Klass
-}
-
-func (this *RequestRecord_Observed_Exception) GetRuleName() string {
-	return this.RuleName
-}
-
-func (this *RequestRecord_Observed_Exception) GetTest() bool {
-	return this.Test
-}
-
-func (this *RequestRecord_Observed_Exception) GetInfos() string {
-	return this.Infos
-}
-
-func (this *RequestRecord_Observed_Exception) GetBacktrace() []string {
-	return this.Backtrace
-}
-
-func (this *RequestRecord_Observed_Exception) GetTime() time.Time {
-	return this.Time
 }
 
 func NewRequestRecord_Observed_ExceptionFromFace(that RequestRecord_Observed_ExceptionFace) *RequestRecord_Observed_Exception {
@@ -1111,22 +696,6 @@ type RequestRecord_Observed_ObservationFace interface {
 	GetTime() time.Time
 }
 
-func (this *RequestRecord_Observed_Observation) GetCategory() string {
-	return this.Category
-}
-
-func (this *RequestRecord_Observed_Observation) GetKey() string {
-	return this.Key
-}
-
-func (this *RequestRecord_Observed_Observation) GetValue() string {
-	return this.Value
-}
-
-func (this *RequestRecord_Observed_Observation) GetTime() time.Time {
-	return this.Time
-}
-
 func NewRequestRecord_Observed_ObservationFromFace(that RequestRecord_Observed_ObservationFace) *RequestRecord_Observed_Observation {
 	this := &RequestRecord_Observed_Observation{}
 	this.Category = that.GetCategory()
@@ -1141,22 +710,6 @@ type RequestRecord_Observed_DataPointFace interface {
 	GetRuleName() string
 	GetTime() time.Time
 	GetInfos() string
-}
-
-func (this *RequestRecord_Observed_DataPoint) GetRulespackId() string {
-	return this.RulespackId
-}
-
-func (this *RequestRecord_Observed_DataPoint) GetRuleName() string {
-	return this.RuleName
-}
-
-func (this *RequestRecord_Observed_DataPoint) GetTime() time.Time {
-	return this.Time
-}
-
-func (this *RequestRecord_Observed_DataPoint) GetInfos() string {
-	return this.Infos
 }
 
 func NewRequestRecord_Observed_DataPointFromFace(that RequestRecord_Observed_DataPointFace) *RequestRecord_Observed_DataPoint {

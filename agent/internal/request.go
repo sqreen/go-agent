@@ -302,62 +302,18 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 
 // WhitelistedHTTPRequestRecord is a request record whose methods do nothing in
 // order to whitelist the request.
-type WhitelistedHTTPRequestRecord struct {
-}
+type WhitelistedHTTPRequestRecord struct{}
 
-func (WhitelistedHTTPRequestRecord) NewCustomEvent(string) types.CustomEvent {
-	return nil
-}
-
-func (WhitelistedHTTPRequestRecord) NewUserSignup(map[string]string) {
-}
-
-func (WhitelistedHTTPRequestRecord) NewUserAuth(map[string]string, bool) {
-}
-
-func (WhitelistedHTTPRequestRecord) Identify(map[string]string) {
-}
-
-func (WhitelistedHTTPRequestRecord) SecurityResponse() http.Handler {
-	return nil
-}
-
-func (WhitelistedHTTPRequestRecord) UserSecurityResponse() http.Handler {
-	return nil
-}
-
-func (WhitelistedHTTPRequestRecord) Close() {
-}
-
-// httpRequestRecord is an adapter type implementing interface
-// `api.RequestRecordFace` to serialize an HTTP request record to the backend
-// API message format.
-type httpRequestRecord struct {
-	ctx         *HTTPRequestRecord
-	rulespackID string
-}
-
-func newHTTPRequestRecord(event *HTTPRequestRecord) *httpRequestRecord {
-	return &httpRequestRecord{
-		ctx: event,
-	}
-}
-
-func (r *httpRequestRecord) GetVersion() string {
-	return api.RequestRecordVersion
-}
-
-func (r *httpRequestRecord) GetRulespackId() string {
-	return r.rulespackID
-}
-
-func (r *httpRequestRecord) SetRulespackId(rulespackId string) {
-	r.rulespackID = rulespackId
-}
-
-func (r *httpRequestRecord) GetClientIp() string {
-	return r.ctx.clientIP.String()
-}
+func (WhitelistedHTTPRequestRecord) NewUserSignup(map[string]string)           {}
+func (WhitelistedHTTPRequestRecord) NewUserAuth(map[string]string, bool)       {}
+func (WhitelistedHTTPRequestRecord) Identify(map[string]string)                {}
+func (WhitelistedHTTPRequestRecord) SecurityResponse() http.Handler            { return nil }
+func (WhitelistedHTTPRequestRecord) UserSecurityResponse() http.Handler        { return nil }
+func (r WhitelistedHTTPRequestRecord) NewCustomEvent(string) types.CustomEvent { return r }
+func (WhitelistedHTTPRequestRecord) Close()                                    {}
+func (WhitelistedHTTPRequestRecord) WithTimestamp(time.Time)                   {}
+func (WhitelistedHTTPRequestRecord) WithProperties(types.EventProperties)      {}
+func (WhitelistedHTTPRequestRecord) WithUserIdentifiers(map[string]string)     {}
 
 type getClientIPConfigFace interface {
 	HTTPClientIPHeader() string

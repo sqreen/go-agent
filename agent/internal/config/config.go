@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 
 	"github.com/spf13/viper"
 )
@@ -207,7 +208,7 @@ const (
 // User configuration's default values.
 const (
 	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
-	configDefaultLogLevel              = `warn`
+	configDefaultLogLevel              = `info`
 )
 
 func New(logger *plog.Logger) *Config {
@@ -247,7 +248,7 @@ func New(logger *plog.Logger) *Config {
 
 	err := manager.ReadInConfig()
 	if err != nil {
-		logger.Error(errors.Wrap(err, "could not read the configuration file"))
+		logger.Error(sqerrors.Wrap(err, "could not read the configuration file"))
 	}
 
 	return &Config{manager}
