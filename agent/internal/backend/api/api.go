@@ -164,6 +164,27 @@ type BatchRequest_Event struct {
 }
 
 type Rule struct {
+	Name      string    `json:"name"`
+	Hookpoint Hookpoint `json:"hookpoint"`
+	Data      RuleData  `json:"data"`
+}
+
+type Hookpoint struct {
+	Class    string `json:"klass"`
+	Method   string `json:"method"`
+	Callback string `json:"callback_class"`
+}
+
+type RuleData struct {
+	Values []RuleDataEntry `json:"values"`
+}
+
+type RuleDataEntry Struct
+
+const CustomErrorPageType = "custom_error_page"
+
+type CustomErrorPageRuleDataEntry struct {
+	StatusCode int `json:"status_code"`
 }
 
 type Dependency struct {
@@ -799,4 +820,9 @@ func NewBlockedUserEventProperties_OutputFromFace(that BlockedUserEventPropertie
 	this := &BlockedUserEventProperties_Output{}
 	this.User = that.GetUser()
 	return this
+}
+
+type RulesPackResponse struct {
+	PackID string `json:"pack_id"`
+	Rules  []Rule `json:"rules"`
 }

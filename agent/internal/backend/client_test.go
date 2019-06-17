@@ -23,14 +23,15 @@ import (
 var (
 	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
 	cfg    = config.New(logger)
-	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest)
+	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue)
 )
 
 func TestClient(t *testing.T) {
 	RegisterTestingT(t)
-	g := NewGomegaWithT(t)
 
 	t.Run("AppLogin", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		token := testlib.RandString(2, 50)
 		appName := testlib.RandString(2, 50)
 
@@ -59,6 +60,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("AppBeat", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
@@ -77,6 +80,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("Batch", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
@@ -94,6 +99,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("ActionsPack", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.ActionsPack
@@ -110,7 +117,28 @@ func TestClient(t *testing.T) {
 		g.Expect(res).Should(Equal(response))
 	})
 
+	t.Run("RulesPack", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
+		statusCode := http.StatusOK
+
+		endpointCfg := &config.BackendHTTPAPIEndpoint.RulesPack
+
+		response := NewRandomRulesPackResponse()
+
+		client, server := initFakeServerSession(endpointCfg, nil, response, statusCode, nil)
+		defer server.Close()
+
+		res, err := client.RulesPack()
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+		g.Expect(res).Should(Equal(response))
+	})
+
 	t.Run("AppLogout", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogout
@@ -282,6 +310,12 @@ func NewRandomActionsPackResponse() *api.ActionsPackResponse {
 	return pb
 }
 
+func NewRandomRulesPackResponse() *api.RulesPackResponse {
+	pb := new(api.RulesPackResponse)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
 func FuzzStruct(e *api.Struct, c fuzz.Continue) {
 	v := struct {
 		A string
@@ -304,4 +338,10 @@ func FuzzStruct(e *api.Struct, c fuzz.Continue) {
 func FuzzCommandRequest(e *api.CommandRequest, c fuzz.Continue) {
 	c.Fuzz(&e.Name)
 	c.Fuzz(&e.Uuid)
+}
+
+func FuzzRuleDataValue(e *api.RuleDataEntry, c fuzz.Continue) {
+	v := &api.CustomErrorPageRuleDataEntry{}
+	c.Fuzz(&v.StatusCode)
+	e.Value = v
 }

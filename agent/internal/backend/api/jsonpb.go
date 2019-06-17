@@ -7,6 +7,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
 var RequestRecordVersion = "20171208"
@@ -103,4 +106,46 @@ func (identify *RequestRecord_Observed_SDKEvent_Args_Identify) MarshalJSON() ([]
 		args = append(args, identify.UserIdentifiers)
 	}
 	return args.MarshalJSON()
+}
+
+// UnmarshalJSON parses rules data to their actual type. The actual type is
+// given by the json structure key `type`.
+func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
+	var discriminant struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &discriminant); err != nil {
+		return sqerrors.Wrap(err, "json unmarshal")
+	}
+
+	var value interface{}
+	switch t := discriminant.Type; t {
+	case CustomErrorPageType:
+		value = &CustomErrorPageRuleDataEntry{}
+	default:
+		return sqerrors.Wrap(errors.Errorf("unexpected type of rule data value `%s`", t), "json unmarshal")
+	}
+
+	if err := json.Unmarshal(data, value); err != nil {
+		return sqerrors.Wrap(err, "json unmarshal")
+	}
+
+	v.Value = value
+	return nil
+}
+
+// MarshalJSON serializes the type to the json representation whose type is
+// provided by the key `type`.
+func (v *RuleDataEntry) MarshalJSON() ([]byte, error) {
+	var discriminant interface{}
+	switch actual := v.Value.(type) {
+	case *CustomErrorPageRuleDataEntry:
+		discriminant = struct {
+			Type string `json:"type"`
+			*CustomErrorPageRuleDataEntry // Inlined
+		}{
+			Type: CustomErrorPageType, CustomErrorPageRuleDataEntry: actual,
+		}
+	}
+	return json.Marshal(discriminant)
 }

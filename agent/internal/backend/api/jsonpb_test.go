@@ -213,6 +213,26 @@ func TestStruct(t *testing.T) {
 	require.Equal(t, parsedPB, pb)
 }
 
+func TestRuleDataValue(t *testing.T) {
+	t.Run("CustomErrorPage", func(t *testing.T) {
+		msg := &api.RuleDataEntry{
+			Value: &api.CustomErrorPageRuleDataEntry{StatusCode: 33},
+		}
+
+		// Check it can be marshaled to the expected JSON struct.
+		buf, err := json.Marshal(msg)
+		require.NoError(t, err)
+
+		// Check it can be unmarshaled back to json.
+		parsed := new(api.RuleDataEntry)
+		err = json.Unmarshal(buf, parsed)
+		require.NoError(t, err)
+
+		// Check both are equal
+		require.Equal(t, parsed, msg)
+	})
+}
+
 func FuzzStruct(e *api.Struct, c fuzz.Continue) {
 	nbFields := c.Uint32() % 10
 	if nbFields == 0 {
