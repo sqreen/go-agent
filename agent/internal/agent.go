@@ -17,6 +17,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
@@ -156,7 +157,7 @@ func New(cfg *config.Config) *Agent {
 		appInfo:    app.NewInfo(logger),
 		client:     backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
 		actors:     actor.NewStore(logger),
-		rules:      rules.NewEngine(logger),
+		rules:      rule.NewEngine(logger),
 	}
 }
 
@@ -275,7 +276,9 @@ func (a *Agent) Serve() error {
 }
 
 func (a *Agent) InstrumentationEnable() error {
-	a.ReloadRules()
+	if err := a.RulesReload(); err != nil {
+		return err
+	}
 	a.rules.Enable()
 	sdk.SetAgent(a)
 	a.logger.Info("instrumentation enabled")
@@ -439,5 +442,5 @@ func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {
 }
 
 func (a *Agent) RulespackID() string {
-	return a.rulespackId
+	return a.rules.PackID()
 }
