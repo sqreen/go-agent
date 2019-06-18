@@ -78,6 +78,10 @@ func TestCommandManager(t *testing.T) {
 				{json.RawMessage(`["a", "b", "c"]`), json.RawMessage(`["a", "b", "c"]`)},
 			},
 		},
+		{
+			Command:           "rules_reload",
+			AgentExpectedCall: agent.ExpectRulesReload,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -285,6 +289,11 @@ func (a *agentMockup) SetCIDRWhitelist(cidrs []string) error {
 	return ret.Error(0)
 }
 
+func (a *agentMockup) RulesReload() error {
+	ret := a.Called()
+	return ret.Error(0)
+}
+
 func (a *agentMockup) ExpectInstrumentationEnable(...interface{}) *mock.Call {
 	return a.On("InstrumentationEnable")
 }
@@ -299,4 +308,8 @@ func (a *agentMockup) ExpectActionsReload(...interface{}) *mock.Call {
 
 func (a *agentMockup) ExpectSetCIDRWhitelist(args ...interface{}) *mock.Call {
 	return a.On("SetCIDRWhitelist", args...)
+}
+
+func (a *agentMockup) ExpectRulesReload(...interface{}) *mock.Call {
+	return a.On("RulesReload")
 }
