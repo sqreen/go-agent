@@ -120,17 +120,17 @@ func Start() {
 }
 
 type Agent struct {
-	logger      *plog.Logger
-	eventMng    *eventManager
-	metricsMng  *metricsManager
-	ctx         context.Context
-	cancel      context.CancelFunc
-	isDone      chan struct{}
-	config      *config.Config
-	appInfo     *app.Info
-	client      *backend.Client
-	actors      *actor.Store
-	rulespackId string
+	logger     *plog.Logger
+	eventMng   *eventManager
+	metricsMng *metricsManager
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isDone     chan struct{}
+	config     *config.Config
+	appInfo    *app.Info
+	client     *backend.Client
+	actors     *actor.Store
+	rules      *rule.Engine
 }
 
 // Error channel buffer length.
@@ -156,6 +156,7 @@ func New(cfg *config.Config) *Agent {
 		appInfo:    app.NewInfo(logger),
 		client:     backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
 		actors:     actor.NewStore(logger),
+		rules:      rules.NewEngine(logger),
 	}
 }
 
@@ -202,7 +203,7 @@ func (a *Agent) Serve() error {
 
 	// Create the command manager to process backend commands
 	commandMng := NewCommandManager(a, a.logger)
-	// Process commands that may have been received on login.
+	// Process commands that may have been received at login.
 	commandResults := commandMng.Do(appLoginRes.Commands)
 
 	heartbeat := time.Duration(appLoginRes.Features.HeartbeatDelay) * time.Second
@@ -213,7 +214,6 @@ func (a *Agent) Serve() error {
 	a.logger.Info("up and running - heartbeat set to ", heartbeat)
 	ticker := time.Tick(heartbeat)
 
-	a.rulespackId = appLoginRes.PackId
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
 		batchSize = config.MaxEventsPerHeatbeat
@@ -275,6 +275,8 @@ func (a *Agent) Serve() error {
 }
 
 func (a *Agent) InstrumentationEnable() error {
+	a.ReloadRules()
+	a.rules.Enable()
 	sdk.SetAgent(a)
 	a.logger.Info("instrumentation enabled")
 	return nil
@@ -284,8 +286,9 @@ func (a *Agent) InstrumentationEnable() error {
 // now the SDK.
 func (a *Agent) InstrumentationDisable() error {
 	sdk.SetAgent(nil)
-	a.logger.Info("instrumentation disabled")
+	a.rules.Disable()
 	err := a.actors.SetActions(nil)
+	a.logger.Info("instrumentation disabled")
 	return err
 }
 
@@ -301,6 +304,16 @@ func (a *Agent) ActionsReload() error {
 
 func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
 	return a.actors.SetCIDRWhitelist(cidrs)
+}
+
+func (a *Agent) RulesReload() error {
+	rulespack, err := a.client.RulesPack()
+	if err != nil {
+		a.logger.Error(err)
+		return err
+	}
+	a.rules.SetRules(rulespack.PackID, rulespack.Rules)
+	return nil
 }
 
 func (a *Agent) GracefulStop() {
