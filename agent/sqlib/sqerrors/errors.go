@@ -64,6 +64,12 @@ func New(message string) error {
 	return WithTimestamp(errors.New(message))
 }
 
+// Errorf returns a new errors whose message is formatted by `fmt.Sprintf`. The
+// returned error is annotated with a timestamp, a message and a stack trace.
+func Errorf(format string, args ...interface{}) error {
+	return New(fmt.Sprintf(format, args...))
+}
+
 // Wrap annotates the given error `err` with a timestamp, a message and a stack
 // trace.
 func Wrap(err error, message string) error {
