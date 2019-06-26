@@ -204,6 +204,7 @@ const (
 	configKeyBackendHTTPAPIProxy      = `proxy`
 	configKeyDisable                  = `disable`
 	configKeyStripHTTPReferer         = `strip_http_referer`
+	configKeyRules                    = `rules`
 )
 
 // User configuration's default values.
@@ -246,6 +247,7 @@ func New(logger *plog.Logger) *Config {
 	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	manager.SetDefault(configKeyDisable, "")
 	manager.SetDefault(configKeyStripHTTPReferer, "")
+	manager.SetDefault(configKeyRules, "")
 
 	err := manager.ReadInConfig()
 	if err != nil {
@@ -301,6 +303,12 @@ func (c *Config) Disable() bool {
 func (c *Config) StripHTTPReferer() bool {
 	strip := sanitizeString(c.GetString(configKeyStripHTTPReferer))
 	return strip != ""
+}
+
+// LocalRulesFile returns a JSON file containing custom rules in an array. They
+// are added to the rules received from server.
+func (c *Config) LocalRulesFile() string {
+	return sanitizeString(c.GetString(configKeyRules))
 }
 
 func sanitizeString(s string) string {

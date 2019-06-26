@@ -6,6 +6,8 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -315,6 +317,21 @@ func (a *Agent) RulesReload() error {
 		a.logger.Error(err)
 		return err
 	}
+
+	// Insert local rules if any
+	localRulesJSON := a.config.LocalRulesFile()
+	buf, err := ioutil.ReadFile(localRulesJSON)
+	if err == nil {
+		var localRules []api.Rule
+		err = json.Unmarshal(buf, &localRules)
+		if err == nil {
+			rulespack.Rules = append(rulespack.Rules, localRules...)
+		}
+	}
+	if err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
+	}
+
 	a.rules.SetRules(rulespack.PackID, rulespack.Rules)
 	return nil
 }
