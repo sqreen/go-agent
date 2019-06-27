@@ -181,10 +181,17 @@ type RuleData struct {
 
 type RuleDataEntry Struct
 
-const CustomErrorPageType = "custom_error_page"
+const (
+	CustomErrorPageType = "custom_error_page"
+	RedirectionType     = "redirection"
+)
 
 type CustomErrorPageRuleDataEntry struct {
 	StatusCode int `json:"status_code"`
+}
+
+type RedirectionRuleDataEntry struct {
+	RedirectionURL string `json:"redirection_url"`
 }
 
 type Dependency struct {

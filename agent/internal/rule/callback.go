@@ -24,6 +24,8 @@ func NewCallbacks(name string, data []interface{}) (prolog, epilog sqhook.Callba
 		return nil, nil, sqerrors.Errorf("undefined callback name `%s`", name)
 	case "WriteCustomErrorPage":
 		callbacksCtor = callback.NewWriteCustomErrorPageCallbacks
+	case "WriteHTTPRedirection":
+		callbacksCtor = callback.NewWriteHTTPRedirectionCallbacks
 	}
 	return callbacksCtor(data)
 }
