@@ -17,6 +17,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
 )
 
@@ -158,7 +159,10 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastSecurityResponseHandler = actor.NewIPActionHTTPHandler(action, ip)
+	ctx.lastSecurityResponseHandler, err = actor.NewIPActionHTTPHandler(action, ip)
+	if err != nil {
+		agent.logger.Error(sqerrors.Wrap(err, "security response"))
+	}
 	return ctx.lastSecurityResponseHandler
 }
 

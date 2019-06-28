@@ -829,6 +829,40 @@ func NewBlockedUserEventProperties_OutputFromFace(that BlockedUserEventPropertie
 	return this
 }
 
+type RedirectedIPEventProperties struct {
+	ActionId string                            `json:"action_id,omitempty"`
+	Output   RedirectedIPEventPropertiesOutput `json:"output"`
+}
+
+type RedirectedIPEventPropertiesOutput struct {
+	IpAddress string `json:"ip_address"`
+	URL       string `json:"url"`
+}
+
+func NewRedirectedIPEventPropertiesFromFace(that RedirectedIPEventPropertiesFace) *RedirectedIPEventProperties {
+	return &RedirectedIPEventProperties{
+		ActionId: that.GetActionId(),
+		Output:   that.GetOutput(),
+	}
+}
+
+type RedirectedIPEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() RedirectedIPEventPropertiesOutput
+}
+
+type RedirectedIPEventPropertiesOutputFace interface {
+	GetIpAddress() string
+	GetURL() string
+}
+
+func NewRedirectedIPEventPropertiesOutputFromFace(that RedirectedIPEventPropertiesOutputFace) *RedirectedIPEventPropertiesOutput {
+	return &RedirectedIPEventPropertiesOutput{
+		IpAddress: that.GetIpAddress(),
+		URL:       that.GetURL(),
+	}
+}
+
 type RulesPackResponse struct {
 	PackID string `json:"pack_id"`
 	Rules  []Rule `json:"rules"`

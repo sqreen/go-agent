@@ -5,13 +5,17 @@
 package actor
 
 import (
+	"net/url"
 	"time"
+
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
 // Action kinds.
 const (
-	actionKind_BlockIP   = "block_ip"
-	actionKind_BlockUser = "block_user"
+	actionKindBlockIP    = "block_ip"
+	actionKindBlockUser  = "block_user"
+	actionKindRedirectIP = "redirect_ip"
 )
 
 // Action is an interface common to each concrete action type stored in the data
@@ -37,6 +41,24 @@ func newBlockAction(id string) blockAction {
 }
 
 func (a blockAction) ActionID() string {
+	return a.ID
+}
+
+type redirectAction struct {
+	ID, URL string
+}
+
+func newRedirectAction(id, location string) (*redirectAction, error) {
+	if _, err := url.ParseRequestURI(location); err != nil {
+		return nil, sqerrors.Wrap(err, "validation of the redirection location url")
+	}
+	return &redirectAction{
+		ID:  id,
+		URL: location,
+	}, nil
+}
+
+func (a *redirectAction) ActionID() string {
 	return a.ID
 }
 

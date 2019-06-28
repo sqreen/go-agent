@@ -11,20 +11,28 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/httphandler"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
 )
 
 // Event names.
 const (
-	blockIPEventName   = "app.sqreen.action.block_ip"
-	blockUserEventName = "app.sqreen.action.block_user"
+	blockIPEventName    = "app.sqreen.action.block_ip"
+	blockUserEventName  = "app.sqreen.action.block_user"
+	redirectIPEventName = "app.sqreen.action.redirect_ip"
 )
 
 // NewIPActionHTTPHandler returns a HTTP handler that should be applied at the
 // request handler level to perform the security response.
-func NewIPActionHTTPHandler(action Action, ip net.IP) http.Handler {
-	return newBlockHTTPHandler(blockIPEventName, newBlockedIPEventProperties(action, ip))
+func NewIPActionHTTPHandler(action Action, ip net.IP) (http.Handler, error) {
+	switch actual := action.(type) {
+	case blockAction:
+		return newBlockHTTPHandler(blockIPEventName, newBlockedIPEventProperties(actual, ip)), nil
+	case *redirectAction:
+		return newRedirectHTTPHandler(redirectIPEventName, newRedirectedIPEventProperties(actual, ip), actual.URL), nil
+	}
+	return nil, sqerrors.Errorf("unexpected IP action type `%T`", action)
 }
 
 // NewUserActionHTTPHandler returns a HTTP handler that should be applied at
@@ -117,4 +125,65 @@ func (p *blockedUserEventProperties) GetOutput() api.BlockedUserEventProperties_
 }
 func (p *blockedUserEventProperties) GetUser() map[string]string {
 	return p.userID
+}
+
+// redirectHTTPHandler implements the http.Handler interface and holds the event
+// data corresponding to the action.
+type redirectHTTPHandler struct {
+	eventName       string
+	eventProperties types.EventProperties
+	location        string
+}
+
+// Static assertion that http.Handler is implemented.
+var _ http.Handler = &redirectHTTPHandler{}
+
+func newRedirectHTTPHandler(eventName string, properties types.EventProperties, location string) *redirectHTTPHandler {
+	return &redirectHTTPHandler{
+		eventName:       eventName,
+		eventProperties: properties,
+		location:        location,
+	}
+}
+
+// ServeHTTP writes the HTTP status code 500 into the HTTP response writer `w`.
+// The caller needs to abort the request.
+func (a *redirectHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	record := sdk.FromContext(r.Context())
+	record.TrackEvent(a.eventName).WithProperties(a.eventProperties)
+	w.Header().Set("Location", a.location)
+	w.WriteHeader(http.StatusSeeOther)
+}
+
+// redirectedIPEventProperties implements `types.EventProperties` to be marshaled
+// to an SDK event property structure.
+type redirectedIPEventProperties struct {
+	action *redirectAction
+	ip     net.IP
+}
+
+// Static assert that blockedIPEventProperties implements types.EventProperties.
+var _ types.EventProperties = &redirectedIPEventProperties{}
+
+func newRedirectedIPEventProperties(action *redirectAction, ip net.IP) *blockedIPEventProperties {
+	return &blockedIPEventProperties{
+		action: action,
+		ip:     ip,
+	}
+}
+func (p *redirectedIPEventProperties) MarshalJSON() ([]byte, error) {
+	pb := api.NewRedirectedIPEventPropertiesFromFace(p)
+	return json.Marshal(pb)
+}
+func (p *redirectedIPEventProperties) GetActionId() string {
+	return p.action.ActionID()
+}
+func (p *redirectedIPEventProperties) GetOutput() api.RedirectedIPEventPropertiesOutput {
+	return *api.NewRedirectedIPEventPropertiesOutputFromFace(p)
+}
+func (p *redirectedIPEventProperties) GetIpAddress() string {
+	return p.ip.String()
+}
+func (p *redirectedIPEventProperties) GetURL() string {
+	return p.action.URL
 }
