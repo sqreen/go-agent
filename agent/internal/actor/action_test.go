@@ -44,7 +44,8 @@ func TestAction(t *testing.T) {
 			})
 
 			t.Run("Block User", func(t *testing.T) {
-				handler := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandString(1, 250)})
+				handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandString(1, 250)})
+				require.NoError(t, err)
 				require.NotNil(t, handler)
 				// Use the handler
 				req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -93,8 +94,19 @@ func TestAction(t *testing.T) {
 					// TODO: check the sdk event
 				})
 
+				t.Run("Redirect User", func(t *testing.T) {
+					handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandString(1, 250)})
+					require.NoError(t, err)
+					require.NotNil(t, handler)
+					// Use the handler
+					req := httptest.NewRequest(http.MethodPost, "/", nil)
+					rec := httptest.NewRecorder()
+					handler.ServeHTTP(rec, req)
+					require.Equal(t, rec.Code, http.StatusSeeOther)
+					require.Equal(t, rec.Header().Get("Location"), action.URL)
+					// TODO: check the sdk event
+				})
 			})
 		})
 	})
-
 }

@@ -18,9 +18,10 @@ import (
 
 // Event names.
 const (
-	blockIPEventName    = "app.sqreen.action.block_ip"
-	blockUserEventName  = "app.sqreen.action.block_user"
-	redirectIPEventName = "app.sqreen.action.redirect_ip"
+	blockIPEventName      = "app.sqreen.action.block_ip"
+	blockUserEventName    = "app.sqreen.action.block_user"
+	redirectIPEventName   = "app.sqreen.action.redirect_ip"
+	redirectUserEventName = "app.sqreen.action.redirect_user"
 )
 
 // NewIPActionHTTPHandler returns a HTTP handler that should be applied at the
@@ -37,8 +38,14 @@ func NewIPActionHTTPHandler(action Action, ip net.IP) (http.Handler, error) {
 
 // NewUserActionHTTPHandler returns a HTTP handler that should be applied at
 // the request handler level to perform the security response.
-func NewUserActionHTTPHandler(action Action, userID map[string]string) http.Handler {
-	return newBlockHTTPHandler(blockUserEventName, newBlockedUserEventProperties(action, userID))
+func NewUserActionHTTPHandler(action Action, userID map[string]string) (http.Handler, error) {
+	switch actual := action.(type) {
+	case blockAction:
+		return newBlockHTTPHandler(blockUserEventName, newBlockedUserEventProperties(actual, userID)), nil
+	case *redirectAction:
+		return newRedirectHTTPHandler(redirectUserEventName, newRedirectedUserEventProperties(actual, userID), actual.URL), nil
+	}
+	return nil, sqerrors.Errorf("unexpected user action type `%T`", action)
 }
 
 // blockHTTPHandler implements the http.Handler interface and holds the event
@@ -96,7 +103,7 @@ func (p *blockedIPEventProperties) GetIpAddress() string {
 	return p.ip.String()
 }
 
-// blockedIPEventProperties implements `types.EventProperties` to be marshaled
+// blockedUserEventProperties implements `types.EventProperties` to be marshaled
 // to an SDK event property structure.
 type blockedUserEventProperties struct {
 	action Action
@@ -120,10 +127,40 @@ func (p *blockedUserEventProperties) MarshalJSON() ([]byte, error) {
 func (p *blockedUserEventProperties) GetActionId() string {
 	return p.action.ActionID()
 }
-func (p *blockedUserEventProperties) GetOutput() api.BlockedUserEventProperties_Output {
-	return *api.NewBlockedUserEventProperties_OutputFromFace(p)
+func (p *blockedUserEventProperties) GetOutput() api.BlockedUserEventPropertiesOutput {
+	return *api.NewBlockedUserEventPropertiesOutputFromFace(p)
 }
 func (p *blockedUserEventProperties) GetUser() map[string]string {
+	return p.userID
+}
+
+// redirectedUserEventProperties implements `types.EventProperties` to be marshaled
+// to an SDK event property structure.
+type redirectedUserEventProperties struct {
+	action Action
+	userID map[string]string
+}
+
+// Static assert that redirectedUserEventProperties implements `types.EventProperties`.
+var _ types.EventProperties = &redirectedUserEventProperties{}
+
+func newRedirectedUserEventProperties(action Action, userID map[string]string) *redirectedUserEventProperties {
+	return &redirectedUserEventProperties{
+		action: action,
+		userID: userID,
+	}
+}
+func (p *redirectedUserEventProperties) MarshalJSON() ([]byte, error) {
+	pb := api.NewRedirectedUserEventPropertiesFromFace(p)
+	return json.Marshal(pb)
+}
+func (p *redirectedUserEventProperties) GetActionId() string {
+	return p.action.ActionID()
+}
+func (p *redirectedUserEventProperties) GetOutput() api.RedirectedUserEventPropertiesOutput {
+	return *api.NewRedirectedUserEventPropertiesOutputFromFace(p)
+}
+func (p *redirectedUserEventProperties) GetUser() map[string]string {
 	return p.userID
 }
 

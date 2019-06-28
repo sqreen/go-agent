@@ -13,9 +13,10 @@ import (
 
 // Action kinds.
 const (
-	actionKindBlockIP    = "block_ip"
-	actionKindBlockUser  = "block_user"
-	actionKindRedirectIP = "redirect_ip"
+	actionKindBlockIP      = "block_ip"
+	actionKindBlockUser    = "block_user"
+	actionKindRedirectIP   = "redirect_ip"
+	actionKindRedirectUser = "redirect_user"
 )
 
 // Action is an interface common to each concrete action type stored in the data

@@ -161,7 +161,7 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	}
 	ctx.lastSecurityResponseHandler, err = actor.NewIPActionHTTPHandler(action, ip)
 	if err != nil {
-		agent.logger.Error(sqerrors.Wrap(err, "security response"))
+		agent.logger.Error(sqerrors.Wrap(err, "ip security response"))
 	}
 	return ctx.lastSecurityResponseHandler
 }
@@ -179,7 +179,11 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastUserSecurityResponseHandler = actor.NewUserActionHTTPHandler(action, userID)
+	var err error
+	ctx.lastUserSecurityResponseHandler, err = actor.NewUserActionHTTPHandler(action, userID)
+	if err != nil {
+		agent.logger.Error(sqerrors.Wrap(err, "user security response"))
+	}
 	return ctx.lastUserSecurityResponseHandler
 }
 
