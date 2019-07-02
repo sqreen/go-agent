@@ -5,8 +5,11 @@
 package sqgin
 
 import (
+	"net/http"
+
 	gingonic "github.com/gin-gonic/gin"
 	"github.com/sqreen/go-agent/sdk"
+	"github.com/sqreen/go-agent/sdk/middleware/sqhttp"
 )
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
@@ -53,39 +56,20 @@ import (
 //
 func Middleware() gingonic.HandlerFunc {
 	return func(c *gingonic.Context) {
-		// Get current request.
-		r := c.Request
-		// Create a new sqreen request wrapper.
-		req := sdk.NewHTTPRequest(r)
-		defer req.Close()
-		// Use the newly created request compliant with `sdk.FromContext()`.
-		r = req.Request()
-		// Also replace Gin's request pointer with it.
-		c.Request = r
-
-		// Check if an early security action is already required such as based on
-		// the request IP address.
-		if handler := req.SecurityResponse(); handler != nil {
-			handler.ServeHTTP(c.Writer, r)
-			c.Abort()
-			return
-		}
-
-		// Gin implements the `context.Context` interface but with string keys, so
-		// we need to also store the request record in Gin's context using a string
-		// key (previous call to `sdk.NewHTTPRequest()` stored it with a non-string
-		// key, as documented by `context.WithValue()`
-		// (https://godoc.org/context#WithValue)).
-		contextKey := sdk.HTTPRequestRecordContextKey.String
-		c.Set(contextKey, req.Record())
-
-		// Call next handler.
-		c.Next()
-
-		// Check if a security response should be applied now after having used
-		// `Identify()` and `MatchSecurityResponse()`.
-		if handler := req.UserSecurityResponse(); handler != nil {
-			handler.ServeHTTP(c.Writer, r)
+		// Adapt sqhttp middleware to Gin's
+		err := sqhttp.MiddlewareWithError(sqhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+			c.Request = r
+			// Gin implements the `context.Context` interface but with string keys, so
+			// we need to also store the request record in Gin's context using a string
+			// key (previous call to `sdk.NewHTTPRequest()` stored it with a non-string
+			// key, as documented by `context.WithValue()`
+			// (https://godoc.org/context#WithValue)).
+			contextKey := sdk.HTTPRequestRecordContextKey.String
+			c.Set(contextKey, sdk.FromContext(r.Context()))
+			c.Next()
+			return nil
+		})).ServeHTTP(c.Writer, c.Request)
+		if err != nil {
 			c.Abort()
 		}
 	}
