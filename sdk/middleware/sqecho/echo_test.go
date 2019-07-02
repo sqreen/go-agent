@@ -15,8 +15,10 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/sdk/middleware/sqecho"
+	"github.com/sqreen/go-agent/sdk/middleware/sqhttp"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 )
 
 func TestMiddleware(t *testing.T) {
@@ -164,7 +166,8 @@ func TestMiddleware(t *testing.T) {
 			mw := sqecho.Middleware()
 			err := mw(h)(c)
 			// Check the request was performed as expected
-			require.NoError(t, err)
+			require.Error(t, err)
+			require.True(t, xerrors.Is(err, sqhttp.AbortRequestError{}))
 			require.Equal(t, rec.Code, status)
 			require.Equal(t, rec.Body.String(), "")
 		})
@@ -201,9 +204,9 @@ func TestMiddleware(t *testing.T) {
 			mw := sqecho.Middleware()
 			err := mw(h)(c)
 			// Check the request was performed as expected
-			require.NoError(t, err)
-			require.Equal(t, rec.Code, status)
-			require.Equal(t, rec.Body.String(), "")
+			require.Error(t, err)
+			require.Equal(t, status, rec.Code)
+			require.Equal(t, "", rec.Body.String())
 		})
 	})
 }
