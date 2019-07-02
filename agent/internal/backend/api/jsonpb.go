@@ -114,7 +114,16 @@ func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &discriminant); err != nil {
-		return sqerrors.Wrap(err, "json unmarshal")
+		// Some rules come with values not discriminated by a `type` key
+		// So we try other types
+		// TODO: fix this in the API
+		var strArray []string
+		err = json.Unmarshal(data, &strArray)
+		if err != nil {
+			return err
+		}
+		v.Value = strArray
+		return nil
 	}
 
 	var value interface{}
