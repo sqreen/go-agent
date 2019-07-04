@@ -41,11 +41,11 @@ func TestNew(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(fmt.Sprintf("%T", tc.value), func(t *testing.T) {
-			hook := sqhook.New(tc.value)
 			if tc.shouldSucceed {
+				hook := sqhook.New(tc.value)
 				require.NotNil(t, hook)
 			} else {
-				require.Nil(t, hook)
+				require.Panics(t, func() { sqhook.New(tc.value) })
 			}
 		})
 	}
@@ -261,16 +261,6 @@ func TestEnableDisable(t *testing.T) {
 }
 
 func TestUsage(t *testing.T) {
-	t.Run("nil hook", func(t *testing.T) {
-		hook := sqhook.New(33)
-		require.Nil(t, hook)
-		err := hook.Attach("oops", "no")
-		require.Error(t, err)
-		prolog, epilog := hook.Callbacks()
-		require.Nil(t, prolog)
-		require.Nil(t, epilog)
-	})
-
 	t.Run("attaching nil", func(t *testing.T) {
 		hook := sqhook.New(example.method)
 		require.NotNil(t, hook)
