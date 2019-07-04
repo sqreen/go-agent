@@ -146,17 +146,17 @@ var _ error = Error(0)
 func New(fn interface{}) *Hook {
 	// Check fn is a non-nil function value.
 	if fn == nil {
-		return nil
+		panic("nil argument")
 	}
 	v := reflect.ValueOf(fn)
 	fnType := v.Type()
 	if fnType.Kind() != reflect.Func {
-		return nil
+		panic("the argument is not a function type")
 	}
 	// If the symbol name cannot be retrieved
 	symbol := runtime.FuncForPC(v.Pointer()).Name()
 	if symbol == "" {
-		return nil
+		panic("could not read the symbol name of the function")
 	}
 	// Create the hook, store it in the map and return it.
 	hook := &Hook{
@@ -176,9 +176,6 @@ func Find(symbol string) *Hook {
 // possible to pass nil values when only one type of callback is required. If
 // both arguments are nil, the callbacks are removed.
 func (h *Hook) Attach(prolog, epilog Callback) error {
-	if h == nil {
-		return sqerrors.New("cannot attach callbacks to a nil hook")
-	}
 	var cbs *callbacks
 	if prolog != nil || epilog != nil {
 		cbs = &callbacks{}
@@ -211,9 +208,6 @@ func (h *Hook) Attach(prolog, epilog Callback) error {
 
 // Callbacks atomically accesses the attached prolog and epilog callbacks.
 func (h *Hook) Callbacks() (prolog, epilog Callback) {
-	if h == nil {
-		return nil, nil
-	}
 	attached := (*callbacks)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&h.attached))))
 	if attached == nil {
 		return nil, nil
