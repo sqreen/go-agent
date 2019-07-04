@@ -24,7 +24,7 @@ func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
 			{&api.RedirectionRuleDataEntry{}},
 			{&api.RedirectionRuleDataEntry{"http//sqreen.com"}},
 		} {
-			prolog, epilog, err := callback.NewWriteHTTPRedirectionCallbacks(data)
+			prolog, epilog, err := callback.NewWriteHTTPRedirectionCallbacks(data, nil, nil)
 			require.Error(t, err)
 			require.Nil(t, prolog)
 			require.Nil(t, epilog)
@@ -36,7 +36,7 @@ func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
 		expectedURL := "http://sqreen.com"
 		prolog, epilog, err := callback.NewWriteHTTPRedirectionCallbacks([]interface{}{
 			&api.RedirectionRuleDataEntry{RedirectionURL: expectedURL},
-		})
+		}, nil, nil)
 		require.NoError(t, err)
 		require.NotNil(t, prolog)
 		require.Nil(t, epilog)

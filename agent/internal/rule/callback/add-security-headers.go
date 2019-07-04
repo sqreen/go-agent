@@ -14,7 +14,7 @@ import (
 // NewAddSecurityHeadersCallbacks returns the native prolog and epilog callbacks
 // to be hooked to `sqhttp.MiddlewareWithError` in order to add HTTP headers
 // provided by the rule's data.
-func NewAddSecurityHeadersCallbacks(data []interface{}) (prolog, epilog sqhook.Callback, err error) {
+func NewAddSecurityHeadersCallbacks(data []interface{}, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
 	var headers = make(http.Header, len(data))
 	for _, headersKV := range data {
 		// TODO: move to a structured list of headers to avoid dynamic type checking
@@ -32,19 +32,36 @@ func NewAddSecurityHeadersCallbacks(data []interface{}) (prolog, epilog sqhook.C
 	if len(headers) == 0 {
 		return nil, nil, sqerrors.New("there are no headers to add")
 	}
-	return newAddHeadersPrologCallback(headers), nil, nil
+
+	// Next callbacks to call
+	actualNextProlog, ok := nextProlog.(AddSecurityHeadersPrologCallbackType)
+	if nextProlog != nil && !ok {
+		err = sqerrors.Errorf("unexpected next prolog type `%T` instead of `%T`", nextProlog, AddSecurityHeadersPrologCallbackType(nil))
+		return
+	}
+	// No epilog in this callback, so simply check and pass the given one
+	if _, ok := nextEpilog.(AddSecurityHeadersEpilogCallbackType); nextEpilog != nil && !ok {
+		err = sqerrors.Errorf("unexpected next epilog type `%T` instead of `%T`", nextEpilog, AddSecurityHeadersEpilogCallbackType(nil))
+		return
+	}
+	return newAddHeadersPrologCallback(headers, actualNextProlog), nextEpilog, nil
 }
 
 type AddSecurityHeadersPrologCallbackType = func(*sqhook.Context, *http.ResponseWriter) error
+type AddSecurityHeadersEpilogCallbackType = func(*sqhook.Context)
 
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
-func newAddHeadersPrologCallback(headers http.Header) AddSecurityHeadersPrologCallbackType {
-	return func(_ *sqhook.Context, w *http.ResponseWriter) error {
+func newAddHeadersPrologCallback(headers http.Header, next AddSecurityHeadersPrologCallbackType) AddSecurityHeadersPrologCallbackType {
+	return func(ctx *sqhook.Context, w *http.ResponseWriter) error {
 		responseHeaders := (*w).Header()
 		for k, v := range headers {
 			responseHeaders[k] = v
 		}
-		return nil
+
+		if next == nil {
+			return nil
+		}
+		return next(ctx, w)
 	}
 }

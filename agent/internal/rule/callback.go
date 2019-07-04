@@ -13,11 +13,11 @@ import (
 // CallbackConstructorFunc is a function returning a callback function
 // configured with the given data. The data types are known by the constructor
 // that can type-assert them.
-type CallbacksConstructorFunc func(data []interface{}) (prolog, epilog sqhook.Callback, err error)
+type CallbacksConstructorFunc func(data []interface{}, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error)
 
 // NewCallbacks returns the prolog and epilog callbacks of the given callback
 // name. And error is returned if the callback name is unknown.
-func NewCallbacks(name string, data []interface{}) (prolog, epilog sqhook.Callback, err error) {
+func NewCallbacks(name string, data []interface{}, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
 	var callbacksCtor CallbacksConstructorFunc
 	switch name {
 	default:
@@ -29,5 +29,5 @@ func NewCallbacks(name string, data []interface{}) (prolog, epilog sqhook.Callba
 	case "AddSecurityHeaders":
 		callbacksCtor = callback.NewAddSecurityHeadersCallbacks
 	}
-	return callbacksCtor(data)
+	return callbacksCtor(data, nextProlog, nextEpilog)
 }
