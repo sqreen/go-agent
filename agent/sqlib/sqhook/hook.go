@@ -104,6 +104,8 @@ type Hook struct {
 	// Pointer to a structure containing the callbacks in order to be able to
 	// atomically modify the pointer.
 	attached *callbacks
+	// Symbol name where the hook is used. Required for the stringer.
+	symbol string
 }
 
 type callbacks struct {
@@ -160,6 +162,7 @@ func New(fn interface{}) *Hook {
 	}
 	// Create the hook, store it in the map and return it.
 	hook := &Hook{
+		symbol: symbol,
 		fnType: fnType,
 	}
 	index[symbol] = hook
@@ -276,4 +279,8 @@ func validateCallback(callback Callback, argTypes []reflect.Type) (err error) {
 		}
 	}
 	return nil
+}
+
+func (h *Hook) String() string {
+	return fmt.Sprintf("%s (%s)", h.symbol, h.fnType)
 }
