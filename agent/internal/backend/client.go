@@ -139,6 +139,19 @@ func (c *Client) ActionsPack() (*api.ActionsPackResponse, error) {
 	return res, nil
 }
 
+func (c *Client) RulesPack() (*api.RulesPackResponse, error) {
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.RulesPack)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
+	res := new(api.RulesPackResponse)
+	if err := c.Do(httpReq, nil, res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // Do performs the request whose body is pbs[0] pointer, while the expected
 // response is pbs[1] pointer. They are optional, and must be used according to
 // the cases request case.

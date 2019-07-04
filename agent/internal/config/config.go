@@ -49,7 +49,7 @@ var (
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
-		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack HTTPAPIEndpoint
+		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack, RulesPack HTTPAPIEndpoint
 	}{
 		AppLogin:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
 		AppLogout:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
@@ -57,8 +57,9 @@ var (
 		AppException: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_sqreen_exception"},
 		Batch:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
 		ActionsPack:  HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
+		RulesPack:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/rulespack"},
 	}
-
+	
 	// Header name of the API token.
 	BackendHTTPAPIHeaderToken = "X-Api-Key"
 
@@ -203,6 +204,7 @@ const (
 	configKeyBackendHTTPAPIProxy      = `proxy`
 	configKeyDisable                  = `disable`
 	configKeyStripHTTPReferer         = `strip_http_referer`
+	configKeyRules                    = `rules`
 )
 
 // User configuration's default values.
@@ -245,6 +247,7 @@ func New(logger *plog.Logger) *Config {
 	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
 	manager.SetDefault(configKeyDisable, "")
 	manager.SetDefault(configKeyStripHTTPReferer, "")
+	manager.SetDefault(configKeyRules, "")
 
 	err := manager.ReadInConfig()
 	if err != nil {
@@ -300,6 +303,12 @@ func (c *Config) Disable() bool {
 func (c *Config) StripHTTPReferer() bool {
 	strip := sanitizeString(c.GetString(configKeyStripHTTPReferer))
 	return strip != ""
+}
+
+// LocalRulesFile returns a JSON file containing custom rules in an array. They
+// are added to the rules received from server.
+func (c *Config) LocalRulesFile() string {
+	return sanitizeString(c.GetString(configKeyRules))
 }
 
 func sanitizeString(s string) string {

@@ -6,6 +6,8 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
@@ -120,17 +123,17 @@ func Start() {
 }
 
 type Agent struct {
-	logger      *plog.Logger
-	eventMng    *eventManager
-	metricsMng  *metricsManager
-	ctx         context.Context
-	cancel      context.CancelFunc
-	isDone      chan struct{}
-	config      *config.Config
-	appInfo     *app.Info
-	client      *backend.Client
-	actors      *actor.Store
-	rulespackId string
+	logger     *plog.Logger
+	eventMng   *eventManager
+	metricsMng *metricsManager
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isDone     chan struct{}
+	config     *config.Config
+	appInfo    *app.Info
+	client     *backend.Client
+	actors     *actor.Store
+	rules      *rule.Engine
 }
 
 // Error channel buffer length.
@@ -156,6 +159,7 @@ func New(cfg *config.Config) *Agent {
 		appInfo:    app.NewInfo(logger),
 		client:     backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
 		actors:     actor.NewStore(logger),
+		rules:      rule.NewEngine(logger),
 	}
 }
 
@@ -202,7 +206,7 @@ func (a *Agent) Serve() error {
 
 	// Create the command manager to process backend commands
 	commandMng := NewCommandManager(a, a.logger)
-	// Process commands that may have been received on login.
+	// Process commands that may have been received at login.
 	commandResults := commandMng.Do(appLoginRes.Commands)
 
 	heartbeat := time.Duration(appLoginRes.Features.HeartbeatDelay) * time.Second
@@ -213,7 +217,6 @@ func (a *Agent) Serve() error {
 	a.logger.Info("up and running - heartbeat set to ", heartbeat)
 	ticker := time.Tick(heartbeat)
 
-	a.rulespackId = appLoginRes.PackId
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
 		batchSize = config.MaxEventsPerHeatbeat
@@ -275,6 +278,10 @@ func (a *Agent) Serve() error {
 }
 
 func (a *Agent) InstrumentationEnable() error {
+	if err := a.RulesReload(); err != nil {
+		return err
+	}
+	a.rules.Enable()
 	sdk.SetAgent(a)
 	a.logger.Info("instrumentation enabled")
 	return nil
@@ -284,8 +291,9 @@ func (a *Agent) InstrumentationEnable() error {
 // now the SDK.
 func (a *Agent) InstrumentationDisable() error {
 	sdk.SetAgent(nil)
-	a.logger.Info("instrumentation disabled")
+	a.rules.Disable()
 	err := a.actors.SetActions(nil)
+	a.logger.Info("instrumentation disabled")
 	return err
 }
 
@@ -301,6 +309,31 @@ func (a *Agent) ActionsReload() error {
 
 func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
 	return a.actors.SetCIDRWhitelist(cidrs)
+}
+
+func (a *Agent) RulesReload() error {
+	rulespack, err := a.client.RulesPack()
+	if err != nil {
+		a.logger.Error(err)
+		return err
+	}
+
+	// Insert local rules if any
+	localRulesJSON := a.config.LocalRulesFile()
+	buf, err := ioutil.ReadFile(localRulesJSON)
+	if err == nil {
+		var localRules []api.Rule
+		err = json.Unmarshal(buf, &localRules)
+		if err == nil {
+			rulespack.Rules = append(rulespack.Rules, localRules...)
+		}
+	}
+	if err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
+	}
+
+	a.rules.SetRules(rulespack.PackID, rulespack.Rules)
+	return nil
 }
 
 func (a *Agent) GracefulStop() {
@@ -426,5 +459,5 @@ func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {
 }
 
 func (a *Agent) RulespackID() string {
-	return a.rulespackId
+	return a.rules.PackID()
 }
