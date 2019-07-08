@@ -161,7 +161,7 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	}
 	ctx.lastSecurityResponseHandler, err = actor.NewIPActionHTTPHandler(action, ip)
 	if err != nil {
-		agent.logger.Error(sqerrors.Wrap(err, "ip security response"))
+		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for an ip security response: action `%v` - ip `%s`:", action.ActionID(), ip)))
 	}
 	return ctx.lastSecurityResponseHandler
 }
@@ -182,7 +182,7 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 	var err error
 	ctx.lastUserSecurityResponseHandler, err = actor.NewUserActionHTTPHandler(action, userID)
 	if err != nil {
-		agent.logger.Error(sqerrors.Wrap(err, "user security response"))
+		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for a user security response: action `%v` - user `%v`:", action.ActionID(), userID)))
 	}
 	return ctx.lastUserSecurityResponseHandler
 }
