@@ -17,6 +17,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
 )
 
@@ -158,7 +159,10 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastSecurityResponseHandler = actor.NewIPActionHTTPHandler(action, ip)
+	ctx.lastSecurityResponseHandler, err = actor.NewIPActionHTTPHandler(action, ip)
+	if err != nil {
+		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for an ip security response: action `%v` - ip `%s`:", action.ActionID(), ip)))
+	}
 	return ctx.lastSecurityResponseHandler
 }
 
@@ -175,7 +179,11 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastUserSecurityResponseHandler = actor.NewUserActionHTTPHandler(action, userID)
+	var err error
+	ctx.lastUserSecurityResponseHandler, err = actor.NewUserActionHTTPHandler(action, userID)
+	if err != nil {
+		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for a user security response: action `%v` - user `%v`:", action.ActionID(), userID)))
+	}
 	return ctx.lastUserSecurityResponseHandler
 }
 

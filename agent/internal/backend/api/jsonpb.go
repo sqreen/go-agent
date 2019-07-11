@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
@@ -122,8 +121,10 @@ func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 	switch t := discriminant.Type; t {
 	case CustomErrorPageType:
 		value = &CustomErrorPageRuleDataEntry{}
+	case RedirectionType:
+		value = &RedirectionRuleDataEntry{}
 	default:
-		return sqerrors.Wrap(errors.Errorf("unexpected type of rule data value `%s`", t), "json unmarshal")
+		return sqerrors.Errorf("unexpected type of rule data value `%s`", t)
 	}
 
 	if err := json.Unmarshal(data, value); err != nil {

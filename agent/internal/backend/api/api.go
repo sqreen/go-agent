@@ -181,10 +181,17 @@ type RuleData struct {
 
 type RuleDataEntry Struct
 
-const CustomErrorPageType = "custom_error_page"
+const (
+	CustomErrorPageType = "custom_error_page"
+	RedirectionType     = "redirection"
+)
 
 type CustomErrorPageRuleDataEntry struct {
 	StatusCode int `json:"status_code"`
+}
+
+type RedirectionRuleDataEntry struct {
+	RedirectionURL string `json:"redirection_url"`
 }
 
 type Dependency struct {
@@ -792,11 +799,11 @@ func NewBlockedIPEventProperties_OutputFromFace(that BlockedIPEventProperties_Ou
 }
 
 type BlockedUserEventProperties struct {
-	ActionId string                            `json:"action_id"`
-	Output   BlockedUserEventProperties_Output `json:"output"`
+	ActionId string                           `json:"action_id"`
+	Output   BlockedUserEventPropertiesOutput `json:"output"`
 }
 
-type BlockedUserEventProperties_Output struct {
+type BlockedUserEventPropertiesOutput struct {
 	User map[string]string `json:"user"`
 }
 
@@ -809,15 +816,80 @@ func NewBlockedUserEventPropertiesFromFace(that BlockedUserEventPropertiesFace) 
 
 type BlockedUserEventPropertiesFace interface {
 	GetActionId() string
-	GetOutput() BlockedUserEventProperties_Output
+	GetOutput() BlockedUserEventPropertiesOutput
 }
 
-type BlockedUserEventProperties_OutputFace interface {
+type BlockedUserEventPropertiesOutputFace interface {
 	GetUser() map[string]string
 }
 
-func NewBlockedUserEventProperties_OutputFromFace(that BlockedUserEventProperties_OutputFace) *BlockedUserEventProperties_Output {
-	this := &BlockedUserEventProperties_Output{}
+func NewBlockedUserEventPropertiesOutputFromFace(that BlockedUserEventPropertiesOutputFace) *BlockedUserEventPropertiesOutput {
+	this := &BlockedUserEventPropertiesOutput{}
+	this.User = that.GetUser()
+	return this
+}
+
+type RedirectedIPEventProperties struct {
+	ActionId string                            `json:"action_id,omitempty"`
+	Output   RedirectedIPEventPropertiesOutput `json:"output"`
+}
+
+type RedirectedIPEventPropertiesOutput struct {
+	IpAddress string `json:"ip_address"`
+	URL       string `json:"url"`
+}
+
+func NewRedirectedIPEventPropertiesFromFace(that RedirectedIPEventPropertiesFace) *RedirectedIPEventProperties {
+	return &RedirectedIPEventProperties{
+		ActionId: that.GetActionId(),
+		Output:   that.GetOutput(),
+	}
+}
+
+type RedirectedIPEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() RedirectedIPEventPropertiesOutput
+}
+
+type RedirectedIPEventPropertiesOutputFace interface {
+	GetIpAddress() string
+	GetURL() string
+}
+
+func NewRedirectedIPEventPropertiesOutputFromFace(that RedirectedIPEventPropertiesOutputFace) *RedirectedIPEventPropertiesOutput {
+	return &RedirectedIPEventPropertiesOutput{
+		IpAddress: that.GetIpAddress(),
+		URL:       that.GetURL(),
+	}
+}
+
+type RedirectedUserEventProperties struct {
+	ActionId string                              `json:"action_id"`
+	Output   RedirectedUserEventPropertiesOutput `json:"output"`
+}
+
+type RedirectedUserEventPropertiesOutput struct {
+	User map[string]string `json:"user"`
+}
+
+func NewRedirectedUserEventPropertiesFromFace(that RedirectedUserEventPropertiesFace) *RedirectedUserEventProperties {
+	return &RedirectedUserEventProperties{
+		ActionId: that.GetActionId(),
+		Output:   that.GetOutput(),
+	}
+}
+
+type RedirectedUserEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() RedirectedUserEventPropertiesOutput
+}
+
+type RedirectedUserEventPropertiesOutputFace interface {
+	GetUser() map[string]string
+}
+
+func NewRedirectedUserEventPropertiesOutputFromFace(that RedirectedUserEventPropertiesOutputFace) *RedirectedUserEventPropertiesOutput {
+	this := &RedirectedUserEventPropertiesOutput{}
 	this.User = that.GetUser()
 	return this
 }
