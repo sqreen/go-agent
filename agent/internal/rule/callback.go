@@ -26,6 +26,8 @@ func NewCallbacks(name string, data []interface{}) (prolog, epilog sqhook.Callba
 		callbacksCtor = callback.NewWriteCustomErrorPageCallbacks
 	case "WriteHTTPRedirection":
 		callbacksCtor = callback.NewWriteHTTPRedirectionCallbacks
+	case "AddSecurityHeaders":
+		callbacksCtor = callback.NewAddSecurityHeadersCallbacks
 	}
 	return callbacksCtor(data)
 }

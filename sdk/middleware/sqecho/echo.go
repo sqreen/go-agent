@@ -5,9 +5,11 @@
 package sqecho
 
 import (
+	"net/http"
+
 	"github.com/labstack/echo"
 	"github.com/sqreen/go-agent/sdk"
-	"golang.org/x/xerrors"
+	"github.com/sqreen/go-agent/sdk/middleware/sqhttp"
 )
 
 // Middleware is Sqreen's middleware function for Echo to monitor and protect
@@ -53,44 +55,17 @@ import (
 //	}
 //
 func Middleware() echo.MiddlewareFunc {
+	// Create a middleware function by adapting to sqhttp's
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Get current request.
-			r := c.Request()
-			// Create a new sqreen request wrapper.
-			req := sdk.NewHTTPRequest(r)
-			defer req.Close()
-			// Use the newly created request compliant with `sdk.FromContext()`.
-			r = req.Request()
-			// Also replace Echo's request pointer with it.
-			c.SetRequest(r)
-
-			// Check if an early security action is already required such as based on
-			// the request IP address.
-			if handler := req.SecurityResponse(); handler != nil {
-				handler.ServeHTTP(c.Response(), req.Request())
-				return nil
-			}
-
-			// Echo defines its own context interface, so we need to store it in
-			// Echo's context. Echo expects string keys.
-			contextKey := sdk.HTTPRequestRecordContextKey.String
-			c.Set(contextKey, req.Record())
-
-			// Call next handler.
-			err := next(c)
-			if err != nil && !xerrors.As(err, &sdk.SecurityResponseMatch{}) {
-				// The error is not a security response match
-				return err
-			}
-
-			// Check if a security response should be applied now after having used
-			// `Identify()` and `MatchSecurityResponse()`.
-			if handler := req.UserSecurityResponse(); handler != nil {
-				handler.ServeHTTP(c.Response(), req.Request())
-			}
-
-			return nil
+			return sqhttp.MiddlewareWithError(sqhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+				c.SetRequest(r)
+				// Echo defines its own context interface, so we need to store it in
+				// Echo's context. Echo expects string keys.
+				contextKey := sdk.HTTPRequestRecordContextKey.String
+				c.Set(contextKey, sdk.FromContext(r.Context()))
+				return next(c)
+			})).ServeHTTP(c.Response(), c.Request())
 		}
 	}
 }
