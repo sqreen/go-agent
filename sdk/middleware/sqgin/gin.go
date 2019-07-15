@@ -67,10 +67,17 @@ func Middleware() gingonic.HandlerFunc {
 			contextKey := sdk.HTTPRequestRecordContextKey.String
 			c.Set(contextKey, sdk.FromContext(r.Context()))
 			c.Next()
+			monitorHTTPStatusCode(c.Writer.Status())
 			return nil
 		})).ServeHTTP(c.Writer, c.Request)
 		if err != nil {
 			c.Abort()
 		}
 	}
+}
+
+func monitorHTTPStatusCode(statusCode int) {
+	// Hack for now to monitor the status code because Gin doesn't use the
+	// HTTP ResponseWriter when overwriting it through c.Writer = ...
+	sqhttp.ResponseWriter{}.WriteHeader(statusCode)
 }
