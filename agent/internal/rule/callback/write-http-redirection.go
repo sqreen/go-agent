@@ -17,13 +17,12 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and headers in order to perform an HTTP
 // redirection to the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(data []interface{}, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+func NewWriteHTTPRedirectionCallbacks(rule Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
 	var redirectionURL string
-	if len(data) > 0 {
-		d0 := data[0]
-		cfg, ok := d0.(*api.RedirectionRuleDataEntry)
+	if cfg := rule.Config(); cfg != nil {
+		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)
 		if !ok {
-			err = sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", d0)
+			err = sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", cfg)
 			return
 		}
 		redirectionURL = cfg.RedirectionURL
@@ -43,11 +42,16 @@ func NewWriteHTTPRedirectionCallbacks(data []interface{}, nextProlog, nextEpilog
 		err = sqerrors.Errorf("unexpected next prolog type `%T`", nextProlog)
 		return
 	}
-	// No epilog in this callback, so simply pass the given one
+	// No epilog in this callback, so simply check and pass the given one
+	if _, ok := nextEpilog.(WriteHTTPRedirectionEpilogCallbackType); nextEpilog != nil && !ok {
+		err = sqerrors.Errorf("unexpected next epilog type `%T` instead of `%T`", nextEpilog, WriteHTTPRedirectionEpilogCallbackType(nil))
+		return
+	}
 	return newWriteHTTPRedirectionPrologCallback(redirectionURL, actualNextProlog), nextEpilog, nil
 }
 
 type WriteHTTPRedirectionPrologCallbackType = func(*sqhook.Context, *http.ResponseWriter, **http.Request, *http.Header, *int, *[]byte) error
+type WriteHTTPRedirectionEpilogCallbackType = func(*sqhook.Context)
 
 // The prolog callback modifies the function arguments in order to perform an
 // HTTP redirection.

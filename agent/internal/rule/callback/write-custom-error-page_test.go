@@ -20,22 +20,18 @@ func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 		ExpectProlog:  true,
 		PrologType:    reflect.TypeOf(callback.WriteCustomErrorPagePrologCallbackType(nil)),
 		EpilogType:    reflect.TypeOf(callback.WriteCustomErrorPageEpilogCallbackType(nil)),
-		InvalidTestCases: [][]interface{}{
-			{33},
-			{"yet another wrong type"},
+		InvalidTestCases: []interface{}{
+			33,
+			"yet another wrong type",
 		},
 		ValidTestCases: []ValidTestCase{
 			{
-				ValidData:     nil,
+				Rule:          &FakeRule{},
 				TestCallbacks: testWriteCustomErrorPageCallbacks(500),
 			},
 			{
-				ValidData:     []interface{}{},
-				TestCallbacks: testWriteCustomErrorPageCallbacks(500),
-			},
-			{
-				ValidData: []interface{}{
-					&api.CustomErrorPageRuleDataEntry{StatusCode: 33},
+				Rule: &FakeRule{
+					config: &api.CustomErrorPageRuleDataEntry{StatusCode: 33},
 				},
 				TestCallbacks: testWriteCustomErrorPageCallbacks(33),
 			},
@@ -43,8 +39,8 @@ func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 	})
 }
 
-func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, prolog sqhook.Callback, epilog sqhook.Callback) {
-	return func(t *testing.T, prolog, epilog sqhook.Callback) {
+func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *FakeRule, prolog sqhook.Callback, epilog sqhook.Callback) {
+	return func(t *testing.T, _ *FakeRule, prolog, epilog sqhook.Callback) {
 		actualProlog, ok := prolog.(callback.WriteCustomErrorPagePrologCallbackType)
 		require.True(t, ok)
 		var (

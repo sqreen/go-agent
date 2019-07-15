@@ -26,9 +26,7 @@ func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog, nextEpilog sqho
 
 func newMonitorHTTPStatusCodePrologCallback(rule Context, next MonitorHTTPStatusCodePrologCallbackType) MonitorHTTPStatusCodePrologCallbackType {
 	return func(ctx *sqhook.Context, code *int) error {
-		//if status := *code; status >= 400 && status <= 500 {
 		rule.AddMetricsValue(*code, 1)
-		//}
 
 		if next == nil {
 			return nil
