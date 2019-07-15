@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
@@ -24,7 +25,7 @@ type empty struct{}
 
 func TestEngineUsage(t *testing.T) {
 	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
-	engine := rule.NewEngine(logger)
+	engine := rule.NewEngine(logger, metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0)))
 	hookFunc1 := sqhook.New(func1)
 	require.NotNil(t, hookFunc1)
 	hookFunc2 := sqhook.New(func2)
@@ -52,6 +53,11 @@ func TestEngineUsage(t *testing.T) {
 					Method:   "func1",
 					Callback: "WriteCustomErrorPage",
 				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
 			},
 			{
 				Name: "another valid rule",
@@ -59,6 +65,11 @@ func TestEngineUsage(t *testing.T) {
 					Class:    reflect.TypeOf(empty{}).PkgPath(),
 					Method:   "func2",
 					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
 				},
 			},
 		})
@@ -119,6 +130,11 @@ func TestEngineUsage(t *testing.T) {
 					Class:    reflect.TypeOf(empty{}).PkgPath(),
 					Method:   "func2",
 					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
 				},
 			},
 		})

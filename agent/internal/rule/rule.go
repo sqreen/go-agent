@@ -21,6 +21,7 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
@@ -30,10 +31,11 @@ type Engine struct {
 	logger Logger
 	// Map rules to their corresponding symbol in order to be able to modify them
 	// at run time by atomically replacing a running rule.
-	hooks   hookDescriptors
-	packID  string
-	cfg     *config.Config
-	enabled bool
+	hooks         hookDescriptors
+	packID        string
+	cfg           *config.Config
+	enabled       bool
+	metricsEngine *metrics.Engine
 }
 
 // Logger interface required by this package.
@@ -43,9 +45,10 @@ type Logger interface {
 }
 
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger) *Engine {
+func NewEngine(logger Logger, metricsEngine *metrics.Engine) *Engine {
 	return &Engine{
-		logger: logger,
+		logger:        logger,
+		metricsEngine: metricsEngine,
 	}
 }
 
@@ -58,7 +61,7 @@ func (e *Engine) PackID() string {
 // them by atomically modifying the hooks, and removing what is left.
 func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	// Create the net rule descriptors and replace the existing ones
-	ruleDescriptors := newHookDescriptors(e.logger, rules)
+	ruleDescriptors := newHookDescriptors(e.logger, rules, e.metricsEngine)
 	e.setRules(packID, ruleDescriptors)
 }
 
@@ -94,7 +97,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(logger Logger, rules []api.Rule) hookDescriptors {
+func newHookDescriptors(logger Logger, rules []api.Rule, metricsEngine *metrics.Engine) hookDescriptors {
 	// Create and configure the list of callbacks according to the given rules
 	var hookDescriptors = make(hookDescriptors)
 	for i := len(rules) - 1; i >= 0; i-- {
@@ -107,17 +110,10 @@ func newHookDescriptors(logger Logger, rules []api.Rule) hookDescriptors {
 			logger.Debugf("rule `%s` ignored: symbol `%s` cannot be hooked", r.Name, symbol)
 			continue
 		}
-		// Get the callback data from the API message
-		var data []interface{}
-		if nbData := len(r.Data.Values); nbData > 0 {
-			data = make([]interface{}, 0, nbData)
-			for _, e := range r.Data.Values {
-				data = append(data, e.Value)
-			}
-		}
 		// Instantiate the callback
 		next := hookDescriptors.Get(hook)
-		prolog, epilog, err := NewCallbacks(hookpoint.Callback, data, next.prolog, next.epilog)
+		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine)
+		prolog, epilog, err := NewCallbacks(hookpoint.Callback, ruleDescriptor, next.prolog, next.epilog)
 		if err != nil {
 			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not instantiate the callbacks", r.Name)))
 			continue
