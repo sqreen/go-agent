@@ -164,9 +164,16 @@ type BatchRequest_Event struct {
 }
 
 type Rule struct {
-	Name      string    `json:"name"`
-	Hookpoint Hookpoint `json:"hookpoint"`
-	Data      RuleData  `json:"data"`
+	Name      string             `json:"name"`
+	Hookpoint Hookpoint          `json:"hookpoint"`
+	Data      RuleData           `json:"data"`
+	Metrics   []MetricDefinition `json:"metrics"`
+}
+
+type MetricDefinition struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Period int64  `json:"period"`
 }
 
 type Hookpoint struct {
