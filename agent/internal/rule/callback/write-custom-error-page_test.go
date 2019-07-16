@@ -5,72 +5,63 @@
 package callback_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
-	t.Run("with incorrect data", func(t *testing.T) {
-		for _, data := range [][]interface{}{
+	RunCallbackTest(t, TestConfig{
+		CallbacksCtor: callback.NewWriteCustomErrorPageCallbacks,
+		ExpectProlog:  true,
+		PrologType:    reflect.TypeOf(callback.WriteCustomErrorPagePrologCallbackType(nil)),
+		EpilogType:    reflect.TypeOf(callback.WriteCustomErrorPageEpilogCallbackType(nil)),
+		InvalidTestCases: [][]interface{}{
 			{33},
 			{"yet another wrong type"},
-		} {
-			prolog, epilog, err := callback.NewWriteCustomErrorPageCallbacks(data)
-			require.Error(t, err)
-			require.Nil(t, prolog)
-			require.Nil(t, epilog)
-		}
-	})
-
-	t.Run("with correct data", func(t *testing.T) {
-		for _, tc := range []struct {
-			testName           string
-			data               []interface{}
-			expectedStatusCode int
-		}{
+		},
+		ValidTestCases: []ValidTestCase{
 			{
-				testName:           "default behaviour with nil data",
-				data:               nil,
-				expectedStatusCode: 500,
+				ValidData:     nil,
+				TestCallbacks: testWriteCustomErrorPageCallbacks(500),
 			},
 			{
-				testName:           "default behaviour with empty array",
-				data:               nil,
-				expectedStatusCode: 500,
+				ValidData:     []interface{}{},
+				TestCallbacks: testWriteCustomErrorPageCallbacks(500),
 			},
 			{
-				testName: "actual rule data",
-				data: []interface{}{
-					&api.CustomErrorPageRuleDataEntry{
-						StatusCode: 33,
-					},
+				ValidData: []interface{}{
+					&api.CustomErrorPageRuleDataEntry{StatusCode: 33},
 				},
-				expectedStatusCode: 33,
+				TestCallbacks: testWriteCustomErrorPageCallbacks(33),
 			},
-		} {
-			tc := tc
-			t.Run(tc.testName, func(t *testing.T) {
-				// Instantiate the callback with the given correct rule data
-				prolog, epilog, err := callback.NewWriteCustomErrorPageCallbacks(tc.data)
-				require.NoError(t, err)
-				require.NotNil(t, prolog)
-				require.Nil(t, epilog)
-				// Call it and check the behaviour follows the rule's data
-				actualProlog, ok := prolog.(callback.WriteCustomErrorPagePrologCallbackType)
-				require.True(t, ok)
-				var (
-					statusCode int
-					body       []byte
-				)
-				err = actualProlog(nil, nil, nil, nil, &statusCode, &body)
-				// Check it behaves as expected
-				require.NoError(t, err)
-				require.Equal(t, tc.expectedStatusCode, statusCode)
-				require.NotNil(t, body)
-			})
-		}
+		},
 	})
+}
+
+func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, prolog sqhook.Callback, epilog sqhook.Callback) {
+	return func(t *testing.T, prolog, epilog sqhook.Callback) {
+		actualProlog, ok := prolog.(callback.WriteCustomErrorPagePrologCallbackType)
+		require.True(t, ok)
+		var (
+			statusCode int
+			body       []byte
+		)
+		err := actualProlog(nil, nil, nil, nil, &statusCode, &body)
+		// Check it behaves as expected
+		require.NoError(t, err)
+		require.Equal(t, expectedStatusCode, statusCode)
+		require.NotNil(t, body)
+
+		// Test the epilog if any
+		if epilog != nil {
+			actualEpilog, ok := epilog.(callback.AddSecurityHeadersEpilogCallbackType)
+			require.True(t, ok)
+			actualEpilog(&sqhook.Context{})
+		}
+	}
 }
