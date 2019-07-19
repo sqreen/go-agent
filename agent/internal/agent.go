@@ -299,7 +299,7 @@ func (a *Agent) Serve() error {
 func makeAPIMetrics(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadyStore) []api.MetricResponse {
 	var metricsArray []api.MetricResponse
 	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
-		metricsArray = make([]api.MetricResponse, len(readyMetrics))
+		metricsArray = make([]api.MetricResponse, 0, len(readyMetrics))
 		for name, values := range readyMetrics {
 			observations := make(map[string]uint64, len(values.Metrics()))
 			for k, v := range values.Metrics() {
