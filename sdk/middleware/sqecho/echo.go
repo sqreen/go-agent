@@ -58,12 +58,17 @@ func Middleware() echo.MiddlewareFunc {
 	// Create a middleware function by adapting to sqhttp's
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			return sqhttp.MiddlewareWithError(sqhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+			return sqhttp.MiddlewareWithError(sqhttp.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) error {
 				c.SetRequest(r)
 				// Echo defines its own context interface, so we need to store it in
 				// Echo's context. Echo expects string keys.
 				contextKey := sdk.HTTPRequestRecordContextKey.String
 				c.Set(contextKey, sdk.FromContext(r.Context()))
+				c.Response().After(func() {
+					// Hack for now to monitor the status code because Echo doesn't use the
+					// HTTP ResponseWriter when overwriting it through c.Writer = ...
+					sqhttp.ResponseWriter{}.WriteHeader(c.Response().Status)
+				})
 				return next(c)
 			})).ServeHTTP(c.Response(), c.Request())
 		}

@@ -16,33 +16,37 @@ func TestNewCallbacks(t *testing.T) {
 	for _, tc := range []struct {
 		testName      string
 		name          string
-		data          []interface{}
+		rule          *rule.CallbackContext
 		shouldSucceed bool
 	}{
 		{
 			testName:      "not existing",
 			name:          "iDontExist",
-			data:          nil,
+			rule:          nil,
 			shouldSucceed: false,
 		},
 		{
 			testName:      "empty string",
 			name:          "",
-			data:          nil,
+			rule:          nil,
 			shouldSucceed: false,
 		},
 		{
 			testName: "WriteCustomErrorPage",
 			name:     "WriteCustomErrorPage",
-			data: []interface{}{
-				&api.CustomErrorPageRuleDataEntry{},
-			},
+			rule: rule.NewCallbackContext(&api.Rule{
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+			}, nil, nil),
 			shouldSucceed: true,
 		},
 	} {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			_, _, err := rule.NewCallbacks(tc.name, tc.data, nil, nil)
+			_, _, err := rule.NewCallbacks(tc.name, tc.rule, nil, nil)
 			if tc.shouldSucceed {
 				require.NoError(t, err)
 			} else {

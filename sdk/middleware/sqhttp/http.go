@@ -73,6 +73,8 @@ func MiddlewareWithError(next Handler) Handler {
 		defer req.Close()
 		// Use the newly created request compliant with `sdk.FromContext()`.
 		r = req.Request()
+		// Wrap the response writer to monitor the http status codes.
+		w = ResponseWriter{w}
 		// Check if an early security action is already required such as based on
 		// the request IP address.
 		if handler := req.SecurityResponse(); handler != nil {
@@ -147,8 +149,39 @@ func addSecurityHeaders(w http.ResponseWriter) (err error) {
 	return nil
 }
 
-var addSecurityHeaderHook *sqhook.Hook
+var (
+	addSecurityHeaderHook     *sqhook.Hook
+	responseWriterWriteHeader *sqhook.Hook
+)
 
 func init() {
 	addSecurityHeaderHook = sqhook.New(addSecurityHeaders)
+	responseWriterWriteHeader = sqhook.New(responseWriter.WriteHeader)
+}
+
+type ResponseWriter = responseWriter
+
+type responseWriter struct {
+	http.ResponseWriter
+}
+
+func (w responseWriter) WriteHeader(statusCode int) {
+	{
+		type Prolog = func(*sqhook.Context, *int) error
+		type Epilog = func(*sqhook.Context)
+		ctx := sqhook.Context{sqhook.MethodReceiver(&w)}
+		prolog, epilog := responseWriterWriteHeader.Callbacks()
+		if epilog, ok := epilog.(Epilog); ok {
+			defer epilog(&ctx)
+		}
+		if prolog, ok := prolog.(Prolog); ok {
+			if err := prolog(&ctx, &statusCode); err != nil {
+				return
+			}
+		}
+	}
+
+	if w.ResponseWriter != nil {
+		w.ResponseWriter.WriteHeader(statusCode)
+	}
 }

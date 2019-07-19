@@ -16,13 +16,12 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallbacks(data []interface{}, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
 	var statusCode = 500
-	if len(data) > 0 {
-		d0 := data[0]
-		cfg, ok := d0.(*api.CustomErrorPageRuleDataEntry)
+	if cfg := rule.Config(); cfg != nil {
+		cfg, ok := cfg.(*api.CustomErrorPageRuleDataEntry)
 		if !ok {
-			err = sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", d0)
+			err = sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", cfg)
 			return
 		}
 		statusCode = cfg.StatusCode

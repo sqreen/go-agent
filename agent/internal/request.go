@@ -54,7 +54,6 @@ type HTTPRequestEvent struct {
 
 type userEventFace interface {
 	isUserEvent()
-	metricEntry
 }
 
 type userEvent struct {
@@ -70,12 +69,12 @@ type authUserEvent struct {
 
 func (_ *authUserEvent) isUserEvent() {}
 
-func (e *authUserEvent) bucketID() (string, error) {
+func (e *authUserEvent) MarshalJSON() ([]byte, error) {
 	k := &userMetricKey{
 		id: e.userEvent.userIdentifiers,
 		ip: e.userEvent.ip,
 	}
-	return k.bucketID()
+	return k.MarshalJSON()
 }
 
 type userMetricKey struct {
@@ -83,7 +82,7 @@ type userMetricKey struct {
 	ip net.IP
 }
 
-func (k *userMetricKey) bucketID() (string, error) {
+func (k *userMetricKey) MarshalJSON() ([]byte, error) {
 	var keys [][]interface{}
 	for prop, val := range k.id {
 		keys = append(keys, []interface{}{prop, val})
@@ -96,19 +95,19 @@ func (k *userMetricKey) bucketID() (string, error) {
 		IP:   k.ip.String(),
 	}
 	buf, err := json.Marshal(&v)
-	return string(buf), err
+	return buf, err
 }
 
 type signupUserEvent struct {
 	*userEvent
 }
 
-func (e *signupUserEvent) bucketID() (string, error) {
+func (e *signupUserEvent) MarshalJSON() ([]byte, error) {
 	k := &userMetricKey{
 		id: e.userEvent.userIdentifiers,
 		ip: e.userEvent.ip,
 	}
-	return k.bucketID()
+	return k.MarshalJSON()
 }
 
 func (_ *signupUserEvent) isUserEvent() {}

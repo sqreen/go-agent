@@ -14,20 +14,28 @@ import (
 // NewAddSecurityHeadersCallbacks returns the native prolog and epilog callbacks
 // to be hooked to `sqhttp.MiddlewareWithError` in order to add HTTP headers
 // provided by the rule's data.
-func NewAddSecurityHeadersCallbacks(data []interface{}, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
-	var headers = make(http.Header, len(data))
-	for _, headersKV := range data {
-		// TODO: move to a structured list of headers to avoid dynamic type checking
-		kv, ok := headersKV.([]string)
+func NewAddSecurityHeadersCallbacks(rule Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+	var headers http.Header
+	if cfg := rule.Config(); cfg != nil {
+		cfg, ok := rule.Config().([]interface{})
 		if !ok {
-			err = sqerrors.Errorf("unexpected number of values: header key and values are expected but got `%d` values instead", len(kv))
+			err = sqerrors.Errorf("unexpected callback data type: got `%T` instead of `[][]string`", cfg)
 			return
 		}
-		if len(kv) != 2 {
-			err = sqerrors.Errorf("unexpected number of values: header key and values are expected but got `%d` values instead", len(kv))
-			return
+		headers = make(http.Header, len(cfg))
+		for _, headersKV := range cfg {
+			// TODO: move to a structured list of headers to avoid these dynamic type checking
+			kv, ok := headersKV.([]string)
+			if !ok {
+				err = sqerrors.Errorf("unexpected number of values: header key and values are expected but got `%d` values instead", len(kv))
+				return
+			}
+			if len(kv) != 2 {
+				err = sqerrors.Errorf("unexpected number of values: header key and values are expected but got `%d` values instead", len(kv))
+				return
+			}
+			headers.Set(kv[0], kv[1])
 		}
-		headers.Set(kv[0], kv[1])
 	}
 	if len(headers) == 0 {
 		return nil, nil, sqerrors.New("there are no headers to add")

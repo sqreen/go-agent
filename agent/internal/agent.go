@@ -7,6 +7,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
@@ -123,17 +125,22 @@ func Start() {
 }
 
 type Agent struct {
-	logger     *plog.Logger
-	eventMng   *eventManager
-	metricsMng *metricsManager
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isDone     chan struct{}
-	config     *config.Config
-	appInfo    *app.Info
-	client     *backend.Client
-	actors     *actor.Store
-	rules      *rule.Engine
+	logger        *plog.Logger
+	eventMng      *eventManager
+	metrics       *metrics.Engine
+	staticMetrics staticMetrics
+	ctx           context.Context
+	cancel        context.CancelFunc
+	isDone        chan struct{}
+	config        *config.Config
+	appInfo       *app.Info
+	client        *backend.Client
+	actors        *actor.Store
+	rules         *rule.Engine
+}
+
+type staticMetrics struct {
+	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, whitelistedIP *metrics.Store
 }
 
 // Error channel buffer length.
@@ -147,19 +154,27 @@ func New(cfg *config.Config) *Agent {
 		return nil
 	}
 
+	metrics := metrics.NewEngine(logger)
+
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Agent{
-		logger:     logger,
-		isDone:     make(chan struct{}),
-		metricsMng: newMetricsManager(ctx, logger),
-		ctx:        ctx,
-		cancel:     cancel,
-		config:     cfg,
-		appInfo:    app.NewInfo(logger),
-		client:     backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
-		actors:     actor.NewStore(logger),
-		rules:      rule.NewEngine(logger),
+		logger:  logger,
+		isDone:  make(chan struct{}),
+		metrics: metrics,
+		staticMetrics: staticMetrics{
+			sdkUserLoginSuccess: metrics.NewStore("sdk-login-success", 60*time.Second),
+			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", 60*time.Second),
+			sdkUserSignup:       metrics.NewStore("sdk-signup", 60*time.Second),
+			whitelistedIP:       metrics.NewStore("whitelisted", 60*time.Second),
+		},
+		ctx:     ctx,
+		cancel:  cancel,
+		config:  cfg,
+		appInfo: app.NewInfo(logger),
+		client:  backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
+		actors:  actor.NewStore(logger),
+		rules:   rule.NewEngine(logger, metrics),
 	}
 }
 
@@ -239,9 +254,8 @@ func (a *Agent) Serve() error {
 		case <-ticker:
 			a.logger.Debug("heartbeat")
 
-			metrics := a.metricsMng.getObservations()
 			appBeatReq := api.AppBeatRequest{
-				Metrics:        metrics,
+				Metrics:        makeAPIMetrics(a.logger, a.metrics.ReadyMetrics()),
 				CommandResults: commandResults,
 			}
 
@@ -275,6 +289,33 @@ func (a *Agent) Serve() error {
 			a.AddExceptionEvent(NewExceptionEvent(err, a.RulespackID()))
 		}
 	}
+}
+
+func makeAPIMetrics(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadyStore) []api.MetricResponse {
+	var metricsArray []api.MetricResponse
+	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
+		metricsArray = make([]api.MetricResponse, len(readyMetrics))
+		for name, values := range readyMetrics {
+			observations := make(map[string]uint64, len(values.Metrics()))
+			for k, v := range values.Metrics() {
+				jsonKey, err := json.Marshal(k)
+				if err != nil {
+					logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not marshal to json key the value `%v` of type `%T`", k, k)))
+					continue
+				}
+				observations[string(jsonKey)] = v
+			}
+			if len(observations) > 0 {
+				metricsArray = append(metricsArray, api.MetricResponse{
+					Name:        name,
+					Start:       values.Start(),
+					Finish:      values.Finish(),
+					Observation: api.Struct{Value: observations},
+				})
+			}
+		}
+	}
+	return metricsArray
 }
 
 func (a *Agent) InstrumentationEnable() error {
