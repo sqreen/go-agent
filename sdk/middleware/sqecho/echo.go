@@ -65,7 +65,7 @@ func Middleware() echo.MiddlewareFunc {
 				contextKey := sdk.HTTPRequestRecordContextKey.String
 				c.Set(contextKey, sdk.FromContext(r.Context()))
 				c.Response().After(func() {
-					// Hack for now to monitor the status code because Gin doesn't use the
+					// Hack for now to monitor the status code because Echo doesn't use the
 					// HTTP ResponseWriter when overwriting it through c.Writer = ...
 					sqhttp.ResponseWriter{}.WriteHeader(c.Response().Status)
 				})
