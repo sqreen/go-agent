@@ -366,16 +366,18 @@ func (a *Agent) RulesReload() error {
 
 	// Insert local rules if any
 	localRulesJSON := a.config.LocalRulesFile()
-	buf, err := ioutil.ReadFile(localRulesJSON)
-	if err == nil {
-		var localRules []api.Rule
-		err = json.Unmarshal(buf, &localRules)
+	if localRulesJSON != "" {
+		buf, err := ioutil.ReadFile(localRulesJSON)
 		if err == nil {
-			rulespack.Rules = append(rulespack.Rules, localRules...)
+			var localRules []api.Rule
+			err = json.Unmarshal(buf, &localRules)
+			if err == nil {
+				rulespack.Rules = append(rulespack.Rules, localRules...)
+			}
 		}
-	}
-	if err != nil {
-		a.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
+		if err != nil {
+			a.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
+		}
 	}
 
 	a.rules.SetRules(rulespack.PackID, rulespack.Rules)

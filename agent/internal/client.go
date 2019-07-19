@@ -148,10 +148,10 @@ func TrySendAppException(logger plog.DebugLogger, cfg *config.Config, exception 
 	req.Header.Add(config.BackendHTTPAPIHeaderAppName, cfg.AppName())
 	req.Header.Add("Content-Type", "application/json")
 
-	logger.Debugf("sending app exception:\n%s\n", req, (*backend.HTTPRequestStringer)(req))
+	logger.Debugf("sending app exception:\n%s\n", (*backend.HTTPRequestStringer)(req))
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
-	logger.Debugf("received app exception response:\n%s\n", res, (*backend.HTTPResponseStringer)(res))
+	logger.Debugf("received app exception response:\n%s\n", (*backend.HTTPResponseStringer)(res))
 }
