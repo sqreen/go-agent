@@ -6,6 +6,7 @@ package rule
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
@@ -73,14 +74,14 @@ func NewCallbackContext(r *api.Rule, logger plog.ErrorLogger, metricsEngine *met
 }
 
 func newCallbackConfig(data *api.RuleData) (config interface{}) {
-	if nbData := len(data.Values); nbData > 1 {
+	if nbData := len(data.Values); nbData == 1 && reflect.TypeOf(data.Values[0].Value).Kind() != reflect.Slice {
+		config = data.Values[0].Value
+	} else {
 		configArray := make([]interface{}, 0, nbData)
 		for _, e := range data.Values {
 			configArray = append(configArray, e.Value)
 		}
 		config = configArray
-	} else if nbData == 1 {
-		config = data.Values[0].Value
 	}
 	return config
 }
