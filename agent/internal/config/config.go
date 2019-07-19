@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -205,12 +206,14 @@ const (
 	configKeyDisable                  = `disable`
 	configKeyStripHTTPReferer         = `strip_http_referer`
 	configKeyRules                    = `rules`
+	configKeySDKMetricsPeriod         = `sdk_metrics_period`
 )
 
 // User configuration's default values.
 const (
 	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
 	configDefaultLogLevel              = `info`
+	configDefaultSDKMetricsPeriod      = 60
 )
 
 func New(logger *plog.Logger) *Config {
@@ -248,6 +251,7 @@ func New(logger *plog.Logger) *Config {
 	manager.SetDefault(configKeyDisable, "")
 	manager.SetDefault(configKeyStripHTTPReferer, "")
 	manager.SetDefault(configKeyRules, "")
+	manager.SetDefault(configKeySDKMetricsPeriod, configDefaultSDKMetricsPeriod)
 
 	err := manager.ReadInConfig()
 	if err != nil {
@@ -309,6 +313,17 @@ func (c *Config) StripHTTPReferer() bool {
 // are added to the rules received from server.
 func (c *Config) LocalRulesFile() string {
 	return sanitizeString(c.GetString(configKeyRules))
+}
+
+// SDKMetricsPeriod returns the period to use for the SDK metric stores.
+// This is temporary until the SDK rules are implemented and required for
+// integration tests which require a shorter time.
+func (c *Config) SDKMetricsPeriod() int {
+	p, err := strconv.Atoi(sanitizeString(c.GetString(configKeySDKMetricsPeriod)))
+	if err != nil {
+		return configDefaultSDKMetricsPeriod
+	}
+	return p
 }
 
 func sanitizeString(s string) string {

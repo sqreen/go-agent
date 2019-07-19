@@ -156,6 +156,11 @@ func New(cfg *config.Config) *Agent {
 
 	metrics := metrics.NewEngine(logger)
 
+	// TODO: remove this SDK metrics period config when the corresponding js rule
+	//  is supported
+	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
+	logger.Debugf("using sdk metrics store period of %s", sdkMetricsPeriod)
+
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Agent{
@@ -163,10 +168,10 @@ func New(cfg *config.Config) *Agent {
 		isDone:  make(chan struct{}),
 		metrics: metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess: metrics.NewStore("sdk-login-success", 60*time.Second),
-			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", 60*time.Second),
-			sdkUserSignup:       metrics.NewStore("sdk-signup", 60*time.Second),
-			whitelistedIP:       metrics.NewStore("whitelisted", 60*time.Second),
+			sdkUserLoginSuccess: metrics.NewStore("sdk-login-success", sdkMetricsPeriod),
+			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", sdkMetricsPeriod),
+			sdkUserSignup:       metrics.NewStore("sdk-signup", sdkMetricsPeriod),
+			whitelistedIP:       metrics.NewStore("whitelisted", sdkMetricsPeriod),
 		},
 		ctx:     ctx,
 		cancel:  cancel,
