@@ -28,6 +28,8 @@ const (
 // request handler level to perform the security response.
 func NewIPActionHTTPHandler(action Action, ip net.IP) (http.Handler, error) {
 	switch actual := action.(type) {
+	case *timedAction:
+		return NewIPActionHTTPHandler(actual.Action, ip)
 	case blockAction:
 		return newBlockHTTPHandler(blockIPEventName, newBlockedIPEventProperties(actual, ip)), nil
 	case *redirectAction:
@@ -40,6 +42,8 @@ func NewIPActionHTTPHandler(action Action, ip net.IP) (http.Handler, error) {
 // the request handler level to perform the security response.
 func NewUserActionHTTPHandler(action Action, userID map[string]string) (http.Handler, error) {
 	switch actual := action.(type) {
+	case *timedAction:
+		return NewUserActionHTTPHandler(actual.Action, userID)
 	case blockAction:
 		return newBlockHTTPHandler(blockUserEventName, newBlockedUserEventProperties(actual, userID)), nil
 	case *redirectAction:
