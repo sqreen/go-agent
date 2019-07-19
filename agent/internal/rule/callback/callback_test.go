@@ -132,7 +132,7 @@ type FakeRule struct {
 	mock.Mock
 }
 
-func (r *FakeRule) AddMetricsValue(key interface{}, value uint64) {
+func (r *FakeRule) PushMetricsValue(key interface{}, value uint64) {
 	r.Called(key, value)
 }
 

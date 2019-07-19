@@ -27,7 +27,7 @@ func TestNewMonitorHTTPStatusCodeCallbacks(t *testing.T) {
 					actualProlog, ok := prolog.(callback.MonitorHTTPStatusCodePrologCallbackType)
 					require.True(t, ok)
 					code := rand.Int()
-					rule.On("AddMetricsValue", code, uint64(1)).Return().Once()
+					rule.On("PushMetricsValue", code, uint64(1)).Return().Once()
 					err := actualProlog(nil, &code)
 					// Check it behaves as expected
 					require.NoError(t, err)

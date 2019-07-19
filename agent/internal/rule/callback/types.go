@@ -7,7 +7,7 @@ package callback
 type Context interface {
 	// Get the rule configuration.
 	Config() interface{}
-	// Add a new metrics value for the given key to the default metrics store
+	// Push a new metrics value for the given key into the default metrics store
 	// given by the rule.
-	AddMetricsValue(key interface{}, value uint64)
+	PushMetricsValue(key interface{}, value uint64)
 }

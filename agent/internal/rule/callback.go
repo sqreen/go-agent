@@ -89,7 +89,7 @@ func (d *CallbackContext) Config() interface{} {
 	return d.config
 }
 
-func (d *CallbackContext) AddMetricsValue(key interface{}, value uint64) {
+func (d *CallbackContext) PushMetricsValue(key interface{}, value uint64) {
 	err := d.defaultMetricsStore.Add(key, value)
 	if err != nil {
 		d.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not add a value to the default metrics store", d.name)))
