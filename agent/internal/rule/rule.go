@@ -64,16 +64,16 @@ func (e *Engine) PackID() string {
 // them by atomically modifying the hooks, and removing what is left.
 func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	// Create the net rule descriptors and replace the existing ones
-	ruleDescriptors := newHookDescriptors(e.logger, rules, e.metricsEngine)
+	ruleDescriptors := newHookDescriptors(e.logger, rules, e.publicKey, e.metricsEngine)
 	e.setRules(packID, ruleDescriptors)
 }
 
 func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
-	for hook, callback := range descriptors {
+	for hook, prolog := range descriptors {
 		if e.enabled {
 			// TODO: chain multiple callbacks per hookpoint using a callback of callbacks
 			//       Attach the callback to the hook
-			err := hook.Attach(callback.prolog, callback.epilog)
+			err := hook.Attach(prolog)
 			if err != nil {
 				e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
 				continue
@@ -86,7 +86,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 
 	// Disable previously enabled rules that were not replaced by new ones.
 	for hook := range e.hooks {
-		err := hook.Attach(nil, nil)
+		err := hook.Attach(nil)
 		if err != nil {
 			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
 			continue
@@ -119,19 +119,16 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 			continue
 		}
 		// Instantiate the callback
-		next := hookDescriptors.Get(hook)
+		nextProlog := hookDescriptors.Get(hook)
 		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine)
-		prolog, epilog, err := NewCallbacks(hookpoint.Callback, ruleDescriptor, next.prolog, next.epilog)
+		prolog, err := NewCallbacks(hookpoint.Callback, ruleDescriptor, nextProlog)
 		if err != nil {
 			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not instantiate the callbacks", r.Name)))
 			continue
 		}
 		// Create the descriptor with everything required to be able to enable or
 		// disable it afterwards.
-		hookDescriptors.Set(hook, callbacksDescriptor{
-			prolog: prolog,
-			epilog: epilog,
-		})
+		hookDescriptors.Set(hook, prolog)
 	}
 	// Nothing in the end
 	if len(hookDescriptors) == 0 {
@@ -142,10 +139,10 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 
 // Enable the hooks of the ongoing configured rules.
 func (e *Engine) Enable() {
-	for hook, callback := range e.hooks {
-		err := hook.Attach(callback.prolog, callback.epilog)
+	for hook, prolog := range e.hooks {
+		err := hook.Attach(prolog)
 		if err != nil {
-			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks `%v` and `%v` to hook `%v`", callback.prolog, callback.epilog, hook)))
+			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks `%v` to hook `%v`", prolog, hook)))
 		}
 	}
 	e.enabled = true
@@ -154,7 +151,7 @@ func (e *Engine) Enable() {
 // Disable the hooks currently attached to callbacks.
 func (e *Engine) Disable() {
 	for hook := range e.hooks {
-		err := hook.Attach(nil, nil)
+		err := hook.Attach(nil)
 		if err != nil {
 			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not disable hook `%v`", hook)))
 		}
@@ -162,16 +159,12 @@ func (e *Engine) Disable() {
 	e.enabled = false
 }
 
-type hookDescriptors map[*sqhook.Hook]callbacksDescriptor
+type hookDescriptors map[*sqhook.Hook]sqhook.PrologCallback
 
-type callbacksDescriptor struct {
-	prolog, epilog sqhook.Callback
+func (m hookDescriptors) Set(hook *sqhook.Hook, prolog sqhook.PrologCallback) {
+	m[hook] = prolog
 }
 
-func (m hookDescriptors) Set(hook *sqhook.Hook, descriptor callbacksDescriptor) {
-	m[hook] = descriptor
-}
-
-func (m hookDescriptors) Get(hook *sqhook.Hook) callbacksDescriptor {
+func (m hookDescriptors) Get(hook *sqhook.Hook) sqhook.PrologCallback {
 	return m[hook]
 }

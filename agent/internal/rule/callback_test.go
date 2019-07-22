@@ -46,7 +46,7 @@ func TestNewCallbacks(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			_, _, err := rule.NewCallbacks(tc.name, tc.rule, nil, nil)
+			_, err := rule.NewCallbacks(tc.name, tc.rule, nil)
 			if tc.shouldSucceed {
 				require.NoError(t, err)
 			} else {

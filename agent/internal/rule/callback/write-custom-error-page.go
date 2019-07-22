@@ -16,7 +16,7 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
 	var statusCode = 500
 	if cfg := rule.Config(); cfg != nil {
 		cfg, ok := cfg.(*api.CustomErrorPageRuleDataEntry)
@@ -33,28 +33,23 @@ func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog, nextEpilog sqhoo
 		err = sqerrors.Errorf("unexpected next prolog type `%T`", nextProlog)
 		return
 	}
-	// No epilog in this callback, so simply check and pass the given one
-	if _, ok := nextEpilog.(WriteCustomErrorPageEpilogCallbackType); nextEpilog != nil && !ok {
-		err = sqerrors.Errorf("unexpected next epilog type `%T` instead of `%T`", nextEpilog, WriteCustomErrorPageEpilogCallbackType(nil))
-		return
-	}
-	return newWriteCustomErrorPagePrologCallback(statusCode, []byte(blockedBySqreenPage), actualNextProlog), nextEpilog, nil
+	return newWriteCustomErrorPagePrologCallback(statusCode, []byte(blockedBySqreenPage), actualNextProlog), nil
 }
 
-type WriteCustomErrorPagePrologCallbackType = func(*sqhook.Context, *http.ResponseWriter, **http.Request, *http.Header, *int, *[]byte) error
-type WriteCustomErrorPageEpilogCallbackType = func(*sqhook.Context)
+type WriteCustomErrorPageEpilogCallbackType = func()
+type WriteCustomErrorPagePrologCallbackType = func(*http.ResponseWriter, **http.Request, *http.Header, *int, *[]byte) (WriteCustomErrorPageEpilogCallbackType, error)
 
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
 func newWriteCustomErrorPagePrologCallback(statusCode int, body []byte, next WriteCustomErrorPagePrologCallbackType) WriteCustomErrorPagePrologCallbackType {
-	return func(ctx *sqhook.Context, callerWriter *http.ResponseWriter, callerRequest **http.Request, callerHeaders *http.Header, callerStatusCode *int, callerBody *[]byte) error {
+	return func(callerWriter *http.ResponseWriter, callerRequest **http.Request, callerHeaders *http.Header, callerStatusCode *int, callerBody *[]byte) (WriteCustomErrorPageEpilogCallbackType, error) {
 		*callerStatusCode = statusCode
 		*callerBody = body
 
 		if next == nil {
-			return nil
+			return nil, nil
 		}
-		return next(ctx, callerWriter, callerRequest, callerHeaders, callerStatusCode, callerBody)
+		return next(callerWriter, callerRequest, callerHeaders, callerStatusCode, callerBody)
 	}
 }
 

@@ -89,48 +89,40 @@ func TestEngineUsage(t *testing.T) {
 
 		t.Run("callbacks are not attached when disabled", func(t *testing.T) {
 			// Check the callbacks were not attached because rules are disabled
-			prologFunc1, epilogFunc1 := hookFunc1.Callbacks()
+			prologFunc1 := hookFunc1.Prolog()
 			require.Nil(t, prologFunc1)
-			require.Nil(t, epilogFunc1)
-			prologFunc2, epilogFunc2 := hookFunc2.Callbacks()
+			prologFunc2 := hookFunc2.Prolog()
 			require.Nil(t, prologFunc2)
-			require.Nil(t, epilogFunc2)
 		})
 
 		t.Run("enabling the rules attaches the callbacks", func(t *testing.T) {
 			// Enable the rules
 			engine.Enable()
 			// Check the callbacks were now attached
-			prologFunc1, epilogFunc1 := hookFunc1.Callbacks()
+			prologFunc1 := hookFunc1.Prolog()
 			require.NotNil(t, prologFunc1)
-			require.Nil(t, epilogFunc1)
-			prologFunc2, epilogFunc2 := hookFunc2.Callbacks()
+			prologFunc2 := hookFunc2.Prolog()
 			require.NotNil(t, prologFunc2)
-			require.Nil(t, epilogFunc2)
 		})
 
 		t.Run("disabling the rules removes the callbacks", func(t *testing.T) {
 			// Disable the rules
 			engine.Disable()
 			// Check the callbacks were all removed for func1 and not func2
-			prologFunc1, epilogFunc1 := hookFunc1.Callbacks()
+			prologFunc1 := hookFunc1.Prolog()
 			require.Nil(t, prologFunc1)
-			require.Nil(t, epilogFunc1)
-			prologFunc2, epilogFunc2 := hookFunc2.Callbacks()
+			prologFunc2 := hookFunc2.Prolog()
 			require.Nil(t, prologFunc2)
-			require.Nil(t, epilogFunc2)
 		})
 
 		t.Run("enabling the rules again sets back the callbacks", func(t *testing.T) {
 			// Enable again the rules
 			engine.Enable()
 			// Check the callbacks are attached again
-			prologFunc1, epilogFunc1 := hookFunc1.Callbacks()
+			prologFunc1 := hookFunc1.Prolog()
 			require.NotNil(t, prologFunc1)
-			require.Nil(t, epilogFunc1)
-			prologFunc2, epilogFunc2 := hookFunc2.Callbacks()
+			prologFunc2 := hookFunc2.Prolog()
 			require.NotNil(t, prologFunc2)
-			require.Nil(t, epilogFunc2)
 		})
 	})
 

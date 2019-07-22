@@ -132,15 +132,15 @@ func (AbortRequestError) Error() string {
 // a hook and called by the closure.
 func addSecurityHeaders(w http.ResponseWriter) (err error) {
 	{
-		type Prolog = func(*sqhook.Context, *http.ResponseWriter) error
-		type Epilog = func(*sqhook.Context, *error)
-		ctx := sqhook.Context{}
-		prolog, epilog := addSecurityHeaderHook.Callbacks()
-		if epilog, ok := epilog.(Epilog); ok {
-			defer epilog(&ctx, &err)
-		}
+		type Epilog = func(*error)
+		type Prolog = func(*http.ResponseWriter) (Epilog, error)
+		prolog := addSecurityHeaderHook.Prolog()
 		if prolog, ok := prolog.(Prolog); ok {
-			if err := prolog(&ctx, &w); err != nil {
+			epilog, err := prolog(&w)
+			if epilog != nil {
+				defer epilog(&err)
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -167,15 +167,15 @@ type responseWriter struct {
 
 func (w responseWriter) WriteHeader(statusCode int) {
 	{
-		type Prolog = func(*sqhook.Context, *int) error
-		type Epilog = func(*sqhook.Context)
-		ctx := sqhook.Context{sqhook.MethodReceiver(&w)}
-		prolog, epilog := responseWriterWriteHeader.Callbacks()
-		if epilog, ok := epilog.(Epilog); ok {
-			defer epilog(&ctx)
-		}
+		type Epilog = func()
+		type Prolog = func(sqhook.MethodReceiver, *int) (Epilog, error)
+		prolog := responseWriterWriteHeader.Prolog()
 		if prolog, ok := prolog.(Prolog); ok {
-			if err := prolog(&ctx, &statusCode); err != nil {
+			epilog, err := prolog(sqhook.MethodReceiver{&w}, &statusCode)
+			if epilog != nil {
+				defer epilog()
+			}
+			if err != nil {
 				return
 			}
 		}

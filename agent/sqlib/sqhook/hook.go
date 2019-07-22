@@ -3,13 +3,13 @@
 // https://www.sqreen.io/terms.html
 
 // Package sqhook provides a pure Go implementation of hooks to be inserted
-// into function definitions in order to be able to attach prolog and epilog
-// callbacks giving read/write access to the arguments and returned values of
-// the function call at run time.
+// into function definitions in order to be able to attach at run time prolog
+// and epilog callbacks getting read/write access to the arguments and returned
+// values of the function call.
 //
 // A hook needs to be globally created and associated to a function symbol at
-// package initialization time. Prolog and epilog callbacks can then be
-// accessed in the function call to pass the call arguments and return values.
+// package initialization time. Callbacks can then be accessed in the function
+// call to pass the call arguments and return values.
 //
 // On the other side, callbacks can be attached to a hook at run time. Prolog
 // callbacks get read/write access to the arguments of the function call before
@@ -20,9 +20,15 @@
 // Given a function F:
 // 		func F(A, B, C) (R, S, T)
 // The expected prolog signature is:
-//		type prolog = func(*sqhook.Context, *A, *B, *C) error
+//		type prolog = func(*A, *B, *C) (epilog, error)
 // The expected epilog signature is:
-//		type epilog = func(*sqhook.Context, *R, *S, *T)
+//		type epilog = func(*R, *S, *T)
+//
+// Note 1: the prolog callback returns the epilog callback - which can be nil
+// when not required - so that context can be shared using a closure.
+//
+// Note 2: a prolog for a method should accept the method receiver pointer as
+// first argument wrapped into a `sqhook.MethodReceiver` value.
 //
 // Example:
 //		// Define the hook globally
@@ -37,36 +43,37 @@
 // 		func Example(arg1 int, arg2 string) (ret1 []byte, ret2 error) {
 //			// Use the hook first and call its callbacks
 //			{
-//				type Prolog = func(*sqhook.Context, *int, *string) error
-//				type Epilog = func(*sqhook.Context, *[]byte, *error)
-//				// Create a call context
-//				ctx := sqhook.Context{}
-//				prolog, epilog := exampleHook.Callbacks()
-//				// If an epilog is set, defer the call to the epilog
-//				if epilog, ok := epilog.(Epilog); ok {
-//					// Pass pointers to the return values
-//					defer epilog(&ctx, &ret1, &ret2)
-//				}
-//				// If a prolog is set, call it
+//				type Epilog = func(*[]byte, *error)
+//				type Prolog = func(*int, *string) (Epilog, error)
+//				// Get the prolog callback and call it if it is not nil
+//				prolog := exampleHook.Prolog()
 //				if prolog, ok := prolog.(Prolog); ok {
 //					// Pass pointers to the arguments
-//					err := prolog(&ctx, &w, &r, &headers, &statusCode, &body)
+//					epilog, err := prolog(&w, &r, &headers, &statusCode, &body)
 //					// If an error is returned, the function execution is aborted.
-//					// The deferred epilog call will still be executed before returning.
+//					// The epilog still needs to be called if set. A deferred call to it
+//					// does the job.
+//					if epilog != nil {
+//						// Pass pointers to the return values
+//						defer epilog(&ret1, &ret2)
+//					}
 //					if err != nil {
 //						return
 //					}
 //				}
 //			}
-// 			// .. function code ...
+// 			/* .. function code ... */
 //		}
 //
 //
 // Main requirements:
-// - Concurrent access and modification of callbacks.
-// - Reentrant implementation of callbacks with a call context when data needs
-//   to be shared between the prolog and epilog.
 //
+// - Concurrent access and modification of callbacks.
+// - Ability to read/write arguments and return values.
+// - Hook to the prolog and epilog of a function.
+// - Epilog callbacks should be able to recover from a panic.
+// - Callbacks should be reentrant. If any context needs to be shared, it
+//   should be done through the closure.
 // - Fast call dispatch for callbacks that don't need to be generic, ie.
 //   callbacks that are designed to be attached to specific functions.
 //   Type-assertion instead of `reflect.Call` is therefore used while generic
@@ -101,34 +108,29 @@ var index = make(map[string]*Hook)
 type Hook struct {
 	// The function type where the hook is used.
 	fnType reflect.Type
-	// Pointer to a structure containing the callbacks in order to be able to
-	// atomically modify the pointer.
-	attached *callbacks
+	// Currently attached callback.
+	attached *PrologCallback
 	// Symbol name where the hook is used. Required for the stringer.
 	symbol string
 }
 
-type callbacks struct {
-	prolog, epilog Callback
-}
+// PrologCallback is an interface type to a prolog function.
+// Given a function F:
+// 		func F(A, B, C) (R, S, T)
+// The expected prolog signature is:
+//		type prolog = func(*A, *B, *C) (epilog, error)
+// The expected epilog signature is:
+//		type epilog = func(*R, *S, *T)
+// The returned epilog value can be nil when there is no need for epilog.
+type PrologCallback interface{}
 
-// Callback is a function expecting a Context pointer as first argument,
-// followed by the pointers to the arguments of the hooked function for a
-// prolog, and followed by the pointers to the returned values for an epilog.
-type Callback interface{}
-
-// Context is a call context for the hook. It is shared between the prolog and
-// epilog and is unique for each function call. It allows callbacks to provide
-// reentrant implementations when memory needs to be shared for a given call.
-type Context []interface{}
-
-// MethodReceiver is store in the context when hooking a method.
-type MethodReceiver interface{}
-
-type Error int
+// MethodReceiver should be the first argument of the prolog of a method.
+type MethodReceiver struct{ Receiver interface{} }
 
 // Errors that hooks can return in order to modify the control flow of the
 // function.
+type Error int
+
 const (
 	_ Error = iota
 	// Abort the execution of the function by returning from it.
@@ -175,69 +177,81 @@ func Find(symbol string) *Hook {
 	return index[symbol]
 }
 
-// Attach atomically attaches prolog and epilog callbacks to the hook. It is
-// possible to pass nil values when only one type of callback is required. If
-// both arguments are nil, the callbacks are removed.
-func (h *Hook) Attach(prolog, epilog Callback) error {
-	var cbs *callbacks
-	if prolog != nil || epilog != nil {
-		cbs = &callbacks{}
-		if prolog != nil {
-			// Create the list of argument types
-			argTypes := make([]reflect.Type, 0, h.fnType.NumIn())
-			for i := 0; i < h.fnType.NumIn(); i++ {
-				argTypes = append(argTypes, h.fnType.In(i))
-			}
-			if err := validateProlog(prolog, argTypes); err != nil {
-				return err
-			}
-			cbs.prolog = prolog
-		}
-		if epilog != nil {
-			// Create the list of return types
-			retTypes := make([]reflect.Type, 0, h.fnType.NumOut())
-			for i := 0; i < h.fnType.NumOut(); i++ {
-				retTypes = append(retTypes, h.fnType.Out(i))
-			}
-			if err := validateEpilog(epilog, retTypes); err != nil {
-				return err
-			}
-			cbs.epilog = epilog
-		}
+// Attach atomically attaches a prolog callback to the hook. It is
+// possible to pass a `nil` value to remove the attached callback.
+func (h *Hook) Attach(prolog PrologCallback) error {
+	addr := (*unsafe.Pointer)(unsafe.Pointer(&h.attached))
+	if prolog == nil {
+		atomic.StorePointer(addr, nil)
+		return nil
 	}
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&h.attached)), unsafe.Pointer(cbs))
+	if err := validateProlog(prolog, h.fnType); err != nil {
+		return err
+	}
+	atomic.StorePointer(addr, unsafe.Pointer(&prolog))
 	return nil
 }
 
-// Callbacks atomically accesses the attached prolog and epilog callbacks.
-func (h *Hook) Callbacks() (prolog, epilog Callback) {
-	attached := (*callbacks)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&h.attached))))
+// Callbacks atomically accesses the attached prolog.
+func (h *Hook) Prolog() (prolog PrologCallback) {
+	addr := (*unsafe.Pointer)(unsafe.Pointer(&h.attached))
+	attached := (*PrologCallback)(atomic.LoadPointer(addr))
 	if attached == nil {
-		return nil, nil
+		return nil
 	}
-	return attached.prolog, attached.epilog
+	return *attached
 }
 
 // validateProlog validates that the prolog has the expected signature.
-func validateProlog(prolog Callback, argTypes []reflect.Type) error {
-	if err := validateCallback(prolog, argTypes); err != nil {
+func validateProlog(prolog PrologCallback, fnType reflect.Type) (err error) {
+	defer func() {
+		if err != nil {
+			err = sqerrors.Wrap(err, "prolog validation error")
+		}
+	}()
+	// Create the list of argument types
+	callbackArgsTypes := make([]reflect.Type, 0, fnType.NumIn())
+	for i := 0; i < fnType.NumIn(); i++ {
+		callbackArgsTypes = append(callbackArgsTypes, fnType.In(i))
+	}
+	// Check the prolog args are pointers to the callback args
+	prologType := reflect.TypeOf(prolog)
+	if err := validateCallback(prologType, callbackArgsTypes); err != nil {
 		return err
 	}
-	t := reflect.TypeOf(prolog)
-	if t.NumOut() != 1 || !t.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-		return sqerrors.New("validation: the prolog callback should return an error value")
+	// Check the prolog returns two values
+	if numPrologOut, numCallbackOut := prologType.NumOut(), 2; numPrologOut != numCallbackOut {
+		return sqerrors.Errorf("wrong number of returned values, expected `%d` but got `%d`", numCallbackOut, numPrologOut)
+	}
+	// Check the second returned value is an error
+	if ret1Type := prologType.Out(1); ret1Type != reflect.TypeOf((*error)(nil)).Elem() {
+		return sqerrors.Errorf("unexpected second return type `%s` instead of `error`", ret1Type)
+	}
+	// Check the first returned value is the expected epilog type
+	epilogType := prologType.Out(0)
+	if err := validateEpilog(epilogType, fnType); err != nil {
+		return err
 	}
 	return nil
 }
 
 // validateEpilog validates that the epilog has the expected signature.
-func validateEpilog(epilog Callback, argTypes []reflect.Type) error {
-	if err := validateCallback(epilog, argTypes); err != nil {
+func validateEpilog(epilogType reflect.Type, fnType reflect.Type) (err error) {
+	defer func() {
+		if err != nil {
+			err = sqerrors.Wrap(err, "epilog validation error")
+		}
+	}()
+	// Create the list of argument types
+	callbackRetTypes := make([]reflect.Type, 0, fnType.NumOut())
+	for i := 0; i < fnType.NumOut(); i++ {
+		callbackRetTypes = append(callbackRetTypes, fnType.Out(i))
+	}
+	if err := validateCallback(epilogType, callbackRetTypes); err != nil {
 		return err
 	}
-	t := reflect.TypeOf(epilog)
-	if t.NumOut() != 0 {
-		return sqerrors.New("validation: the epilog callback should not return values")
+	if numOut := epilogType.NumOut(); numOut != 0 {
+		return sqerrors.Errorf("unexpected number of return values `%d` instead of `0`", numOut)
 	}
 	return nil
 }
@@ -245,37 +259,30 @@ func validateEpilog(epilog Callback, argTypes []reflect.Type) error {
 // validateCallback validates the fact that the callback is a function whose
 // first argument is the hook context and the rest of its arguments can be
 // assigned the hook argument values.
-func validateCallback(callback Callback, argTypes []reflect.Type) (err error) {
-	defer func() {
-		if err != nil {
-			err = sqerrors.Wrap(err, "validation error")
-		}
-	}()
-	callbackType := reflect.TypeOf(callback)
+func validateCallback(callbackType reflect.Type, argTypes []reflect.Type) error {
 	// Check the callback is a function
 	if callbackType.Kind() != reflect.Func {
 		return sqerrors.New("the callback argument is not a function")
 	}
 	callbackArgc := callbackType.NumIn()
-	// Check the callback accepts a hook context as first argument
-	if callbackArgc < 1 {
-		return sqerrors.New("the callback should expect a hook context as first argument")
+	// Check the callback accepts the same number of arguments than the function
+	// Note that the method receiver is in the argument list of the type
+	// definition.
+	if callbackArgc != len(argTypes) {
+		return sqerrors.Errorf("the callback should have the same arguments: `%d` callback arguments while expecting `%d`", callbackArgc, len(argTypes))
 	}
-	if !reflect.TypeOf((*Context)(nil)).AssignableTo(callbackType.In(0)) {
-		return sqerrors.New("the callback should expect a hook context as first argument")
-	}
-	// Check the argument count
-	fnArgc := len(argTypes)
-	if callbackArgc-1 != fnArgc && callbackArgc != fnArgc {
-		return sqerrors.Errorf("the callback arguments count `%d` is not compatible to the hook arguments count `%d`", callbackArgc, fnArgc)
-	}
-	// Check arguments are assignable
-	var i int
-	for i = 1; i < callbackArgc; i++ {
-		argPtrType := reflect.PtrTo(argTypes[i-1])
-		callbackArgType := callbackType.In(i)
-		if !argPtrType.AssignableTo(callbackArgType) {
-			return sqerrors.Errorf("hook argument `%d` of type `%s` cannot be assigned to the callback argument `%d` of type `%s`", i-1, argPtrType, i, callbackArgType)
+	// Check arguments are pointers to the same types than the function arguments.
+	if callbackArgc > 0 {
+		i := 0
+		if callbackType.In(0) == reflect.TypeOf(MethodReceiver{}) {
+			i++
+		}
+		for ; i < callbackArgc; i++ {
+			argPtrType := reflect.PtrTo(argTypes[i])
+			callbackArgType := callbackType.In(i)
+			if argPtrType != callbackArgType {
+				return sqerrors.Errorf("argument `%d` has type `%s` instead of `%s`", i, callbackArgType, argPtrType)
+			}
 		}
 	}
 	return nil

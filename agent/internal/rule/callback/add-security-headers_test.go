@@ -28,6 +28,8 @@ func TestNewAddSecurityHeadersCallbacks(t *testing.T) {
 			[]string{},
 			[]string{"one"},
 			[]string{"one", "two", "three"},
+			[]interface{}{[]string{"one", "two"}, []string{"three"}},
+			[]interface{}{[]string{"one", "two"}, []string{"three", "four"}, "nope"},
 		},
 		ValidTestCases: []ValidTestCase{
 			{
@@ -38,7 +40,7 @@ func TestNewAddSecurityHeadersCallbacks(t *testing.T) {
 						[]string{"canonical-header", "the value"},
 					},
 				},
-				TestCallbacks: func(t *testing.T, _ *FakeRule, prolog, epilog sqhook.Callback) {
+				TestCallbacks: func(t *testing.T, _ *FakeRule, prolog sqhook.PrologCallback) {
 					expectedHeaders := http.Header{
 						"K":                []string{"v"},
 						"One":              []string{"two"},
@@ -47,16 +49,15 @@ func TestNewAddSecurityHeadersCallbacks(t *testing.T) {
 					actualProlog, ok := prolog.(callback.AddSecurityHeadersPrologCallbackType)
 					require.True(t, ok)
 					var rec http.ResponseWriter = httptest.NewRecorder()
-					err := actualProlog(nil, &rec)
+					epilog, err := actualProlog(&rec)
 					// Check it behaves as expected
 					require.NoError(t, err)
 					require.Equal(t, expectedHeaders, rec.Header())
 
 					// Test the epilog if any
 					if epilog != nil {
-						actualEpilog, ok := epilog.(callback.AddSecurityHeadersEpilogCallbackType)
 						require.True(t, ok)
-						actualEpilog(&sqhook.Context{})
+						epilog(nil)
 					}
 				},
 			},

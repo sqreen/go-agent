@@ -17,7 +17,7 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and headers in order to perform an HTTP
 // redirection to the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(rule Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+func NewWriteHTTPRedirectionCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
 	var redirectionURL string
 	if cfg := rule.Config(); cfg != nil {
 		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)
@@ -42,21 +42,16 @@ func NewWriteHTTPRedirectionCallbacks(rule Context, nextProlog, nextEpilog sqhoo
 		err = sqerrors.Errorf("unexpected next prolog type `%T`", nextProlog)
 		return
 	}
-	// No epilog in this callback, so simply check and pass the given one
-	if _, ok := nextEpilog.(WriteHTTPRedirectionEpilogCallbackType); nextEpilog != nil && !ok {
-		err = sqerrors.Errorf("unexpected next epilog type `%T` instead of `%T`", nextEpilog, WriteHTTPRedirectionEpilogCallbackType(nil))
-		return
-	}
-	return newWriteHTTPRedirectionPrologCallback(redirectionURL, actualNextProlog), nextEpilog, nil
+	return newWriteHTTPRedirectionPrologCallback(redirectionURL, actualNextProlog), nil
 }
 
-type WriteHTTPRedirectionPrologCallbackType = func(*sqhook.Context, *http.ResponseWriter, **http.Request, *http.Header, *int, *[]byte) error
-type WriteHTTPRedirectionEpilogCallbackType = func(*sqhook.Context)
+type WriteHTTPRedirectionEpilogCallbackType = func()
+type WriteHTTPRedirectionPrologCallbackType = func(*http.ResponseWriter, **http.Request, *http.Header, *int, *[]byte) (WriteHTTPRedirectionEpilogCallbackType, error)
 
 // The prolog callback modifies the function arguments in order to perform an
 // HTTP redirection.
 func newWriteHTTPRedirectionPrologCallback(url string, next WriteHTTPRedirectionPrologCallbackType) WriteHTTPRedirectionPrologCallbackType {
-	return func(ctx *sqhook.Context, callerWriter *http.ResponseWriter, callerRequest **http.Request, callerHeaders *http.Header, callerStatusCode *int, callerBody *[]byte) error {
+	return func(callerWriter *http.ResponseWriter, callerRequest **http.Request, callerHeaders *http.Header, callerStatusCode *int, callerBody *[]byte) (WriteHTTPRedirectionEpilogCallbackType, error) {
 		*callerStatusCode = http.StatusSeeOther
 		if *callerHeaders == nil {
 			*callerHeaders = make(http.Header)
@@ -64,8 +59,8 @@ func newWriteHTTPRedirectionPrologCallback(url string, next WriteHTTPRedirection
 		callerHeaders.Set("Location", url)
 
 		if next == nil {
-			return nil
+			return nil, nil
 		}
-		return next(ctx, callerWriter, callerRequest, callerHeaders, callerStatusCode, callerBody)
+		return next(callerWriter, callerRequest, callerHeaders, callerStatusCode, callerBody)
 	}
 }

@@ -20,15 +20,14 @@ func init() {
 // The statusCode is the only mandatory argument. Headers and body can be nil.
 func WriteResponse(w http.ResponseWriter, r *http.Request, headers http.Header, statusCode int, body []byte) {
 	{
-		type Prolog = func(*sqhook.Context, *http.ResponseWriter, **http.Request, *http.Header, *int, *[]uint8) error
-		type Epilog = func(*sqhook.Context)
-		ctx := sqhook.Context{}
-		prolog, epilog := writeResponseHook.Callbacks()
-		if epilog, ok := epilog.(Epilog); ok {
-			defer epilog(&ctx)
-		}
+		type Epilog = func()
+		type Prolog = func(*http.ResponseWriter, **http.Request, *http.Header, *int, *[]uint8) (Epilog, error)
+		prolog := writeResponseHook.Prolog()
 		if prolog, ok := prolog.(Prolog); ok {
-			err := prolog(&ctx, &w, &r, &headers, &statusCode, &body)
+			epilog, err := prolog(&w, &r, &headers, &statusCode, &body)
+			if epilog != nil {
+				defer epilog()
+			}
 			if err != nil {
 				return
 			}

@@ -9,31 +9,37 @@ import (
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
 )
 
-func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
 	// Next callbacks to call
 	actualNextProlog, ok := nextProlog.(MonitorHTTPStatusCodePrologCallbackType)
 	if nextProlog != nil && !ok {
 		err = sqerrors.Errorf("unexpected next prolog type `%T` instead of `%T`", nextProlog, MonitorHTTPStatusCodePrologCallbackType(nil))
 		return
 	}
-	// No epilog in this callback, so simply check and pass the given one
-	if _, ok := nextEpilog.(MonitorHTTPStatusCodeEpilogCallbackType); nextEpilog != nil && !ok {
-		err = sqerrors.Errorf("unexpected next epilog type `%T` instead of `%T`", nextEpilog, MonitorHTTPStatusCodeEpilogCallbackType(nil))
-		return
-	}
-	return newMonitorHTTPStatusCodePrologCallback(rule, actualNextProlog), nextEpilog, nil
+	return newMonitorHTTPStatusCodePrologCallback(rule, actualNextProlog), nil
 }
 
 func newMonitorHTTPStatusCodePrologCallback(rule Context, next MonitorHTTPStatusCodePrologCallbackType) MonitorHTTPStatusCodePrologCallbackType {
-	return func(ctx *sqhook.Context, code *int) error {
-		rule.PushMetricsValue(*code, 1)
-
-		if next == nil {
-			return nil
+	return func(r sqhook.MethodReceiver, code *int) (MonitorHTTPStatusCodeEpilogCallbackType, error) {
+		var (
+			nextEpilog MonitorHTTPStatusCodeEpilogCallbackType
+			err        error
+		)
+		if next != nil {
+			nextEpilog, err = next(r, code)
 		}
-		return next(ctx, code)
+		return newMonitorHTTPStatusCodeEpilogCallback(rule, code, nextEpilog), err
 	}
 }
 
-type MonitorHTTPStatusCodePrologCallbackType = func(*sqhook.Context, *int) error
-type MonitorHTTPStatusCodeEpilogCallbackType = func(*sqhook.Context)
+func newMonitorHTTPStatusCodeEpilogCallback(rule Context, code *int, next MonitorHTTPStatusCodeEpilogCallbackType) MonitorHTTPStatusCodeEpilogCallbackType {
+	return func() {
+		if next != nil {
+			defer next()
+		}
+		rule.PushMetricsValue(*code, 1)
+	}
+}
+
+type MonitorHTTPStatusCodeEpilogCallbackType = func()
+type MonitorHTTPStatusCodePrologCallbackType = func(sqhook.MethodReceiver, *int) (MonitorHTTPStatusCodeEpilogCallbackType, error)

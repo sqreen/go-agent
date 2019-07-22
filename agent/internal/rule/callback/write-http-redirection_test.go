@@ -34,7 +34,7 @@ func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
 				Rule: &FakeRule{
 					config: &api.RedirectionRuleDataEntry{"http://sqreen.com"},
 				},
-				TestCallbacks: func(t *testing.T, rule *FakeRule, prolog, epilog sqhook.Callback) {
+				TestCallbacks: func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback) {
 					// Call it and check the behaviour follows the rule's data
 					actualProlog, ok := prolog.(callback.WriteHTTPRedirectionPrologCallbackType)
 					require.True(t, ok)
@@ -42,7 +42,7 @@ func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
 						statusCode int
 						headers    http.Header
 					)
-					err := actualProlog(nil, nil, nil, &headers, &statusCode, nil)
+					epilog, err := actualProlog(nil, nil, &headers, &statusCode, nil)
 					// Check it behaves as expected
 					require.NoError(t, err)
 					require.Equal(t, http.StatusSeeOther, statusCode)
@@ -51,9 +51,8 @@ func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
 
 					// Test the epilog if any
 					if epilog != nil {
-						actualEpilog, ok := epilog.(callback.WriteHTTPRedirectionEpilogCallbackType)
 						require.True(t, ok)
-						actualEpilog(&sqhook.Context{})
+						epilog()
 					}
 				},
 			},

@@ -20,15 +20,15 @@ import (
 // CallbackConstructorFunc is a function returning a callback function
 // configured with the given data. The data types are known by the constructor
 // that can type-assert them.
-type CallbacksConstructorFunc func(rule callback.Context, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error)
+type CallbacksConstructorFunc func(rule callback.Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error)
 
 // NewCallbacks returns the prolog and epilog callbacks of the given callback
 // name. And error is returned if the callback name is unknown.
-func NewCallbacks(name string, rule *CallbackContext, nextProlog, nextEpilog sqhook.Callback) (prolog, epilog sqhook.Callback, err error) {
+func NewCallbacks(name string, rule *CallbackContext, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
 	var callbacksCtor CallbacksConstructorFunc
 	switch name {
 	default:
-		return nil, nil, sqerrors.Errorf("undefined callback name `%s`", name)
+		return nil, sqerrors.Errorf("undefined callback name `%s`", name)
 	case "WriteCustomErrorPage":
 		callbacksCtor = callback.NewWriteCustomErrorPageCallbacks
 	case "WriteHTTPRedirection":
@@ -38,7 +38,7 @@ func NewCallbacks(name string, rule *CallbackContext, nextProlog, nextEpilog sqh
 	case "MonitorHTTPStatusCode":
 		callbacksCtor = callback.NewMonitorHTTPStatusCodeCallbacks
 	}
-	return callbacksCtor(rule, nextProlog, nextEpilog)
+	return callbacksCtor(rule, nextProlog)
 }
 
 type CallbackContext struct {

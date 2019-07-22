@@ -39,15 +39,15 @@ func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 	})
 }
 
-func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *FakeRule, prolog sqhook.Callback, epilog sqhook.Callback) {
-	return func(t *testing.T, _ *FakeRule, prolog, epilog sqhook.Callback) {
+func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback) {
+	return func(t *testing.T, _ *FakeRule, prolog sqhook.PrologCallback) {
 		actualProlog, ok := prolog.(callback.WriteCustomErrorPagePrologCallbackType)
 		require.True(t, ok)
 		var (
 			statusCode int
 			body       []byte
 		)
-		err := actualProlog(nil, nil, nil, nil, &statusCode, &body)
+		epilog, err := actualProlog(nil, nil, nil, &statusCode, &body)
 		// Check it behaves as expected
 		require.NoError(t, err)
 		require.Equal(t, expectedStatusCode, statusCode)
@@ -55,9 +55,8 @@ func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T
 
 		// Test the epilog if any
 		if epilog != nil {
-			actualEpilog, ok := epilog.(callback.AddSecurityHeadersEpilogCallbackType)
 			require.True(t, ok)
-			actualEpilog(&sqhook.Context{})
+			epilog()
 		}
 	}
 }

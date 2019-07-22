@@ -23,20 +23,19 @@ func TestNewMonitorHTTPStatusCodeCallbacks(t *testing.T) {
 		ValidTestCases: []ValidTestCase{
 			{
 				Rule: &FakeRule{},
-				TestCallbacks: func(t *testing.T, rule *FakeRule, prolog, epilog sqhook.Callback) {
+				TestCallbacks: func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback) {
 					actualProlog, ok := prolog.(callback.MonitorHTTPStatusCodePrologCallbackType)
 					require.True(t, ok)
 					code := rand.Int()
 					rule.On("PushMetricsValue", code, uint64(1)).Return().Once()
-					err := actualProlog(nil, &code)
+					epilog, err := actualProlog(sqhook.MethodReceiver{}, &code)
 					// Check it behaves as expected
 					require.NoError(t, err)
 
 					// Test the epilog if any
 					if epilog != nil {
-						actualEpilog, ok := epilog.(callback.MonitorHTTPStatusCodeEpilogCallbackType)
 						require.True(t, ok)
-						actualEpilog(&sqhook.Context{})
+						epilog()
 					}
 				},
 			},

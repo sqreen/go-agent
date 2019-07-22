@@ -23,7 +23,7 @@ import (
 var (
 	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
 	cfg    = config.New(logger)
-	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue)
+	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue, FuzzRule)
 )
 
 func TestClient(t *testing.T) {
@@ -344,4 +344,9 @@ func FuzzRuleDataValue(e *api.RuleDataEntry, c fuzz.Continue) {
 	v := &api.CustomErrorPageRuleDataEntry{}
 	c.Fuzz(&v.StatusCode)
 	e.Value = v
+}
+
+func FuzzRule(e *api.Rule, c fuzz.Continue) {
+	c.Fuzz(e)
+	e.Signature = api.RuleSignature{ECDSASignature: api.ECDSASignature{Message: []byte(`{}`)}}
 }
