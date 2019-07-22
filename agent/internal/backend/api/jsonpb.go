@@ -7,6 +7,8 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
@@ -158,4 +160,72 @@ func (v *RuleDataEntry) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(discriminant)
+}
+
+func (r *Rule) UnmarshalJSON(data []byte) error {
+	type rule Rule
+	if err := json.Unmarshal(data, (*rule)(r)); err != nil {
+		return err
+	}
+
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+
+	signature := &r.Signature.ECDSASignature
+	kv := make(map[string]interface{}, len(signature.Keys))
+	for _, k := range signature.Keys {
+		rawValue, exists := keys[k]
+		if !exists {
+			continue
+		}
+		var v interface{}
+		if err := json.Unmarshal(rawValue, &v); err != nil {
+			return err
+		}
+		kv[k] = v
+	}
+	message, err := LexicographicalOrderJSONMarshalMap(kv)
+	if err != nil {
+		return err
+	}
+	signature.Message = message
+
+	return nil
+}
+
+func LexicographicalOrderJSONMarshal(o interface{}) ([]byte, error) {
+	switch actual := o.(type) {
+	case map[string]interface{}:
+		return LexicographicalOrderJSONMarshalMap(actual)
+	default:
+		return json.Marshal(o)
+	}
+}
+
+func LexicographicalOrderJSONMarshalMap(o map[string]interface{}) ([]byte, error) {
+	if len(o) == 0 {
+		return []byte(`{}`), nil
+	}
+	// Get the list of keys
+	keys := make([]string, 0, len(o))
+	for k := range o {
+		keys = append(keys, k)
+	}
+	// Sort the list of keys
+	sort.Strings(keys)
+	for i, k := range keys {
+		v, err := LexicographicalOrderJSONMarshal(o[k])
+		if err != nil {
+			return nil, err
+		}
+		jsonKey, err := json.Marshal(k)
+		if err != nil {
+			return nil, sqerrors.Wrap(err, "map string key marshaling")
+		}
+		k = string(jsonKey)
+		keys[i] = fmt.Sprintf("%s:%s", k, v)
+	}
+	return []byte(fmt.Sprintf("{%s}", strings.Join(keys, ","))), nil
 }

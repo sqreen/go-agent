@@ -17,6 +17,7 @@
 package rule
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
@@ -36,6 +37,7 @@ type Engine struct {
 	cfg           *config.Config
 	enabled       bool
 	metricsEngine *metrics.Engine
+	publicKey     *ecdsa.PublicKey
 }
 
 // Logger interface required by this package.
@@ -45,10 +47,11 @@ type Logger interface {
 }
 
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger, metricsEngine *metrics.Engine) *Engine {
+func NewEngine(logger Logger, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey) *Engine {
 	return &Engine{
 		logger:        logger,
 		metricsEngine: metricsEngine,
+		publicKey:     publicKey,
 	}
 }
 
@@ -97,13 +100,18 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(logger Logger, rules []api.Rule, metricsEngine *metrics.Engine) hookDescriptors {
+func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.PublicKey, metricsEngine *metrics.Engine) hookDescriptors {
 	// Create and configure the list of callbacks according to the given rules
 	var hookDescriptors = make(hookDescriptors)
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
-		hookpoint := r.Hookpoint
+		// Verify the signature
+		if err := VerifyRuleSignature(&r, publicKey); err != nil {
+			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: signature verification", r.Name)))
+			continue
+		}
 		// Find the symbol
+		hookpoint := r.Hookpoint
 		symbol := fmt.Sprintf("%s.%s", hookpoint.Class, hookpoint.Method)
 		hook := sqhook.Find(symbol)
 		if hook == nil {

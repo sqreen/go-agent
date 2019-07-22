@@ -156,6 +156,13 @@ func New(cfg *config.Config) *Agent {
 
 	metrics := metrics.NewEngine(logger)
 
+	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
+		return nil
+	}
+	rulesEngine := rule.NewEngine(logger, metrics, publicKey)
+
 	// TODO: remove this SDK metrics period config when the corresponding js rule
 	//  is supported
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
@@ -179,7 +186,7 @@ func New(cfg *config.Config) *Agent {
 		appInfo: app.NewInfo(logger),
 		client:  backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
 		actors:  actor.NewStore(logger),
-		rules:   rule.NewEngine(logger, metrics),
+		rules:   rulesEngine,
 	}
 }
 

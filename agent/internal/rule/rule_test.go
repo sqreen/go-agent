@@ -5,6 +5,13 @@
 package rule_test
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha512"
+	"encoding/asn1"
+	"encoding/base64"
+	"math/big"
 	"net/http"
 	"os"
 	"reflect"
@@ -24,8 +31,12 @@ func func2(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byt
 type empty struct{}
 
 func TestEngineUsage(t *testing.T) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	publicKey := &privateKey.PublicKey
+
 	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
-	engine := rule.NewEngine(logger, metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0)))
+	engine := rule.NewEngine(logger, metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0)), publicKey)
 	hookFunc1 := sqhook.New(func1)
 	require.NotNil(t, hookFunc1)
 	hookFunc2 := sqhook.New(func2)
@@ -58,6 +69,7 @@ func TestEngineUsage(t *testing.T) {
 						{&api.CustomErrorPageRuleDataEntry{}},
 					},
 				},
+				Signature: MakeSignature(privateKey, `{"name":"a valid rule"}`),
 			},
 			{
 				Name: "another valid rule",
@@ -71,6 +83,7 @@ func TestEngineUsage(t *testing.T) {
 						{&api.CustomErrorPageRuleDataEntry{}},
 					},
 				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
 			},
 		})
 
@@ -136,26 +149,142 @@ func TestEngineUsage(t *testing.T) {
 						{&api.CustomErrorPageRuleDataEntry{}},
 					},
 				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
 			},
 		})
 		// Check the callbacks were removed for func1 and not func2
-		prologFunc1, epilogFunc1 := hookFunc1.Callbacks()
+		prologFunc1 := hookFunc1.Prolog()
 		require.Nil(t, prologFunc1)
-		require.Nil(t, epilogFunc1)
-		prologFunc2, epilogFunc2 := hookFunc2.Callbacks()
+		prologFunc2 := hookFunc2.Prolog()
 		require.NotNil(t, prologFunc2)
-		require.Nil(t, epilogFunc2)
 	})
 
 	t.Run("replace the enabled rules with an empty array of rules", func(t *testing.T) {
 		// Set the rules with an empty array while enabled
 		engine.SetRules("yet another pack id", []api.Rule{})
 		// Check the callbacks were all removed for func1 and not func2
-		prologFunc1, epilogFunc1 := hookFunc1.Callbacks()
+		prologFunc1 := hookFunc1.Prolog()
 		require.Nil(t, prologFunc1)
-		require.Nil(t, epilogFunc1)
-		prologFunc2, epilogFunc2 := hookFunc2.Callbacks()
+		prologFunc2 := hookFunc2.Prolog()
 		require.Nil(t, prologFunc2)
-		require.Nil(t, epilogFunc2)
 	})
+
+	t.Run("add rules with signature issues", func(t *testing.T) {
+		validSignature := MakeSignature(privateKey, `{"name":"a valid rule"}`).ECDSASignature
+
+		// Modify the rules while enabled
+		engine.SetRules("a pack id", []api.Rule{
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: api.RuleSignature{ /*zero value*/ },
+			},
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: api.RuleSignature{
+					ECDSASignature: api.ECDSASignature{
+						Message: validSignature.Message,
+						/* zero signature value */
+					},
+				},
+			},
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: api.RuleSignature{
+					ECDSASignature: api.ECDSASignature{
+						Value: validSignature.Value,
+						/* zero message value */
+					},
+				},
+			},
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: api.RuleSignature{
+					ECDSASignature: api.ECDSASignature{
+						Value:   validSignature.Value,
+						Message: []byte(`wrong message`),
+					},
+				},
+			},
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: api.RuleSignature{
+					ECDSASignature: api.ECDSASignature{
+						Value:   `wrong value`,
+						Message: validSignature.Message,
+					},
+				},
+			},
+		})
+		// Check the callbacks were removed for func1 and not func2
+		prologFunc1 := hookFunc1.Prolog()
+		require.Nil(t, prologFunc1)
+	})
+}
+
+func MakeSignature(privateKey *ecdsa.PrivateKey, message string) api.RuleSignature {
+	hash := sha512.Sum512([]byte(message))
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hash[:])
+	if err != nil {
+		panic(err)
+	}
+	signature, err := asn1.Marshal(struct{ R, S *big.Int }{R: r, S: s})
+	if err != nil {
+		panic(err)
+	}
+	return api.RuleSignature{
+		ECDSASignature: api.ECDSASignature{
+			Message: []byte(message),
+			Value:   base64.StdEncoding.EncodeToString(signature),
+		},
+	}
 }

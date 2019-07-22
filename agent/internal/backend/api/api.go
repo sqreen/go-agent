@@ -41,7 +41,6 @@ type AppLoginResponse struct {
 	Commands  []CommandRequest         `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands"`
 	Features  AppLoginResponse_Feature `protobuf:"bytes,4,opt,name=features,proto3" json:"features"`
 	PackId    string                   `protobuf:"bytes,5,opt,name=pack_id,json=packId,proto3" json:"pack_id"`
-	Rules     []Rule                   `protobuf:"bytes,6,rep,name=rules,proto3" json:"rules"`
 }
 
 type AppLoginResponse_Feature struct {
@@ -164,10 +163,28 @@ type BatchRequest_Event struct {
 }
 
 type Rule struct {
-	Name      string             `json:"name"`
-	Hookpoint Hookpoint          `json:"hookpoint"`
-	Data      RuleData           `json:"data"`
-	Metrics   []MetricDefinition `json:"metrics"`
+	Name       string             `json:"name"`
+	Hookpoint  Hookpoint          `json:"hookpoint"`
+	Data       RuleData           `json:"data"`
+	Metrics    []MetricDefinition `json:"metrics"`
+	Signature  RuleSignature      `json:"signature"`
+	Conditions RuleConditions     `json:"conditions"`
+	Callbacks  RuleCallbacks      `json:"callbacks"`
+}
+
+type RuleConditions struct{}
+type RuleCallbacks struct{}
+
+type ECDSASignature struct {
+	Keys  []string `json:"keys"`
+	Value string   `json:"value"`
+	// Custom field where the signed message is reconstructed out of the list of
+	// keys
+	Message []byte `json:"-"`
+}
+
+type RuleSignature struct {
+	ECDSASignature ECDSASignature `json:"v0_9"`
 }
 
 type MetricDefinition struct {
@@ -406,7 +423,6 @@ type AppLoginResponseFace interface {
 	GetCommands() []CommandRequest
 	GetFeatures() AppLoginResponse_Feature
 	GetPackId() string
-	GetRules() []Rule
 }
 
 func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
@@ -416,7 +432,6 @@ func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
 	this.Commands = that.GetCommands()
 	this.Features = that.GetFeatures()
 	this.PackId = that.GetPackId()
-	this.Rules = that.GetRules()
 	return this
 }
 

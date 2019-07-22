@@ -34,6 +34,13 @@ const (
 	ErrorMessage_UnsupportedCommand = "command is not supported"
 )
 
+const PublicKey string = `-----BEGIN PUBLIC KEY-----
+MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQA39oWMHR8sxb9LRaM5evZ7mw03iwJ
+WNHuDeGqgPo1HmvuMfLnAyVLwaMXpGPuvbqhC1U65PG90bTJLpvNokQf0VMA5Tpi
+m+NXwl7bjqa03vO/HErLbq3zBRysrZnC4OhJOF1jazkAg0psQOea2r5HcMcPHgMK
+fnWXiKWnZX+uOWPuerE=
+-----END PUBLIC KEY-----`
+
 type HTTPAPIEndpoint struct {
 	Method, URL string
 }
@@ -60,7 +67,7 @@ var (
 		ActionsPack:  HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
 		RulesPack:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/rulespack"},
 	}
-	
+
 	// Header name of the API token.
 	BackendHTTPAPIHeaderToken = "X-Api-Key"
 
