@@ -12,6 +12,7 @@ import (
 	fuzz "github.com/google/gofuzz"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
+	"github.com/sqreen/go-agent/agent/internal"
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
@@ -349,4 +350,78 @@ func FuzzRuleDataValue(e *api.RuleDataEntry, c fuzz.Continue) {
 func FuzzRule(e *api.Rule, c fuzz.Continue) {
 	c.Fuzz(e)
 	e.Signature = api.RuleSignature{ECDSASignature: api.ECDSASignature{Message: []byte(`{}`)}}
+}
+
+func TestValidateCredentialsConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		Name, Token, AppName string
+		ShouldFail           bool
+	}{
+		{
+			Name:    "valid org token strings",
+			Token:   "org_ok",
+			AppName: "ok",
+		},
+		{
+			Name:  "valid non-org",
+			Token: "ok",
+		},
+		{
+			Name:       "invalid credentials with empty strings",
+			Token:      "",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with empty token and non-empty app-name",
+			Token:      "",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with valid org token but empty app-name",
+			Token:      "org_ok",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "ko\nko",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "koko\x00\x01\x02ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "koko\tok",
+			ShouldFail: true,
+		},
+		{
+			Name:    "valid credentials with a space in app-name",
+			Token:   "org_ok",
+			AppName: "ok ok ok",
+		},
+		{
+			Name:       "invalid credentials with invalid token character",
+			Token:      "org_ok\nko",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			err := internal.ValidateCredentialsConfiguration(tc.Token, tc.AppName)
+			if tc.ShouldFail {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

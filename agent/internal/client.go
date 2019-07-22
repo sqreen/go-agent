@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/app"
@@ -19,6 +20,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
 )
 
@@ -99,11 +101,6 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 	}
 }
 
-var (
-	ErrMissingAppName = errors.New("missing application name")
-	ErrMissingToken   = errors.New("missing token")
-)
-
 type InvalidCredentialsConfiguration struct {
 	error
 }
@@ -117,16 +114,32 @@ func (e InvalidCredentialsConfiguration) Cause() error {
 }
 
 func ValidateCredentialsConfiguration(token, appName string) (err error) {
+	defer func() {
+		if err != nil {
+			err = InvalidCredentialsConfiguration{err}
+		}
+	}()
+
 	if token == "" {
-		err = ErrMissingToken
-	} else if strings.HasPrefix(token, config.BackendHTTPAPIOrganizationTokenPrefix) && appName == "" {
-		err = ErrMissingAppName
+		return sqerrors.New("missing application name")
 	}
-	if err == nil {
-		return err
+	if strings.HasPrefix(token, config.BackendHTTPAPIOrganizationTokenPrefix) && appName == "" {
+		return sqerrors.New("missing token")
 	}
 
-	return InvalidCredentialsConfiguration{err}
+	for _, r := range appName {
+		if !unicode.IsPrint(r) {
+			return sqerrors.Errorf("forbidden non-printable character `%q` in the application name `%q`", r, appName)
+		}
+	}
+
+	for _, r := range token {
+		if !unicode.IsPrint(r) {
+			return sqerrors.Errorf("forbidden non-printable character `%q` in the token `%q`", r, token)
+		}
+	}
+
+	return nil
 }
 
 // TrySendAppException is a special client function allowing to send app-level
