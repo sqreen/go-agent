@@ -65,16 +65,20 @@ func MiddlewareWithError(next Handler) Handler {
 	// TODO: move this middleware function into the agent internal package (which
 	//  needs restructuring the SDK)
 	return HandlerFunc(func(w http.ResponseWriter, r *http.Request) (err error) {
-		if err := addSecurityHeaders(w); err != nil {
-			return err
-		}
 		// Create a new sqreen request wrapper.
 		req := sdk.NewHTTPRequest(r)
+		if req.Record().Whitelisted() {
+			return next.ServeHTTP(w, r)
+		}
 		defer req.Close()
 		// Use the newly created request compliant with `sdk.FromContext()`.
 		r = req.Request()
 		// Wrap the response writer to monitor the http status codes.
 		w = ResponseWriter{w}
+		// Add security headers
+		if err := addSecurityHeaders(w); err != nil {
+			return err
+		}
 		// Check if an early security action is already required such as based on
 		// the request IP address.
 		if handler := req.SecurityResponse(); handler != nil {

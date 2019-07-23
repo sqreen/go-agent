@@ -28,20 +28,10 @@ func (a *Agent) addUserEvent(event userEventFace) {
 	store.Add(event, 1)
 }
 
-type WhitelistedIP struct {
-	MatchedWhitelistEntry string
-}
-
-func (m WhitelistedIP) bucketID() (string, error) {
-	return m.MatchedWhitelistEntry, nil
-}
-
 func (a *Agent) addWhitelistEvent(matchedWhitelistEntry string) {
 	if a.config.Disable() || a.metrics == nil {
 		// Agent is disabled or not yet initialized
 		return
 	}
-	a.staticMetrics.whitelistedIP.Add(WhitelistedIP{
-		MatchedWhitelistEntry: matchedWhitelistEntry,
-	}, 1)
+	a.staticMetrics.whitelistedIP.Add(matchedWhitelistEntry, 1)
 }

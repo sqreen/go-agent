@@ -227,6 +227,10 @@ func (ctx *HTTPRequestRecord) Close() {
 	ctx.agent.AddHTTPRequestRecordEvent(NewHTTPRequestRecordEvent(ctx, ctx.agent.RulespackID()))
 }
 
+func (ctx *HTTPRequestRecord) Whitelisted() bool {
+	return false
+}
+
 func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
 	ctx.addEvent_(event, true)
 }
@@ -321,6 +325,7 @@ func (WhitelistedHTTPRequestRecord) Close()                                    {
 func (WhitelistedHTTPRequestRecord) WithTimestamp(time.Time)                   {}
 func (WhitelistedHTTPRequestRecord) WithProperties(types.EventProperties)      {}
 func (WhitelistedHTTPRequestRecord) WithUserIdentifiers(map[string]string)     {}
+func (WhitelistedHTTPRequestRecord) Whitelisted() bool                         { return true }
 
 type getClientIPConfigFace interface {
 	HTTPClientIPHeader() string

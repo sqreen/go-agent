@@ -199,8 +199,7 @@ func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
 	}
 	if whitelisted {
 		a.addWhitelistEvent(matched)
-		return &WhitelistedHTTPRequestRecord{
-		}
+		return &WhitelistedHTTPRequestRecord{}
 	}
 	return &HTTPRequestRecord{
 		request:  req,

@@ -163,14 +163,16 @@ func (s *Store) Add(key interface{}, delta uint64) error {
 			// Note that this is not possible to unlock and perform the atomic
 			// operation because of possible concurrent `Flush()`.
 		} else {
+			if l := len(s.set); l == 0 {
+				// Set the deadline when the first value inserted into the metrics store
+				s.deadline = time.Now().Add(s.period)
+			} else {
+				
+			}
 			// The value still doesn't exist and we need to insert it into the store's
 			// map.
 			value := delta
 			s.set[key] = &value
-			// Set the deadline when the first value inserted into the metrics store
-			if s.deadline.IsZero() {
-				s.deadline = time.Now().Add(s.period)
-			}
 		}
 	}
 
