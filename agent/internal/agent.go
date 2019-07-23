@@ -179,7 +179,7 @@ func New(cfg *config.Config) *Agent {
 			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", sdkMetricsPeriod),
 			sdkUserSignup:       metrics.NewStore("sdk-signup", sdkMetricsPeriod),
 			whitelistedIP:       metrics.NewStore("whitelisted", sdkMetricsPeriod),
-			errors:              metrics.NewStore("whitelisted", config.ErrorMetricsPeriod),
+			errors:              metrics.NewStore("errors", config.ErrorMetricsPeriod),
 		},
 		ctx:     ctx,
 		cancel:  cancel,
