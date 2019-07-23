@@ -62,7 +62,7 @@ func Start() {
 		//   - the correctness of sub-level error handling (ie. they don't panic).
 		// Any panics from these would stop the execution of this level.
 		backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+		logger := plog.NewLogger(plog.Info, os.Stderr, 0)
 		for {
 			err := sqsafe.Call(func() error {
 				// Level 2
@@ -147,10 +147,10 @@ type staticMetrics struct {
 const errorChanBufferLength = 256
 
 func New(cfg *config.Config) *Agent {
-	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, errorChanBufferLength)
+	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
 
 	if cfg.Disable() {
-		logger.Info("agent disabled by configuration")
+		logger.Info("config: empty token value or explicitly disabled agent")
 		return nil
 	}
 
@@ -241,7 +241,8 @@ func (a *Agent) Serve() error {
 		heartbeat = config.BackendHTTPAPIDefaultHeartbeatDelay
 	}
 
-	a.logger.Info("up and running - heartbeat set to ", heartbeat)
+	a.logger.Infof("go agent v%s up and running", version)
+	a.logger.Infof("agent: heartbeat set to %s", heartbeat)
 	ticker := time.Tick(heartbeat)
 
 	batchSize := int(appLoginRes.Features.BatchSize)
@@ -336,7 +337,7 @@ func (a *Agent) InstrumentationEnable() error {
 	}
 	a.rules.Enable()
 	sdk.SetAgent(a)
-	a.logger.Info("instrumentation enabled")
+	a.logger.Debug("instrumentation enabled")
 	return nil
 }
 
@@ -346,7 +347,7 @@ func (a *Agent) InstrumentationDisable() error {
 	sdk.SetAgent(nil)
 	a.rules.Disable()
 	err := a.actors.SetActions(nil)
-	a.logger.Info("instrumentation disabled")
+	a.logger.Debug("instrumentation disabled")
 	return err
 }
 

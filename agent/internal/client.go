@@ -93,9 +93,9 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 			appLoginRes = nil
 			d, max := backoff.Next()
 			if max {
-				return nil, NewLoginError(errors.New("maximum number of retries reached"))
+				return nil, NewLoginError(errors.New("login: maximum number of retries reached"))
 			}
-			logger.Debugf("retrying the request in %s", d)
+			logger.Debugf("login: retrying the request in %s", d)
 			time.Sleep(d)
 		}
 	}

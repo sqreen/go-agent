@@ -35,11 +35,14 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Clie
 	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
 		// No user settings. The default transport uses standard global proxy
 		// settings *_PROXY environment variables.
-		logger.Info("using proxy settings as indicated by the environment variables HTTP_PROXY, HTTPS_PROXY and NO_PROXY (or the lowercase versions)")
+		dummyReq, _ := http.NewRequest("GET", backendURL, nil)
+		if proxyURL, _ := http.ProxyFromEnvironment(dummyReq); proxyURL != nil {
+			logger.Infof("client: using system http proxy `%s` as indicated by the system environment variables http_proxy, https_proxy and no_proxy (or their uppercase alternatives)", proxyURL)
+		}
 		transport = (http.DefaultTransport).(*http.Transport)
 	} else {
 		// Use the settings.
-		logger.Info("using configured https proxy ", proxySettings)
+		logger.Infof("client: using configured https proxy `%s`", proxySettings)
 		proxyCfg := httpproxy.Config{
 			HTTPSProxy: proxySettings,
 		}
