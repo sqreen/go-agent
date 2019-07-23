@@ -40,7 +40,7 @@ func TestNewCallbacks(t *testing.T) {
 						{&api.CustomErrorPageRuleDataEntry{}},
 					},
 				},
-			}, nil, nil),
+			}, nil, nil, nil),
 			shouldSucceed: true,
 		},
 	} {

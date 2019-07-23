@@ -36,7 +36,7 @@ func TestEngineUsage(t *testing.T) {
 	publicKey := &privateKey.PublicKey
 
 	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
-	engine := rule.NewEngine(logger, metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0)), publicKey)
+	engine := rule.NewEngine(logger, metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0), 100000000), publicKey)
 	hookFunc1 := sqhook.New(func1)
 	require.NotNil(t, hookFunc1)
 	hookFunc2 := sqhook.New(func2)
@@ -44,13 +44,13 @@ func TestEngineUsage(t *testing.T) {
 
 	t.Run("empty state", func(t *testing.T) {
 		require.Empty(t, engine.PackID())
-		engine.SetRules("my pack id", nil)
+		engine.SetRules("my pack id", nil, nil)
 		require.Equal(t, engine.PackID(), "my pack id")
 		// No problem enabling/disabling the engine
 		engine.Enable()
 		engine.Disable()
 		engine.Enable()
-		engine.SetRules("my other pack id", []api.Rule{})
+		engine.SetRules("my other pack id", []api.Rule{}, nil)
 		require.Equal(t, engine.PackID(), "my other pack id")
 	})
 
@@ -85,7 +85,7 @@ func TestEngineUsage(t *testing.T) {
 				},
 				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
 			},
-		})
+		}, nil)
 
 		t.Run("callbacks are not attached when disabled", func(t *testing.T) {
 			// Check the callbacks were not attached because rules are disabled
@@ -143,7 +143,7 @@ func TestEngineUsage(t *testing.T) {
 				},
 				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
 			},
-		})
+		}, nil)
 		// Check the callbacks were removed for func1 and not func2
 		prologFunc1 := hookFunc1.Prolog()
 		require.Nil(t, prologFunc1)
@@ -153,7 +153,7 @@ func TestEngineUsage(t *testing.T) {
 
 	t.Run("replace the enabled rules with an empty array of rules", func(t *testing.T) {
 		// Set the rules with an empty array while enabled
-		engine.SetRules("yet another pack id", []api.Rule{})
+		engine.SetRules("yet another pack id", []api.Rule{}, nil)
 		// Check the callbacks were all removed for func1 and not func2
 		prologFunc1 := hookFunc1.Prolog()
 		require.Nil(t, prologFunc1)
@@ -256,7 +256,7 @@ func TestEngineUsage(t *testing.T) {
 					},
 				},
 			},
-		})
+		}, nil)
 		// Check the callbacks were removed for func1 and not func2
 		prologFunc1 := hookFunc1.Prolog()
 		require.Nil(t, prologFunc1)

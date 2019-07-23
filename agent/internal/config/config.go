@@ -45,10 +45,11 @@ type HTTPAPIEndpoint struct {
 	Method, URL string
 }
 
-const (
-	// Default value of network timeouts.
-	DefaultNetworkTimeout = 5 * time.Second
-)
+// Error metrics store period.
+const ErrorMetricsPeriod = time.Minute
+
+// Default value of network timeouts.
+const DefaultNetworkTimeout = 5 * time.Second
 
 // Backend client configuration.
 var (
@@ -214,6 +215,7 @@ const (
 	configKeyStripHTTPReferer         = `strip_http_referer`
 	configKeyRules                    = `rules`
 	configKeySDKMetricsPeriod         = `sdk_metrics_period`
+	configKeyMaxMetricsStoreLength    = `max_metrics_store_length`
 )
 
 // User configuration's default values.
@@ -221,6 +223,7 @@ const (
 	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
 	configDefaultLogLevel              = `info`
 	configDefaultSDKMetricsPeriod      = 60
+	configDefaultMaxMetricsStoreLength = 100 * 1024 * 1024
 )
 
 func New(logger *plog.Logger) *Config {
@@ -259,6 +262,7 @@ func New(logger *plog.Logger) *Config {
 	manager.SetDefault(configKeyStripHTTPReferer, "")
 	manager.SetDefault(configKeyRules, "")
 	manager.SetDefault(configKeySDKMetricsPeriod, configDefaultSDKMetricsPeriod)
+	manager.SetDefault(configKeyMaxMetricsStoreLength, configDefaultMaxMetricsStoreLength)
 
 	err := manager.ReadInConfig()
 	if err != nil {
@@ -331,6 +335,16 @@ func (c *Config) SDKMetricsPeriod() int {
 		return configDefaultSDKMetricsPeriod
 	}
 	return p
+}
+
+// MaxMetricsStoreLength returns the maximum length a metrics store should not
+// exceed. After this limit, new metrics values will be dropped.
+func (c *Config) MaxMetricsStoreLength() uint {
+	n := c.GetInt(configKeyMaxMetricsStoreLength)
+	if n < 0 {
+		n = 0
+	}
+	return uint(n)
 }
 
 func sanitizeString(s string) string {

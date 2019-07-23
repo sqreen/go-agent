@@ -140,7 +140,7 @@ type Agent struct {
 }
 
 type staticMetrics struct {
-	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, whitelistedIP *metrics.Store
+	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, whitelistedIP, errors *metrics.Store
 }
 
 // Error channel buffer length.
@@ -154,7 +154,7 @@ func New(cfg *config.Config) *Agent {
 		return nil
 	}
 
-	metrics := metrics.NewEngine(logger)
+	metrics := metrics.NewEngine(logger, cfg.MaxMetricsStoreLength())
 
 	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
 	if err != nil {
@@ -179,6 +179,7 @@ func New(cfg *config.Config) *Agent {
 			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", sdkMetricsPeriod),
 			sdkUserSignup:       metrics.NewStore("sdk-signup", sdkMetricsPeriod),
 			whitelistedIP:       metrics.NewStore("whitelisted", sdkMetricsPeriod),
+			errors:              metrics.NewStore("whitelisted", config.ErrorMetricsPeriod),
 		},
 		ctx:     ctx,
 		cancel:  cancel,
@@ -386,7 +387,7 @@ func (a *Agent) RulesReload() error {
 		}
 	}
 
-	a.rules.SetRules(rulespack.PackID, rulespack.Rules)
+	a.rules.SetRules(rulespack.PackID, rulespack.Rules, a.staticMetrics.errors)
 	return nil
 }
 

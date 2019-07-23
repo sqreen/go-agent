@@ -62,9 +62,9 @@ func (e *Engine) PackID() string {
 
 // SetRules set the currents rules. If rules were already set, it will replace
 // them by atomically modifying the hooks, and removing what is left.
-func (e *Engine) SetRules(packID string, rules []api.Rule) {
+func (e *Engine) SetRules(packID string, rules []api.Rule, errorMetricsStore *metrics.Store) {
 	// Create the net rule descriptors and replace the existing ones
-	ruleDescriptors := newHookDescriptors(e.logger, rules, e.publicKey, e.metricsEngine)
+	ruleDescriptors := newHookDescriptors(e.logger, rules, e.publicKey, e.metricsEngine, errorMetricsStore)
 	e.setRules(packID, ruleDescriptors)
 }
 
@@ -100,7 +100,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.PublicKey, metricsEngine *metrics.Engine) hookDescriptors {
+func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.PublicKey, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) hookDescriptors {
 	// Create and configure the list of callbacks according to the given rules
 	var hookDescriptors = make(hookDescriptors)
 	for i := len(rules) - 1; i >= 0; i-- {
@@ -120,7 +120,7 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 		}
 		// Instantiate the callback
 		nextProlog := hookDescriptors.Get(hook)
-		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine)
+		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine, errorMetricsStore)
 		prolog, err := NewCallbacks(hookpoint.Callback, ruleDescriptor, nextProlog)
 		if err != nil {
 			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not instantiate the callbacks", r.Name)))

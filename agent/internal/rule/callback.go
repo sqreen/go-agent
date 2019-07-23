@@ -11,7 +11,6 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/metrics"
-	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
@@ -45,11 +44,12 @@ type CallbackContext struct {
 	config              interface{}
 	metricsStores       map[string]*metrics.Store
 	defaultMetricsStore *metrics.Store
-	logger              plog.ErrorLogger
+	errorMetricsStore   *metrics.Store
+	logger              Logger
 	name                string
 }
 
-func NewCallbackContext(r *api.Rule, logger plog.ErrorLogger, metricsEngine *metrics.Engine) *CallbackContext {
+func NewCallbackContext(r *api.Rule, logger Logger, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) *CallbackContext {
 	config := newCallbackConfig(&r.Data)
 
 	var (
@@ -68,6 +68,7 @@ func NewCallbackContext(r *api.Rule, logger plog.ErrorLogger, metricsEngine *met
 		config:              config,
 		metricsStores:       metricsStores,
 		defaultMetricsStore: defaultMetricsStore,
+		errorMetricsStore:   errorMetricsStore,
 		name:                r.Name,
 		logger:              logger,
 	}
@@ -93,6 +94,15 @@ func (d *CallbackContext) Config() interface{} {
 func (d *CallbackContext) PushMetricsValue(key interface{}, value uint64) {
 	err := d.defaultMetricsStore.Add(key, value)
 	if err != nil {
-		d.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not add a value to the default metrics store", d.name)))
+		sqErr := sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not add a value to the default metrics store", d.name))
+		switch actualErr := err.(type) {
+		case metrics.MaxMetricsStoreLengthError:
+			d.logger.Debug(sqErr)
+			if err := d.errorMetricsStore.Add(actualErr, 1); err != nil {
+				d.logger.Debugf("could not update the error metrics store: %v", err)
+			}
+		default:
+			d.logger.Error(sqErr)
+		}
 	}
 }

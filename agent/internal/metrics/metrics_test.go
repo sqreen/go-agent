@@ -21,7 +21,7 @@ import (
 var logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
 
 func TestUsage(t *testing.T) {
-	engine := metrics.NewEngine(logger)
+	engine := metrics.NewEngine(logger, 100000000)
 
 	t.Run("store usage", func(t *testing.T) {
 		t.Run("empty stores are never ready", func(t *testing.T) {
@@ -114,9 +114,19 @@ func TestUsage(t *testing.T) {
 					d [33]byte
 				}
 
+				type T1 struct{}
+				type T2 struct{}
+				var v1, v2 interface{} = T1{}, T2{}
+
 				ptr := &Struct{}
 
 				require.NotPanics(t, func() {
+					require.NoError(t, store.Add("string", 1))
+					require.NoError(t, store.Add(T1{}, 1))
+					require.NoError(t, store.Add(v1, 3))
+					require.NoError(t, store.Add(T2{}, 3))
+					require.NoError(t, store.Add(v2, 5))
+					require.NoError(t, store.Add("string", 1))
 					require.NoError(t, store.Add("string", 1))
 					require.NoError(t, store.Add(33, 1))
 					require.NoError(t, store.Add(Struct{
@@ -134,7 +144,7 @@ func TestUsage(t *testing.T) {
 				require.True(t, store.Ready())
 				old := store.Flush()
 				require.Equal(t, metrics.ReadyStoreMap{
-					"string": 1,
+					"string": 3,
 					33:       1,
 					Struct{
 						a: 33,
@@ -142,7 +152,9 @@ func TestUsage(t *testing.T) {
 						c: 4.815162342,
 						d: [33]byte{},
 					}: 1,
-					ptr: 1,
+					ptr:  1,
+					v1:   4,
+					T2{}: 8,
 				}, old.Metrics())
 			})
 		})
@@ -152,7 +164,7 @@ func TestUsage(t *testing.T) {
 		// Create a store that will be checked more often than actually required by
 		// its period. So that we cover the case where the store is not always
 		// ready.
-		engine := metrics.NewEngine(logger)
+		engine := metrics.NewEngine(logger, 100000000)
 		// The reader will be awaken 4 times per store period, so only it will see
 		// a ready store only once out of four.
 		readerPeriod := time.Microsecond
@@ -249,10 +261,58 @@ func TestUsage(t *testing.T) {
 			require.Equal(t, uint64(nbWriters), v)
 		}
 	})
+
+	t.Run("metrics store max length and store error aggregation", func(t *testing.T) {
+		var maxLen uint = 3
+		engine := metrics.NewEngine(logger, maxLen)
+		period := time.Millisecond
+		s1 := engine.NewStore("s1", period)
+		errors := engine.NewStore("errors", period)
+
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k2", 1))
+		require.NoError(t, s1.Add("k3", 33))
+
+		err := s1.Add("k4", 2)
+		require.Error(t, err)
+		require.NoError(t, errors.Add(err, 1))
+
+		err = s1.Add("k4", 55)
+		require.Error(t, err)
+		require.NoError(t, errors.Add(err, 1))
+
+		err = s1.Add("k4", 1)
+		require.Error(t, err)
+		require.NoError(t, errors.Add(err, 1))
+
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k1", 1))
+		require.NoError(t, s1.Add("k2", 1))
+		require.NoError(t, s1.Add("k3", 33))
+
+		time.Sleep(period)
+		require.True(t, s1.Ready())
+		_ = s1.Flush()
+
+		require.NoError(t, s1.Add("k4", 2))
+		require.NoError(t, s1.Add("k4", 1))
+		require.NoError(t, s1.Add("k4", 5))
+
+		// Errors were properly aggregated
+		require.True(t, errors.Ready())
+		readyErrors := errors.Flush()
+
+		require.Equal(t, metrics.ReadyStoreMap{metrics.MaxMetricsStoreLengthError{MaxLen: maxLen}: 3}, readyErrors.Metrics())
+	})
 }
 
 func BenchmarkStore(b *testing.B) {
-	engine := metrics.NewEngine(logger)
+	engine := metrics.NewEngine(logger, 100000000)
 
 	type structKeyType struct {
 		n int
@@ -472,7 +532,7 @@ func BenchmarkStore(b *testing.B) {
 }
 
 func BenchmarkUsage(b *testing.B) {
-	engine := metrics.NewEngine(logger)
+	engine := metrics.NewEngine(logger, 100000000)
 
 	for p := 1; p <= 1000; p *= 10 {
 		p := p

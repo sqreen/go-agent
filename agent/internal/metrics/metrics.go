@@ -48,6 +48,7 @@
 package metrics
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -61,20 +62,22 @@ import (
 // the existing ones. Engine's methods are not thread-safe and designed to be
 // used by a single goroutine.
 type Engine struct {
-	logger plog.DebugLogger
-	stores map[string]*Store
+	logger             plog.DebugLogger
+	stores             map[string]*Store
+	maxMetricsStoreLen uint
 }
 
-func NewEngine(logger plog.DebugLogger) *Engine {
+func NewEngine(logger plog.DebugLogger, maxMetricsStoreLen uint) *Engine {
 	return &Engine{
-		logger: logger,
-		stores: make(map[string]*Store),
+		logger:             logger,
+		stores:             make(map[string]*Store),
+		maxMetricsStoreLen: maxMetricsStoreLen,
 	}
 }
 
 // NewStore creates and registers a new metrics store.
 func (e *Engine) NewStore(id string, period time.Duration) *Store {
-	store := newStore(period)
+	store := newStore(period, e.maxMetricsStoreLen)
 	e.stores[id] = store
 	return store
 }
@@ -109,16 +112,28 @@ type Store struct {
 	deadline time.Time
 	// Minimum time duration the data should be kept.
 	period time.Duration
+	// Maximum map length. New keys are dropped when reached.
+	// The length is unlimited when 0.
+	maxLen uint
 }
 
 type StoreMap map[interface{}]*uint64
 type ReadyStoreMap map[interface{}]uint64
 
-func newStore(period time.Duration) *Store {
+func newStore(period time.Duration, maxLen uint) *Store {
 	return &Store{
 		set:    make(StoreMap),
 		period: period,
+		maxLen: maxLen,
 	}
+}
+
+type MaxMetricsStoreLengthError struct {
+	MaxLen uint
+}
+
+func (e MaxMetricsStoreLengthError) Error() string {
+	return fmt.Sprintf("new metrics store key dropped as the metrics store has reached its maximum length `%d`", e.MaxLen)
 }
 
 // Add delta to the given key, inserting it if it doesn't exist. This method
@@ -164,10 +179,11 @@ func (s *Store) Add(key interface{}, delta uint64) error {
 			// operation because of possible concurrent `Flush()`.
 		} else {
 			if l := len(s.set); l == 0 {
-				// Set the deadline when the first value inserted into the metrics store
+				// Set the deadline when the first valuMaxMetricsStoreLengthe inserted into the metrics store
 				s.deadline = time.Now().Add(s.period)
-			} else {
-				
+			} else if s.maxLen > 0 && uint(l) >= s.maxLen {
+				// The maximum length is reached - no more new insertions are allowed
+				return MaxMetricsStoreLengthError{MaxLen: s.maxLen}
 			}
 			// The value still doesn't exist and we need to insert it into the store's
 			// map.
