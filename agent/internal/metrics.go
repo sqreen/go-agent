@@ -5,6 +5,8 @@
 package internal
 
 import (
+	"encoding/json"
+
 	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
@@ -18,24 +20,33 @@ func (a *Agent) addUserEvent(event userEventFace) {
 		store  *metrics.Store
 		logFmt string
 	)
+	var uevent *userEvent
 	switch actual := event.(type) {
 	case *authUserEvent:
+		uevent = actual.userEvent
 		if actual.loginSuccess {
 			store = a.staticMetrics.sdkUserLoginSuccess
-			logFmt = "user event: user login success `%v`"
+			logFmt = "user event: user login success `%+v`"
 		} else {
 			store = a.staticMetrics.sdkUserLoginFailure
-			logFmt = "user event: user login failure `%v`"
+			logFmt = "user event: user login failure `%+v`"
 		}
 	case *signupUserEvent:
+		uevent = actual.userEvent
 		store = a.staticMetrics.sdkUserSignup
-		logFmt = "user event: user signup `%v`"
+		logFmt = "user event: user signup `%+v`"
 	default:
 		a.logger.Error(sqerrors.Errorf("user event: unexpected user event type `%T`", actual))
 		return
 	}
-	a.logger.Debug(logFmt, event)
-	if err := store.Add(event, 1); err != nil {
+	key, err := UserEventMetricsStoreKey(uevent)
+	if err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "user event: could not create a metrics store key"))
+		return
+	}
+	a.logger.Debugf(logFmt, key)
+
+	if err := store.Add(key, 1); err != nil {
 		sqErr := sqerrors.Wrap(err, "user event: could not update the user metrics store")
 		switch actualErr := err.(type) {
 		case metrics.MaxMetricsStoreLengthError:
@@ -68,4 +79,32 @@ func (a *Agent) addWhitelistEvent(matchedWhitelistEntry string) {
 			a.logger.Error(sqErr)
 		}
 	}
+}
+
+func UserEventMetricsStoreKey(event *userEvent) (json.Marshaler, error) {
+	var keys [][]interface{}
+	for prop, val := range event.userIdentifiers {
+		keys = append(keys, []interface{}{prop, val})
+	}
+	jsonKeys, _ := json.Marshal(keys)
+	return userMetricsKey{
+		Keys: string(jsonKeys),
+		IP:   event.ip.String(),
+	}, nil
+}
+
+type userMetricsKey struct {
+	Keys string
+	IP   string
+}
+
+func (e userMetricsKey) MarshalJSON() ([]byte, error) {
+	v := struct {
+		Keys json.RawMessage `json:"keys"`
+		IP   string          `json:"ip"`
+	}{
+		Keys: json.RawMessage(e.Keys),
+		IP:   e.IP,
+	}
+	return json.Marshal(&v)
 }

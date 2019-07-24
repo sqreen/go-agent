@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -365,9 +364,9 @@ func (c *Config) LocalRulesFile() string {
 // This is temporary until the SDK rules are implemented and required for
 // integration tests which require a shorter time.
 func (c *Config) SDKMetricsPeriod() int {
-	p, err := strconv.Atoi(sanitizeString(c.GetString(configKeySDKMetricsPeriod)))
-	if err != nil {
-		return configDefaultSDKMetricsPeriod
+	p := c.GetInt(configKeySDKMetricsPeriod)
+	if p < 0 {
+		return 60
 	}
 	return p
 }

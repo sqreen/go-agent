@@ -242,7 +242,7 @@ func (a *Agent) Serve() error {
 	}
 
 	a.logger.Infof("go agent v%s up and running", version)
-	a.logger.Infof("agent: heartbeat set to %s", heartbeat)
+	a.logger.Debugf("agent: heartbeat set to %s", heartbeat)
 	ticker := time.Tick(heartbeat)
 
 	batchSize := int(appLoginRes.Features.BatchSize)

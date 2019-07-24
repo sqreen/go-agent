@@ -97,6 +97,7 @@ func TestUsage(t *testing.T) {
 
 				require.NotPanics(t, func() {
 					require.Error(t, store.Add([]byte("no slices"), 1))
+					require.Error(t, store.Add(map[string]string{"a": "b", "c": "d"}, 21))
 					require.Error(t, store.Add(Struct2{
 						a: 33,
 						b: "string",

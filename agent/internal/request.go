@@ -5,7 +5,6 @@
 package internal
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -69,45 +68,8 @@ type authUserEvent struct {
 
 func (_ *authUserEvent) isUserEvent() {}
 
-func (e *authUserEvent) MarshalJSON() ([]byte, error) {
-	k := &userMetricKey{
-		id: e.userEvent.userIdentifiers,
-		ip: e.userEvent.ip,
-	}
-	return k.MarshalJSON()
-}
-
-type userMetricKey struct {
-	id EventUserIdentifiersMap
-	ip net.IP
-}
-
-func (k *userMetricKey) MarshalJSON() ([]byte, error) {
-	var keys [][]interface{}
-	for prop, val := range k.id {
-		keys = append(keys, []interface{}{prop, val})
-	}
-	v := struct {
-		Keys [][]interface{} `json:"keys"`
-		IP   string          `json:"ip"`
-	}{
-		Keys: keys,
-		IP:   k.ip.String(),
-	}
-	buf, err := json.Marshal(&v)
-	return buf, err
-}
-
 type signupUserEvent struct {
 	*userEvent
-}
-
-func (e *signupUserEvent) MarshalJSON() ([]byte, error) {
-	k := &userMetricKey{
-		id: e.userEvent.userIdentifiers,
-		ip: e.userEvent.ip,
-	}
-	return k.MarshalJSON()
 }
 
 func (_ *signupUserEvent) isUserEvent() {}
