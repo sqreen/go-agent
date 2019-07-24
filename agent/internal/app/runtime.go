@@ -9,6 +9,7 @@ import (
 	"debug/gosym"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -198,4 +199,15 @@ func executable(logger *plog.Logger) string {
 		return ""
 	}
 	return name
+}
+
+func VendorPrefix() string {
+	type t struct{}
+	pkg := reflect.TypeOf(t{}).PkgPath()
+	vendor := "vendor/"
+	i := strings.Index(pkg, vendor)
+	if i == -1 {
+		return ""
+	}
+	return pkg[:i+len(vendor)]
 }

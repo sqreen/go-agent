@@ -20,6 +20,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 
+	"github.com/sqreen/go-agent/agent/internal/app"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/metrics"
@@ -38,6 +39,7 @@ type Engine struct {
 	enabled       bool
 	metricsEngine *metrics.Engine
 	publicKey     *ecdsa.PublicKey
+	vendorPrefix  string
 }
 
 // Logger interface required by this package.
@@ -52,6 +54,7 @@ func NewEngine(logger Logger, metricsEngine *metrics.Engine, publicKey *ecdsa.Pu
 		logger:        logger,
 		metricsEngine: metricsEngine,
 		publicKey:     publicKey,
+		vendorPrefix:  app.VendorPrefix(),
 	}
 }
 
@@ -64,7 +67,7 @@ func (e *Engine) PackID() string {
 // them by atomically modifying the hooks, and removing what is left.
 func (e *Engine) SetRules(packID string, rules []api.Rule, errorMetricsStore *metrics.Store) {
 	// Create the net rule descriptors and replace the existing ones
-	ruleDescriptors := newHookDescriptors(e.logger, rules, e.publicKey, e.metricsEngine, errorMetricsStore)
+	ruleDescriptors := newHookDescriptors(e.logger, rules, e.publicKey, e.metricsEngine, errorMetricsStore, e.vendorPrefix)
 	e.setRules(packID, ruleDescriptors)
 }
 
@@ -100,7 +103,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.PublicKey, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) hookDescriptors {
+func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.PublicKey, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store, vendorPrefix string) hookDescriptors {
 	// Create and configure the list of callbacks according to the given rules
 	var hookDescriptors = make(hookDescriptors)
 	for i := len(rules) - 1; i >= 0; i-- {
@@ -114,10 +117,16 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 		hookpoint := r.Hookpoint
 		symbol := fmt.Sprintf("%s.%s", hookpoint.Class, hookpoint.Method)
 		hook := sqhook.Find(symbol)
-		if hook == nil {
-			logger.Debugf("rule `%s` ignored: symbol `%s` cannot be hooked", r.Name, symbol)
-			continue
+		if hook == nil && vendorPrefix != "" {
+			hook = sqhook.Find(vendorPrefix + symbol)
 		}
+		if hook == nil {
+			logger.Debugf("rule `%s` ignored: symbol `%s` could not be found", r.Name, symbol)
+			continue
+		} else {
+			logger.Debugf("rule `%s`: successfully found hook `%s`", r.Name, hook)
+		}
+
 		// Instantiate the callback
 		nextProlog := hookDescriptors.Get(hook)
 		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine, errorMetricsStore)
