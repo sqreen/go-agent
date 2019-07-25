@@ -2,6 +2,6 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package internal
-
-const version = "0.1.0-beta.6"
+// This package manages the rules by instantiating the callbacks and attaching
+// them to their corresponding hooks.
+package rule

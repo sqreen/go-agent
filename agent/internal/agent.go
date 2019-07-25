@@ -6,6 +6,9 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -16,7 +19,9 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
@@ -57,7 +62,7 @@ func Start() {
 		//   - the correctness of sub-level error handling (ie. they don't panic).
 		// Any panics from these would stop the execution of this level.
 		backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+		logger := plog.NewLogger(plog.Info, os.Stderr, 0)
 		for {
 			err := sqsafe.Call(func() error {
 				// Level 2
@@ -120,42 +125,69 @@ func Start() {
 }
 
 type Agent struct {
-	logger      *plog.Logger
-	eventMng    *eventManager
-	metricsMng  *metricsManager
-	ctx         context.Context
-	cancel      context.CancelFunc
-	isDone      chan struct{}
-	config      *config.Config
-	appInfo     *app.Info
-	client      *backend.Client
-	actors      *actor.Store
-	rulespackId string
+	logger        *plog.Logger
+	eventMng      *eventManager
+	metrics       *metrics.Engine
+	staticMetrics staticMetrics
+	ctx           context.Context
+	cancel        context.CancelFunc
+	isDone        chan struct{}
+	config        *config.Config
+	appInfo       *app.Info
+	client        *backend.Client
+	actors        *actor.Store
+	rules         *rule.Engine
+}
+
+type staticMetrics struct {
+	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, whitelistedIP, errors *metrics.Store
 }
 
 // Error channel buffer length.
 const errorChanBufferLength = 256
 
 func New(cfg *config.Config) *Agent {
-	logger := plog.NewLogger(plog.ParseLogLevel(cfg.LogLevel()), os.Stderr, errorChanBufferLength)
+	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
 
 	if cfg.Disable() {
-		logger.Info("agent disabled by configuration")
+		logger.Info("config: empty token value or explicitly disabled agent")
 		return nil
 	}
+
+	metrics := metrics.NewEngine(logger, cfg.MaxMetricsStoreLength())
+
+	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
+		return nil
+	}
+	rulesEngine := rule.NewEngine(logger, metrics, publicKey)
+
+	// TODO: remove this SDK metrics period config when the corresponding js rule
+	//  is supported
+	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
+	logger.Debugf("using sdk metrics store period of %s", sdkMetricsPeriod)
 
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Agent{
-		logger:     logger,
-		isDone:     make(chan struct{}),
-		metricsMng: newMetricsManager(ctx, logger),
-		ctx:        ctx,
-		cancel:     cancel,
-		config:     cfg,
-		appInfo:    app.NewInfo(logger),
-		client:     backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
-		actors:     actor.NewStore(logger),
+		logger:  logger,
+		isDone:  make(chan struct{}),
+		metrics: metrics,
+		staticMetrics: staticMetrics{
+			sdkUserLoginSuccess: metrics.NewStore("sdk-login-success", sdkMetricsPeriod),
+			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", sdkMetricsPeriod),
+			sdkUserSignup:       metrics.NewStore("sdk-signup", sdkMetricsPeriod),
+			whitelistedIP:       metrics.NewStore("whitelisted", sdkMetricsPeriod),
+			errors:              metrics.NewStore("errors", config.ErrorMetricsPeriod),
+		},
+		ctx:     ctx,
+		cancel:  cancel,
+		config:  cfg,
+		appInfo: app.NewInfo(logger),
+		client:  backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
+		actors:  actor.NewStore(logger),
+		rules:   rulesEngine,
 	}
 }
 
@@ -168,8 +200,7 @@ func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
 	}
 	if whitelisted {
 		a.addWhitelistEvent(matched)
-		return &WhitelistedHTTPRequestRecord{
-		}
+		return &WhitelistedHTTPRequestRecord{}
 	}
 	return &HTTPRequestRecord{
 		request:  req,
@@ -202,7 +233,7 @@ func (a *Agent) Serve() error {
 
 	// Create the command manager to process backend commands
 	commandMng := NewCommandManager(a, a.logger)
-	// Process commands that may have been received on login.
+	// Process commands that may have been received at login.
 	commandResults := commandMng.Do(appLoginRes.Commands)
 
 	heartbeat := time.Duration(appLoginRes.Features.HeartbeatDelay) * time.Second
@@ -210,10 +241,10 @@ func (a *Agent) Serve() error {
 		heartbeat = config.BackendHTTPAPIDefaultHeartbeatDelay
 	}
 
-	a.logger.Info("up and running - heartbeat set to ", heartbeat)
+	a.logger.Infof("go agent v%s up and running", version)
+	a.logger.Debugf("agent: heartbeat set to %s", heartbeat)
 	ticker := time.Tick(heartbeat)
 
-	a.rulespackId = appLoginRes.PackId
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
 		batchSize = config.MaxEventsPerHeatbeat
@@ -236,9 +267,8 @@ func (a *Agent) Serve() error {
 		case <-ticker:
 			a.logger.Debug("heartbeat")
 
-			metrics := a.metricsMng.getObservations()
 			appBeatReq := api.AppBeatRequest{
-				Metrics:        metrics,
+				Metrics:        makeAPIMetrics(a.logger, a.metrics.ReadyMetrics()),
 				CommandResults: commandResults,
 			}
 
@@ -274,9 +304,40 @@ func (a *Agent) Serve() error {
 	}
 }
 
+func makeAPIMetrics(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadyStore) []api.MetricResponse {
+	var metricsArray []api.MetricResponse
+	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
+		metricsArray = make([]api.MetricResponse, 0, len(readyMetrics))
+		for name, values := range readyMetrics {
+			observations := make(map[string]uint64, len(values.Metrics()))
+			for k, v := range values.Metrics() {
+				jsonKey, err := json.Marshal(k)
+				if err != nil {
+					logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not marshal to json key the value `%v` of type `%T`", k, k)))
+					continue
+				}
+				observations[string(jsonKey)] = v
+			}
+			if len(observations) > 0 {
+				metricsArray = append(metricsArray, api.MetricResponse{
+					Name:        name,
+					Start:       values.Start(),
+					Finish:      values.Finish(),
+					Observation: api.Struct{Value: observations},
+				})
+			}
+		}
+	}
+	return metricsArray
+}
+
 func (a *Agent) InstrumentationEnable() error {
+	if err := a.RulesReload(); err != nil {
+		return err
+	}
+	a.rules.Enable()
 	sdk.SetAgent(a)
-	a.logger.Info("instrumentation enabled")
+	a.logger.Debug("instrumentation enabled")
 	return nil
 }
 
@@ -284,8 +345,9 @@ func (a *Agent) InstrumentationEnable() error {
 // now the SDK.
 func (a *Agent) InstrumentationDisable() error {
 	sdk.SetAgent(nil)
-	a.logger.Info("instrumentation disabled")
+	a.rules.Disable()
 	err := a.actors.SetActions(nil)
+	a.logger.Debug("instrumentation disabled")
 	return err
 }
 
@@ -301,6 +363,33 @@ func (a *Agent) ActionsReload() error {
 
 func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
 	return a.actors.SetCIDRWhitelist(cidrs)
+}
+
+func (a *Agent) RulesReload() error {
+	rulespack, err := a.client.RulesPack()
+	if err != nil {
+		a.logger.Error(err)
+		return err
+	}
+
+	// Insert local rules if any
+	localRulesJSON := a.config.LocalRulesFile()
+	if localRulesJSON != "" {
+		buf, err := ioutil.ReadFile(localRulesJSON)
+		if err == nil {
+			var localRules []api.Rule
+			err = json.Unmarshal(buf, &localRules)
+			if err == nil {
+				rulespack.Rules = append(rulespack.Rules, localRules...)
+			}
+		}
+		if err != nil {
+			a.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
+		}
+	}
+
+	a.rules.SetRules(rulespack.PackID, rulespack.Rules, a.staticMetrics.errors)
+	return nil
 }
 
 func (a *Agent) GracefulStop() {
@@ -426,5 +515,5 @@ func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {
 }
 
 func (a *Agent) RulespackID() string {
-	return a.rulespackId
+	return a.rules.PackID()
 }

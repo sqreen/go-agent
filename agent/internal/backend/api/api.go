@@ -41,7 +41,6 @@ type AppLoginResponse struct {
 	Commands  []CommandRequest         `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands"`
 	Features  AppLoginResponse_Feature `protobuf:"bytes,4,opt,name=features,proto3" json:"features"`
 	PackId    string                   `protobuf:"bytes,5,opt,name=pack_id,json=packId,proto3" json:"pack_id"`
-	Rules     []Rule                   `protobuf:"bytes,6,rep,name=rules,proto3" json:"rules"`
 }
 
 type AppLoginResponse_Feature struct {
@@ -164,6 +163,59 @@ type BatchRequest_Event struct {
 }
 
 type Rule struct {
+	Name       string             `json:"name"`
+	Hookpoint  Hookpoint          `json:"hookpoint"`
+	Data       RuleData           `json:"data"`
+	Metrics    []MetricDefinition `json:"metrics"`
+	Signature  RuleSignature      `json:"signature"`
+	Conditions RuleConditions     `json:"conditions"`
+	Callbacks  RuleCallbacks      `json:"callbacks"`
+}
+
+type RuleConditions struct{}
+type RuleCallbacks struct{}
+
+type ECDSASignature struct {
+	Keys  []string `json:"keys"`
+	Value string   `json:"value"`
+	// Custom field where the signed message is reconstructed out of the list of
+	// keys
+	Message []byte `json:"-"`
+}
+
+type RuleSignature struct {
+	ECDSASignature ECDSASignature `json:"v0_9"`
+}
+
+type MetricDefinition struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Period int64  `json:"period"`
+}
+
+type Hookpoint struct {
+	Class    string `json:"klass"`
+	Method   string `json:"method"`
+	Callback string `json:"callback_class"`
+}
+
+type RuleData struct {
+	Values []RuleDataEntry `json:"values"`
+}
+
+type RuleDataEntry Struct
+
+const (
+	CustomErrorPageType = "custom_error_page"
+	RedirectionType     = "redirection"
+)
+
+type CustomErrorPageRuleDataEntry struct {
+	StatusCode int `json:"status_code"`
+}
+
+type RedirectionRuleDataEntry struct {
+	RedirectionURL string `json:"redirection_url"`
 }
 
 type Dependency struct {
@@ -371,7 +423,6 @@ type AppLoginResponseFace interface {
 	GetCommands() []CommandRequest
 	GetFeatures() AppLoginResponse_Feature
 	GetPackId() string
-	GetRules() []Rule
 }
 
 func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
@@ -381,7 +432,6 @@ func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
 	this.Commands = that.GetCommands()
 	this.Features = that.GetFeatures()
 	this.PackId = that.GetPackId()
-	this.Rules = that.GetRules()
 	return this
 }
 
@@ -771,11 +821,11 @@ func NewBlockedIPEventProperties_OutputFromFace(that BlockedIPEventProperties_Ou
 }
 
 type BlockedUserEventProperties struct {
-	ActionId string                            `json:"action_id"`
-	Output   BlockedUserEventProperties_Output `json:"output"`
+	ActionId string                           `json:"action_id"`
+	Output   BlockedUserEventPropertiesOutput `json:"output"`
 }
 
-type BlockedUserEventProperties_Output struct {
+type BlockedUserEventPropertiesOutput struct {
 	User map[string]string `json:"user"`
 }
 
@@ -788,15 +838,85 @@ func NewBlockedUserEventPropertiesFromFace(that BlockedUserEventPropertiesFace) 
 
 type BlockedUserEventPropertiesFace interface {
 	GetActionId() string
-	GetOutput() BlockedUserEventProperties_Output
+	GetOutput() BlockedUserEventPropertiesOutput
 }
 
-type BlockedUserEventProperties_OutputFace interface {
+type BlockedUserEventPropertiesOutputFace interface {
 	GetUser() map[string]string
 }
 
-func NewBlockedUserEventProperties_OutputFromFace(that BlockedUserEventProperties_OutputFace) *BlockedUserEventProperties_Output {
-	this := &BlockedUserEventProperties_Output{}
+func NewBlockedUserEventPropertiesOutputFromFace(that BlockedUserEventPropertiesOutputFace) *BlockedUserEventPropertiesOutput {
+	this := &BlockedUserEventPropertiesOutput{}
 	this.User = that.GetUser()
 	return this
+}
+
+type RedirectedIPEventProperties struct {
+	ActionId string                            `json:"action_id,omitempty"`
+	Output   RedirectedIPEventPropertiesOutput `json:"output"`
+}
+
+type RedirectedIPEventPropertiesOutput struct {
+	IpAddress string `json:"ip_address"`
+	URL       string `json:"url"`
+}
+
+func NewRedirectedIPEventPropertiesFromFace(that RedirectedIPEventPropertiesFace) *RedirectedIPEventProperties {
+	return &RedirectedIPEventProperties{
+		ActionId: that.GetActionId(),
+		Output:   that.GetOutput(),
+	}
+}
+
+type RedirectedIPEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() RedirectedIPEventPropertiesOutput
+}
+
+type RedirectedIPEventPropertiesOutputFace interface {
+	GetIpAddress() string
+	GetURL() string
+}
+
+func NewRedirectedIPEventPropertiesOutputFromFace(that RedirectedIPEventPropertiesOutputFace) *RedirectedIPEventPropertiesOutput {
+	return &RedirectedIPEventPropertiesOutput{
+		IpAddress: that.GetIpAddress(),
+		URL:       that.GetURL(),
+	}
+}
+
+type RedirectedUserEventProperties struct {
+	ActionId string                              `json:"action_id"`
+	Output   RedirectedUserEventPropertiesOutput `json:"output"`
+}
+
+type RedirectedUserEventPropertiesOutput struct {
+	User map[string]string `json:"user"`
+}
+
+func NewRedirectedUserEventPropertiesFromFace(that RedirectedUserEventPropertiesFace) *RedirectedUserEventProperties {
+	return &RedirectedUserEventProperties{
+		ActionId: that.GetActionId(),
+		Output:   that.GetOutput(),
+	}
+}
+
+type RedirectedUserEventPropertiesFace interface {
+	GetActionId() string
+	GetOutput() RedirectedUserEventPropertiesOutput
+}
+
+type RedirectedUserEventPropertiesOutputFace interface {
+	GetUser() map[string]string
+}
+
+func NewRedirectedUserEventPropertiesOutputFromFace(that RedirectedUserEventPropertiesOutputFace) *RedirectedUserEventPropertiesOutput {
+	this := &RedirectedUserEventPropertiesOutput{}
+	this.User = that.GetUser()
+	return this
+}
+
+type RulesPackResponse struct {
+	PackID string `json:"pack_id"`
+	Rules  []Rule `json:"rules"`
 }

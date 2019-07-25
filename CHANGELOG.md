@@ -1,3 +1,38 @@
+# v0.1.0-beta.6
+
+## New Features
+
+- Fully-featured playbooks with the added ability into the agent to redirect the
+  request to a given URL. (#72)
+
+- Configurable protection behaviour of the agent when blocking a request by
+  either customizing the HTTP status code that is used for the blocking HTML
+  page, or by redirecting to a given URL instead.  
+  Dashboard page: https://my.sqreen.com/application/goto/settings/global#protection-mode
+
+- HTTP response status code monitoring. (#75)  
+  Dashboard page: https://my.sqreen.com/application/goto/monitoring
+  
+- Support for browser security headers protection modules allowing to enable
+  various browser security options allowing to restrict modern browsers from
+  running into some preventable vulnerabilities:
+
+  - [Content Security Policy][csp] protection module allowing to prevent
+    cross-site scripting attacks. (#74)  
+    Dashboard page: https://my.sqreen.com/application/goto/modules/csp
+
+  - Security headers protection module allowing to protect against client-side
+    vulnerabilities in the browser. (#73)  
+    Dashboard page: https://my.sqreen.com/application/goto/modules/headers
+
+## Minor Changes
+
+- Better agent configuration logs clearly stating where does the configuration
+  come from (file in search path, enforced file or environment variables),
+  along with the possibility to display the full settings using the `debug`
+  log-level.
+
+
 # v0.1.0-beta.5
 
 ## New Features
@@ -211,5 +246,6 @@ share your impressions with us.
 - sdk: better documentation with examples.
 
 [Security Automation]: https://docs.sqreen.com/security-automation/introduction/
-[playbook]: https://docs.sqreen.com/security-automation/introduction-playbooks
-[playbooks]: https://docs.sqreen.com/security-automation/introduction-playbooks
+[playbook]: https://docs.sqreen.com/security-automation/introduction-playbooks/
+[playbooks]: https://docs.sqreen.com/security-automation/introduction-playbooks/
+[csp]: https://docs.sqreen.com/using-sqreen/automatically-set-content-security-policy/

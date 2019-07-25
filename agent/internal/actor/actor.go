@@ -207,10 +207,14 @@ func newActionStore(actions []api.ActionsPackResponse_Action) (*actionStore, err
 
 func (s *actionStore) addAction(action api.ActionsPackResponse_Action) (err error) {
 	switch action.Action {
-	case actionKind_BlockIP:
+	case actionKindBlockIP:
 		err = s.addBlockIPAction(action)
-	case actionKind_BlockUser:
+	case actionKindBlockUser:
 		err = s.addBlockUserAction(action)
+	case actionKindRedirectIP:
+		err = s.addRedirectIPAction(action)
+	case actionKindRedirectUser:
+		err = s.addRedirectUserAction(action)
 	}
 	return err
 }
@@ -229,6 +233,40 @@ func (s *actionStore) addBlockIPAction(action api.ActionsPackResponse_Action) er
 		return errors.Errorf("could not add action `%s`: empty list of CIDRs", action.ActionId)
 	}
 	return s.addCIDRList(cidrs, blockIP)
+}
+
+func (s *actionStore) addRedirectIPAction(action api.ActionsPackResponse_Action) error {
+	duration, err := float64ToDuration(action.Duration)
+	if err != nil {
+		return err
+	}
+	var redirectIP Action
+	redirectIP, err = newRedirectAction(action.ActionId, action.Parameters.Url)
+	if duration > 0 {
+		redirectIP = withDuration(redirectIP, duration)
+	}
+	cidrs := action.Parameters.IpCidr
+	if len(cidrs) == 0 {
+		return errors.Errorf("could not add action `%s`: empty list of CIDRs", action.ActionId)
+	}
+	return s.addCIDRList(cidrs, redirectIP)
+}
+
+func (s *actionStore) addRedirectUserAction(action api.ActionsPackResponse_Action) error {
+	duration, err := float64ToDuration(action.Duration)
+	if err != nil {
+		return err
+	}
+	var redirectUser Action
+	redirectUser, err = newRedirectAction(action.ActionId, action.Parameters.Url)
+	if duration > 0 {
+		redirectUser = withDuration(redirectUser, duration)
+	}
+	users := action.Parameters.Users
+	if len(users) == 0 {
+		return errors.Errorf("could not add action `%s`: empty list of users", action.ActionId)
+	}
+	return s.addUserList(users, redirectUser)
 }
 
 // Convert a float64 to a `time.Duration` by making sure it doesn't overflow.

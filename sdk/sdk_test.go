@@ -312,29 +312,6 @@ func TestDisabled(t *testing.T) {
 		req.Close()
 		sdk.GracefulStop()
 	})
-
-	t.Run("with a whitelisted request", func(t *testing.T) {
-		agent := &testlib.AgentMockup{}
-		defer agent.AssertExpectations(t)
-		sdk.SetAgent(agent)
-
-		record := whitelistedRecord{}
-		agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
-
-		req := newTestRequest()
-		sqReq := sdk.NewHTTPRequest(req)
-		require.NotNil(t, sqReq)
-		req = sqReq.Request()
-		require.NotNil(t, req)
-
-		// When getting the SDK context out of the request wrapper.
-		require.NotPanics(t, useTheSDK(t, sqReq.Record()))
-
-		// Other methods
-		sqReq.SecurityResponse()
-		sqReq.UserSecurityResponse()
-		sqReq.Close()
-	})
 }
 
 func TestEventPropertyMap(t *testing.T) {

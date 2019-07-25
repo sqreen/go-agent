@@ -5,7 +5,6 @@
 package internal
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
 )
 
@@ -53,7 +53,6 @@ type HTTPRequestEvent struct {
 
 type userEventFace interface {
 	isUserEvent()
-	metricEntry
 }
 
 type userEvent struct {
@@ -69,45 +68,8 @@ type authUserEvent struct {
 
 func (_ *authUserEvent) isUserEvent() {}
 
-func (e *authUserEvent) bucketID() (string, error) {
-	k := &userMetricKey{
-		id: e.userEvent.userIdentifiers,
-		ip: e.userEvent.ip,
-	}
-	return k.bucketID()
-}
-
-type userMetricKey struct {
-	id EventUserIdentifiersMap
-	ip net.IP
-}
-
-func (k *userMetricKey) bucketID() (string, error) {
-	var keys [][]interface{}
-	for prop, val := range k.id {
-		keys = append(keys, []interface{}{prop, val})
-	}
-	v := struct {
-		Keys [][]interface{} `json:"keys"`
-		IP   string          `json:"ip"`
-	}{
-		Keys: keys,
-		IP:   k.ip.String(),
-	}
-	buf, err := json.Marshal(&v)
-	return string(buf), err
-}
-
 type signupUserEvent struct {
 	*userEvent
-}
-
-func (e *signupUserEvent) bucketID() (string, error) {
-	k := &userMetricKey{
-		id: e.userEvent.userIdentifiers,
-		ip: e.userEvent.ip,
-	}
-	return k.bucketID()
 }
 
 func (_ *signupUserEvent) isUserEvent() {}
@@ -158,7 +120,10 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastSecurityResponseHandler = actor.NewIPActionHTTPHandler(action, ip)
+	ctx.lastSecurityResponseHandler, err = actor.NewIPActionHTTPHandler(action, ip)
+	if err != nil {
+		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for an ip security response: action `%v` - ip `%s`:", action.ActionID(), ip)))
+	}
 	return ctx.lastSecurityResponseHandler
 }
 
@@ -175,7 +140,11 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 	if !exists {
 		return nil
 	}
-	ctx.lastUserSecurityResponseHandler = actor.NewUserActionHTTPHandler(action, userID)
+	var err error
+	ctx.lastUserSecurityResponseHandler, err = actor.NewUserActionHTTPHandler(action, userID)
+	if err != nil {
+		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for a user security response: action `%v` - user `%v`:", action.ActionID(), userID)))
+	}
 	return ctx.lastUserSecurityResponseHandler
 }
 
@@ -218,6 +187,10 @@ func (ctx *HTTPRequestRecord) Close() {
 	}
 
 	ctx.agent.AddHTTPRequestRecordEvent(NewHTTPRequestRecordEvent(ctx, ctx.agent.RulespackID()))
+}
+
+func (ctx *HTTPRequestRecord) Whitelisted() bool {
+	return false
 }
 
 func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
@@ -314,6 +287,7 @@ func (WhitelistedHTTPRequestRecord) Close()                                    {
 func (WhitelistedHTTPRequestRecord) WithTimestamp(time.Time)                   {}
 func (WhitelistedHTTPRequestRecord) WithProperties(types.EventProperties)      {}
 func (WhitelistedHTTPRequestRecord) WithUserIdentifiers(map[string]string)     {}
+func (WhitelistedHTTPRequestRecord) Whitelisted() bool                         { return true }
 
 type getClientIPConfigFace interface {
 	HTTPClientIPHeader() string

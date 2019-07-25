@@ -12,6 +12,7 @@ import (
 	fuzz "github.com/google/gofuzz"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
+	"github.com/sqreen/go-agent/agent/internal"
 	"github.com/sqreen/go-agent/agent/internal/backend"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
@@ -23,14 +24,15 @@ import (
 var (
 	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
 	cfg    = config.New(logger)
-	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest)
+	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue, FuzzRule)
 )
 
 func TestClient(t *testing.T) {
 	RegisterTestingT(t)
-	g := NewGomegaWithT(t)
 
 	t.Run("AppLogin", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		token := testlib.RandString(2, 50)
 		appName := testlib.RandString(2, 50)
 
@@ -59,6 +61,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("AppBeat", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
@@ -77,6 +81,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("Batch", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
@@ -94,6 +100,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("ActionsPack", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.ActionsPack
@@ -110,7 +118,28 @@ func TestClient(t *testing.T) {
 		g.Expect(res).Should(Equal(response))
 	})
 
+	t.Run("RulesPack", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
+		statusCode := http.StatusOK
+
+		endpointCfg := &config.BackendHTTPAPIEndpoint.RulesPack
+
+		response := NewRandomRulesPackResponse()
+
+		client, server := initFakeServerSession(endpointCfg, nil, response, statusCode, nil)
+		defer server.Close()
+
+		res, err := client.RulesPack()
+		g.Expect(err).NotTo(HaveOccurred())
+		// A request has been received
+		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+		g.Expect(res).Should(Equal(response))
+	})
+
 	t.Run("AppLogout", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+
 		statusCode := http.StatusOK
 
 		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogout
@@ -282,6 +311,12 @@ func NewRandomActionsPackResponse() *api.ActionsPackResponse {
 	return pb
 }
 
+func NewRandomRulesPackResponse() *api.RulesPackResponse {
+	pb := new(api.RulesPackResponse)
+	fuzzer.Fuzz(pb)
+	return pb
+}
+
 func FuzzStruct(e *api.Struct, c fuzz.Continue) {
 	v := struct {
 		A string
@@ -304,4 +339,89 @@ func FuzzStruct(e *api.Struct, c fuzz.Continue) {
 func FuzzCommandRequest(e *api.CommandRequest, c fuzz.Continue) {
 	c.Fuzz(&e.Name)
 	c.Fuzz(&e.Uuid)
+}
+
+func FuzzRuleDataValue(e *api.RuleDataEntry, c fuzz.Continue) {
+	v := &api.CustomErrorPageRuleDataEntry{}
+	c.Fuzz(&v.StatusCode)
+	e.Value = v
+}
+
+func FuzzRule(e *api.Rule, c fuzz.Continue) {
+	c.Fuzz(e)
+	e.Signature = api.RuleSignature{ECDSASignature: api.ECDSASignature{Message: []byte(`{}`)}}
+}
+
+func TestValidateCredentialsConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		Name, Token, AppName string
+		ShouldFail           bool
+	}{
+		{
+			Name:    "valid org token strings",
+			Token:   "org_ok",
+			AppName: "ok",
+		},
+		{
+			Name:  "valid non-org",
+			Token: "ok",
+		},
+		{
+			Name:       "invalid credentials with empty strings",
+			Token:      "",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with empty token and non-empty app-name",
+			Token:      "",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with valid org token but empty app-name",
+			Token:      "org_ok",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "ko\nko",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "koko\x00\x01\x02ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "koko\tok",
+			ShouldFail: true,
+		},
+		{
+			Name:    "valid credentials with a space in app-name",
+			Token:   "org_ok",
+			AppName: "ok ok ok",
+		},
+		{
+			Name:       "invalid credentials with invalid token character",
+			Token:      "org_ok\nko",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			err := internal.ValidateCredentialsConfiguration(tc.Token, tc.AppName)
+			if tc.ShouldFail {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

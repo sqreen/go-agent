@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/app"
@@ -19,6 +20,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
 )
 
@@ -91,18 +93,13 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 			appLoginRes = nil
 			d, max := backoff.Next()
 			if max {
-				return nil, NewLoginError(errors.New("maximum number of retries reached"))
+				return nil, NewLoginError(errors.New("login: maximum number of retries reached"))
 			}
-			logger.Debugf("retrying the request in %s", d)
+			logger.Debugf("login: retrying the request in %s", d)
 			time.Sleep(d)
 		}
 	}
 }
-
-var (
-	ErrMissingAppName = errors.New("missing application name")
-	ErrMissingToken   = errors.New("missing token")
-)
 
 type InvalidCredentialsConfiguration struct {
 	error
@@ -117,16 +114,32 @@ func (e InvalidCredentialsConfiguration) Cause() error {
 }
 
 func ValidateCredentialsConfiguration(token, appName string) (err error) {
+	defer func() {
+		if err != nil {
+			err = InvalidCredentialsConfiguration{err}
+		}
+	}()
+
 	if token == "" {
-		err = ErrMissingToken
-	} else if strings.HasPrefix(token, config.BackendHTTPAPIOrganizationTokenPrefix) && appName == "" {
-		err = ErrMissingAppName
+		return sqerrors.New("missing application name")
 	}
-	if err == nil {
-		return err
+	if strings.HasPrefix(token, config.BackendHTTPAPIOrganizationTokenPrefix) && appName == "" {
+		return sqerrors.New("missing token")
 	}
 
-	return InvalidCredentialsConfiguration{err}
+	for _, r := range appName {
+		if !unicode.IsPrint(r) {
+			return sqerrors.Errorf("forbidden non-printable character `%q` in the application name `%q`", r, appName)
+		}
+	}
+
+	for _, r := range token {
+		if !unicode.IsPrint(r) {
+			return sqerrors.Errorf("forbidden non-printable character `%q` in the token `%q`", r, token)
+		}
+	}
+
+	return nil
 }
 
 // TrySendAppException is a special client function allowing to send app-level
@@ -148,10 +161,10 @@ func TrySendAppException(logger plog.DebugLogger, cfg *config.Config, exception 
 	req.Header.Add(config.BackendHTTPAPIHeaderAppName, cfg.AppName())
 	req.Header.Add("Content-Type", "application/json")
 
-	logger.Debugf("sending app exception:\n%s\n", req, (*backend.HTTPRequestStringer)(req))
+	logger.Debugf("sending app exception:\n%s\n", (*backend.HTTPRequestStringer)(req))
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
-	logger.Debugf("received app exception response:\n%s\n", res, (*backend.HTTPResponseStringer)(res))
+	logger.Debugf("received app exception response:\n%s\n", (*backend.HTTPResponseStringer)(res))
 }

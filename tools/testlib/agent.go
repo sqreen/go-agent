@@ -46,6 +46,7 @@ func NewAgentForMiddlewareTestsWithoutSecurityResponse() (*AgentMockup, *HTTPReq
 	agent := &AgentMockup{}
 	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
+	record.ExpectWhitelisted().Return(false).Once()
 	record.ExpectSecurityResponse().Return(nil).Once()
 	record.ExpectUserSecurityResponse().Return(nil).Maybe() // Some tests don't call it, such as those returning a handler error
 	record.ExpectClose().Once()
@@ -56,6 +57,7 @@ func NewAgentForMiddlewareTestsWithSecurityResponse(actionHandler http.Handler) 
 	agent := &AgentMockup{}
 	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
+	record.ExpectWhitelisted().Return(false).Once()
 	record.ExpectSecurityResponse().Return(actionHandler).Once()
 	record.ExpectClose().Once()
 	return agent, record
@@ -65,6 +67,7 @@ func NewAgentForMiddlewareTestsWithUserSecurityResponse(actionHandler http.Handl
 	agent := &AgentMockup{}
 	record := &HTTPRequestRecordMockup{}
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
+	record.ExpectWhitelisted().Return(false).Once()
 	record.ExpectSecurityResponse().Return(nil).Once()
 	record.ExpectUserSecurityResponse().Return(actionHandler)
 	record.ExpectClose().Once()
@@ -85,6 +88,14 @@ func (r *HTTPRequestRecordMockup) NewCustomEvent(event string) types.CustomEvent
 
 func (r *HTTPRequestRecordMockup) ExpectTrackEvent(event string) *mock.Call {
 	return r.On("NewCustomEvent", event)
+}
+
+func (r *HTTPRequestRecordMockup) Whitelisted() bool {
+	return r.Called().Bool(0)
+}
+
+func (r *HTTPRequestRecordMockup) ExpectWhitelisted() *mock.Call {
+	return r.On("Whitelisted")
 }
 
 func (r *HTTPRequestRecordMockup) Close() {

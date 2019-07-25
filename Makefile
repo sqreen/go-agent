@@ -19,7 +19,7 @@ protobufs := $(patsubst %.proto,%.pb.go,$(shell find agent -name '*.proto'))
 protoc/flags := -I. -Ivendor --gogo_out=google/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types:.
 test/packages/everything := ./agent/... ./sdk/...
 test/packages := $(or $(TEST_PACKAGE), $(test/packages/everything))
-test/options := $(TEST_OPTIONS)
+test/options := $(TEST_OPTIONS) -timeout 30m
 benchmark := $(or $(BENCHMARK), .)
 benchmark/results := tools/benchmark/results
 benchmark/result = $(benchmark/results)/$(git/ref/head)/$(shell date '+%Y-%m-%d-%H-%M-%S')

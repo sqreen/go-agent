@@ -106,3 +106,10 @@ func (ctx *HTTPRequestRecord) ForUser(id EventUserIdentifiersMap) *UserHTTPReque
 		id:     id,
 	}
 }
+
+func (ctx *HTTPRequestRecord) Whitelisted() bool {
+	if ctx == nil {
+		return true
+	}
+	return ctx.record.Whitelisted()
+}

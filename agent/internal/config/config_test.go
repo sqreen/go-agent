@@ -40,13 +40,6 @@ func TestUserConfig(t *testing.T) {
 			SomeValue:   testlib.RandString(2, 30),
 		},
 		{
-			Name:         "Log Level",
-			GetCfgValue:  cfg.LogLevel,
-			ConfigKey:    configKeyLogLevel,
-			DefaultValue: configDefaultLogLevel,
-			SomeValue:    testlib.RandString(2, 30),
-		},
-		{
 			Name:        "App Name",
 			GetCfgValue: cfg.AppName,
 			ConfigKey:   configKeyAppName,

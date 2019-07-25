@@ -27,6 +27,7 @@ type CommandManagerAgent interface {
 	InstrumentationDisable() error
 	ActionsReload() error
 	SetCIDRWhitelist([]string) error
+	RulesReload() error
 }
 
 func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
@@ -41,6 +42,7 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 		"instrumentation_remove": mng.InstrumentationRemove,
 		"actions_reload":         mng.ActionsReload,
 		"ips_whitelist":          mng.IPSWhitelist,
+		"rules_reload":           mng.RulesReload,
 	}
 
 	return mng
@@ -103,6 +105,10 @@ func (m *CommandManager) IPSWhitelist(args []json.RawMessage) error {
 		return err
 	}
 	return m.agent.SetCIDRWhitelist(cidrs)
+}
+
+func (m *CommandManager) RulesReload([]json.RawMessage) error {
+	return m.agent.RulesReload()
 }
 
 // commandResult converts an error to a command result API object.

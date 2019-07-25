@@ -232,10 +232,6 @@ func (this *AppLoginResponse) GetPackId() string {
 	return this.PackId
 }
 
-func (this *AppLoginResponse) GetRules() []api.Rule {
-	return this.Rules
-}
-
 type AppLoginResponse_Feature api.AppLoginResponse_Feature
 
 func (this *AppLoginResponse_Feature) GetBatchSize() uint32 {

@@ -10,6 +10,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 
@@ -33,14 +33,22 @@ const (
 	ErrorMessage_UnsupportedCommand = "command is not supported"
 )
 
+const PublicKey string = `-----BEGIN PUBLIC KEY-----
+MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQA39oWMHR8sxb9LRaM5evZ7mw03iwJ
+WNHuDeGqgPo1HmvuMfLnAyVLwaMXpGPuvbqhC1U65PG90bTJLpvNokQf0VMA5Tpi
+m+NXwl7bjqa03vO/HErLbq3zBRysrZnC4OhJOF1jazkAg0psQOea2r5HcMcPHgMK
+fnWXiKWnZX+uOWPuerE=
+-----END PUBLIC KEY-----`
+
 type HTTPAPIEndpoint struct {
 	Method, URL string
 }
 
-const (
-	// Default value of network timeouts.
-	DefaultNetworkTimeout = 5 * time.Second
-)
+// Error metrics store period.
+const ErrorMetricsPeriod = time.Minute
+
+// Default value of network timeouts.
+const DefaultNetworkTimeout = 5 * time.Second
 
 // Backend client configuration.
 var (
@@ -49,7 +57,7 @@ var (
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
-		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack HTTPAPIEndpoint
+		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack, RulesPack HTTPAPIEndpoint
 	}{
 		AppLogin:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
 		AppLogout:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
@@ -57,6 +65,7 @@ var (
 		AppException: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_sqreen_exception"},
 		Batch:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
 		ActionsPack:  HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
+		RulesPack:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/rulespack"},
 	}
 
 	// Header name of the API token.
@@ -203,12 +212,17 @@ const (
 	configKeyBackendHTTPAPIProxy      = `proxy`
 	configKeyDisable                  = `disable`
 	configKeyStripHTTPReferer         = `strip_http_referer`
+	configKeyRules                    = `rules`
+	configKeySDKMetricsPeriod         = `sdk_metrics_period`
+	configKeyMaxMetricsStoreLength    = `max_metrics_store_length`
 )
 
 // User configuration's default values.
 const (
 	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
 	configDefaultLogLevel              = `info`
+	configDefaultSDKMetricsPeriod      = 60
+	configDefaultMaxMetricsStoreLength = 100 * 1024 * 1024
 )
 
 func New(logger *plog.Logger) *Config {
@@ -217,41 +231,79 @@ func New(logger *plog.Logger) *Config {
 	manager.AutomaticEnv()
 	manager.SetConfigName(configFileBasename)
 
-	// Configuration file path options
+	// Default values of configurable parameters
+	parameters := []struct {
+		key            string
+		defaultValue   interface{}
+		secretFromChar int
+		hidden         bool
+	}{
+		{key: configKeyBackendHTTPAPIBaseURL, defaultValue: configDefaultBackendHTTPAPIBaseURL},
+		{key: configKeyLogLevel, defaultValue: configDefaultLogLevel},
+		{key: configKeyBackendHTTPAPIToken, defaultValue: "", secretFromChar: 6},
+		{key: configKeyAppName, defaultValue: ""},
+		{key: configKeyHTTPClientIPHeader, defaultValue: ""},
+		{key: configKeyHTTPClientIPHeaderFormat, defaultValue: ""},
+		{key: configKeyBackendHTTPAPIProxy, defaultValue: ""},
+		{key: configKeyDisable, defaultValue: ""},
+		{key: configKeyStripHTTPReferer, defaultValue: ""},
+		{key: configKeyRules, defaultValue: "", hidden: true},
+		{key: configKeySDKMetricsPeriod, defaultValue: configDefaultSDKMetricsPeriod, hidden: true},
+		{key: configKeyMaxMetricsStoreLength, defaultValue: configDefaultMaxMetricsStoreLength, hidden: true},
+	}
+	for _, p := range parameters {
+		manager.SetDefault(p.key, p.defaultValue)
+	}
+
+	// Configuration file settings
 	configFileEnvVar := strings.ToUpper(configEnvPrefix + "_" + configEnvKeyConfigFile)
-	if file := os.Getenv(configFileEnvVar); file != "" {
+	configFile := os.Getenv(configFileEnvVar)
+	if configFile != "" {
 		// File location enforced by the user
-		manager.SetConfigFile(file)
+		manager.SetConfigFile(configFile)
+		logger.Infof("config: configuration file enforced by the environment variable `%s` to `%s`", configFileEnvVar, configFile)
 	} else {
 		// Not enforced: add possible paths in precedence order
-
 		// 1. Current working directory path:
 		manager.AddConfigPath(`.`)
-
 		// 2. Executable path
 		exec, err := os.Executable()
 		if err != nil {
-			logger.Error(errors.Wrap(err, "could not read the executable file path"))
+			logger.Error(sqerrors.Wrap(err, "config: could not read the executable file path"))
 		} else {
 			manager.AddConfigPath(filepath.Dir(exec))
 		}
 	}
-
-	manager.SetDefault(configKeyBackendHTTPAPIBaseURL, configDefaultBackendHTTPAPIBaseURL)
-	manager.SetDefault(configKeyLogLevel, configDefaultLogLevel)
-	manager.SetDefault(configKeyAppName, "")
-	manager.SetDefault(configKeyHTTPClientIPHeader, "")
-	manager.SetDefault(configKeyHTTPClientIPHeaderFormat, "")
-	manager.SetDefault(configKeyBackendHTTPAPIProxy, "")
-	manager.SetDefault(configKeyDisable, "")
-	manager.SetDefault(configKeyStripHTTPReferer, "")
-
-	err := manager.ReadInConfig()
-	if err != nil {
-		logger.Error(sqerrors.Wrap(err, "could not read the configuration file"))
+	// Try to read a configuration file according to the previous settings
+	if readErr, fileUsed := manager.ReadInConfig(), manager.ConfigFileUsed(); readErr != nil && fileUsed != "" {
+		// Could not read despite the fact of having found a file
+		logger.Error(sqerrors.Wrap(readErr, fmt.Sprintf("config: could not read the configuration file `%s`: falling back to environment variables", fileUsed)))
+	} else if fileUsed != "" {
+		// A file was found and no error reading it
+		logger.Infof("config: reading configuration settings from file `%s`", fileUsed)
+	} else {
+		logger.Infof("config: reading configuration settings from environment variables")
 	}
 
-	return &Config{manager}
+	cfg := &Config{manager}
+	if cfg.LogLevel() == plog.Debug {
+		logger.Infof("config: setting: %s = %q", configFileEnvVar, configFile)
+		for _, p := range parameters {
+			if !p.hidden {
+				v := cfg.GetString(p.key)
+				if p.secretFromChar > 0 && len(v) > 0 {
+					secret := make([]byte, 0, len(v))
+					secret = append(secret, v[:p.secretFromChar]...)
+					for range v[p.secretFromChar:] {
+						secret = append(secret, '*')
+					}
+					v = string(secret)
+				}
+				logger.Infof("config: settings: %s = %q", p.key, v)
+			}
+		}
+	}
+	return cfg
 }
 
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
@@ -265,8 +317,8 @@ func (c *Config) BackendHTTPAPIToken() string {
 }
 
 // LogLevel returns the log level.
-func (c *Config) LogLevel() string {
-	return sanitizeString(c.GetString(configKeyLogLevel))
+func (c *Config) LogLevel() plog.LogLevel {
+	return plog.ParseLogLevel(sanitizeString(c.GetString(configKeyLogLevel)))
 }
 
 // AppName returns the app name.
@@ -300,6 +352,33 @@ func (c *Config) Disable() bool {
 func (c *Config) StripHTTPReferer() bool {
 	strip := sanitizeString(c.GetString(configKeyStripHTTPReferer))
 	return strip != ""
+}
+
+// LocalRulesFile returns a JSON file containing custom rules in an array. They
+// are added to the rules received from server.
+func (c *Config) LocalRulesFile() string {
+	return sanitizeString(c.GetString(configKeyRules))
+}
+
+// SDKMetricsPeriod returns the period to use for the SDK metric stores.
+// This is temporary until the SDK rules are implemented and required for
+// integration tests which require a shorter time.
+func (c *Config) SDKMetricsPeriod() int {
+	p := c.GetInt(configKeySDKMetricsPeriod)
+	if p < 0 {
+		return 60
+	}
+	return p
+}
+
+// MaxMetricsStoreLength returns the maximum length a metrics store should not
+// exceed. After this limit, new metrics values will be dropped.
+func (c *Config) MaxMetricsStoreLength() uint {
+	n := c.GetInt(configKeyMaxMetricsStoreLength)
+	if n < 0 {
+		n = 0
+	}
+	return uint(n)
 }
 
 func sanitizeString(s string) string {

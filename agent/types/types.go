@@ -46,6 +46,9 @@ type RequestRecord interface {
 	UserSecurityResponse() http.Handler
 	// Close needs to be called when the request is done.
 	Close()
+	// Whitelisted returns true when the request is whitelisted, false otherwise.
+	// TODO: move the sqhttp middleware into the agent to get rid of this method
+	Whitelisted() bool
 }
 
 type CustomEvent interface {
