@@ -8,12 +8,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"reflect"
 	"testing"
 
-	"github.com/sqreen/go-agent/agent/internal/rule/callback/binding-accessor"
+	bindingaccessor "github.com/sqreen/go-agent/agent/internal/binding-accessor"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/go-playground/assert.v1"
 )
 
 type contextWithMethods struct{}
@@ -200,7 +198,7 @@ func TestBindingAccessor(t *testing.T) {
 					},
 				},
 			},
-			ExpectedValue: []interface{}{33, 1, 2, "Sqreen", 1, "Two", 27, 28},
+			ExpectedValue: FlattenedResult{33, 1, 2, "Sqreen", 1, "Two", 27, 28},
 		},
 		{
 			Title:      "flat keys transformation",
@@ -225,7 +223,7 @@ func TestBindingAccessor(t *testing.T) {
 					},
 				},
 			},
-			ExpectedValue: []interface{}{"A", "B", "C", "D", "E", "One", 2, "Three"},
+			ExpectedValue: FlattenedResult{"A", "B", "C", "D", "E", "One", 2, "Three"},
 		},
 		{
 			Title:      "field value transformation",
@@ -250,7 +248,7 @@ func TestBindingAccessor(t *testing.T) {
 					},
 				},
 			},
-			ExpectedValue: []interface{}{1, 2, "Sqreen", 1, "Two", 27, 28},
+			ExpectedValue: FlattenedResult{1, 2, "Sqreen", 1, "Two", 27, 28},
 		},
 
 		//
@@ -356,18 +354,8 @@ func TestBindingAccessor(t *testing.T) {
 				return
 			}
 
-			if actual, ok := v.([]interface{}); ok {
-				// Results from flat transformations are unordered, so look for
-				// the results no matter what is the order in the array
-			gotLoop:
-				for _, got := range actual {
-					for _, expected := range tc.ExpectedValue.([]interface{}) {
-						if reflect.DeepEqual(expected, got) {
-							continue gotLoop
-						}
-					}
-					t.Fail() // got is not in the expected values
-				}
+			if flatTransResult, ok := tc.ExpectedValue.(FlattenedResult); ok {
+				requireEqualFlatResult(t, flatTransResult, v)
 			} else {
 				require.Equal(t, tc.ExpectedValue, v)
 			}
@@ -402,8 +390,6 @@ func TestBindingAccessorUsage(t *testing.T) {
 				Helper:   struct{ Query url.Values }{Query: req.URL.Query()},
 			},
 		}
-
-		type FlattenedResult []interface{}
 
 		for _, tc := range []struct {
 			Expression    string
@@ -472,17 +458,7 @@ func TestBindingAccessorUsage(t *testing.T) {
 				// cannot be compared to the expected value because the order of the map
 				// accesses is not stable
 				if flattened, ok := tc.ExpectedValue.(FlattenedResult); ok {
-					got := v.([]interface{})
-					require.Equal(t, len(flattened), len(got))
-				loop:
-					for _, f := range flattened {
-						for _, g := range got {
-							if assert.IsEqual(g, f) {
-								continue loop
-							}
-						}
-						require.Failf(t, "missing expected value `%v`", "", f)
-					}
+					requireEqualFlatResult(t, flattened, v)
 				} else {
 					require.Equal(t, tc.ExpectedValue, v)
 				}
@@ -491,3 +467,5 @@ func TestBindingAccessorUsage(t *testing.T) {
 		require.NotNil(t, req)
 	})
 }
+
+type FlattenedResult []interface{}
