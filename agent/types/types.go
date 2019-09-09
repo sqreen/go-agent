@@ -16,8 +16,8 @@ import (
 type Agent interface {
 	// NewRequestRecord returns a new request record for the given request. It
 	// should be stored into the request context to be retrieved using
-	// `sdk.FromContext()`.
-	NewRequestRecord(req *http.Request) RequestRecord
+	// `sdk.FromContext()`. The returned context should be used.
+	NewRequestRecord(req *http.Request) (RequestRecord, *http.Request)
 
 	GracefulStop()
 }

@@ -14,6 +14,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
@@ -86,12 +88,16 @@ func (f apiStackFrame) GetLineNumber() uint32 {
 }
 
 type HTTPRequestRecordEvent struct {
-	rr          *HTTPRequestRecord
+	logger      plog.ErrorLogger
+	cfg         *config.Config
+	rr          record.RequestRecordFace
 	rulespackID string
 }
 
-func NewHTTPRequestRecordEvent(rr *HTTPRequestRecord, rulespackID string) *HTTPRequestRecordEvent {
+func NewHTTPRequestRecordEvent(rr record.RequestRecordFace, rulespackID string, cfg *config.Config, logger plog.ErrorLogger) *HTTPRequestRecordEvent {
 	return &HTTPRequestRecordEvent{
+		cfg:         cfg,
+		logger:      logger,
 		rr:          rr,
 		rulespackID: rulespackID,
 	}
@@ -106,14 +112,14 @@ func (r *HTTPRequestRecordEvent) GetRulespackId() string {
 }
 
 func (r *HTTPRequestRecordEvent) GetClientIp() string {
-	return getClientIP(r.rr.request, r.rr.agent.config).String()
+	return r.rr.ClientIP().String()
 }
 
 func (r *HTTPRequestRecordEvent) GetRequest() api.RequestRecord_Request {
-	req := r.rr.request
+	req := r.rr.Request()
 
 	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := r.rr.agent.config.HTTPClientIPHeader(); extraHeader != "" {
+	if extraHeader := r.cfg.HTTPClientIPHeader(); extraHeader != "" {
 		trackedHeaders = append(trackedHeaders, extraHeader)
 	}
 	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
@@ -126,8 +132,8 @@ func (r *HTTPRequestRecordEvent) GetRequest() api.RequestRecord_Request {
 		}
 	}
 
-	remoteIP, remotePort := splitHostPort(req.RemoteAddr)
-	_, hostPort := splitHostPort(req.Host)
+	remoteIP, remotePort := record.SplitHostPort(req.RemoteAddr)
+	_, hostPort := record.SplitHostPort(req.Host)
 
 	var scheme string
 	if req.TLS != nil {
@@ -141,14 +147,14 @@ func (r *HTTPRequestRecordEvent) GetRequest() api.RequestRecord_Request {
 		uuid, err := uuid.NewRandom()
 		if err != nil {
 			// Log the error and continue.
-			r.rr.agent.logger.Error(errors.Wrap(err, "could not generate a request id "))
+			r.logger.Error(errors.Wrap(err, "could not generate a request id "))
 			requestId = ""
 		}
 		requestId = hex.EncodeToString(uuid[:])
 	}
 
 	var referer string
-	if !r.rr.agent.config.StripHTTPReferer() {
+	if !r.cfg.StripHTTPReferer() {
 		referer = req.Referer()
 	}
 
@@ -174,8 +180,8 @@ func (r *HTTPRequestRecordEvent) GetResponse() api.RequestRecord_Response {
 }
 
 func (r *HTTPRequestRecordEvent) GetObserved() api.RequestRecord_Observed {
-	events := make([]*api.RequestRecord_Observed_SDKEvent, 0, len(r.rr.events))
-	for _, event := range r.rr.events {
+	events := make([]*api.RequestRecord_Observed_SDKEvent, 0, len(r.rr.Events()))
+	for _, event := range r.rr.Events() {
 		events = append(events, api.NewRequestRecord_Observed_SDKEventFromFace(event))
 	}
 

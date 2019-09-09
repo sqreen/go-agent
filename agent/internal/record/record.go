@@ -2,9 +2,10 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package internal
+package record
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,11 +17,35 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/actor"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
+	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/sdk"
 )
 
-type HTTPRequestRecord struct {
+type Agent interface {
+	FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error)
+	FindActionByUserID(userID map[string]string) (action actor.Action, exists bool)
+	AddHTTPRequestRecord(rr *RequestRecord)
+	AddUserEvent(event UserEventFace)
+	IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error)
+	AddWhitelistEvent(matchedWhitelistEntry string)
+}
+
+type Logger interface {
+	plog.ErrorLogger
+	plog.InfoLogger
+}
+
+// RequestRecordFace is the internal request record interface.
+type RequestRecordFace interface {
+	types.RequestRecord
+	ClientIP() net.IP
+	Request() *http.Request
+	Events() []*HTTPRequestEvent
+}
+
+type RequestRecord struct {
 	// Copy of the request, safe to be asynchronously read, even after the request
 	// was terminated.
 	request      *http.Request
@@ -37,10 +62,65 @@ type HTTPRequestRecord struct {
 	// can therefore observe the same result with `UserSecurityResponse()` as in
 	// the request handler with `MatchSecurityResponse()`.
 	lastUserSecurityResponseHandler http.Handler
-	agent                           *Agent
+	agent                           Agent
+	logger                          Logger
 	shouldSend                      bool
 	// clientIP value deduced from the request headers.
 	clientIP net.IP
+}
+
+func (rr *RequestRecord) ClientIP() net.IP {
+	return rr.clientIP
+}
+
+func (rr *RequestRecord) Request() *http.Request {
+	return rr.request
+}
+
+func (rr *RequestRecord) Events() []*HTTPRequestEvent {
+	return rr.events
+}
+
+type requestRecordContextKey struct{}
+
+func NewRequestRecord(agent Agent, logger Logger, req *http.Request, cfg getClientIPConfigFace) (RequestRecordFace, *http.Request) {
+	clientIP := getClientIP(req, cfg)
+	whitelisted, matched, err := agent.IsIPWhitelisted(clientIP)
+	if err != nil {
+		logger.Error(err)
+		whitelisted = false
+	}
+	var rr RequestRecordFace
+	if whitelisted {
+		agent.AddWhitelistEvent(matched)
+		rr = WhitelistedHTTPRequestRecord{
+			clientIP: clientIP,
+			request:  req,
+		}
+	} else {
+		rr = &RequestRecord{
+			request:  req,
+			agent:    agent,
+			logger:   logger,
+			clientIP: clientIP,
+		}
+	}
+
+	// Store the internal request record into the request context too in order to
+	// get it without going through the SDK - we don't want users to be able
+	// to access the internal request record from the SDK API.
+	ctx := req.Context()
+	req = req.WithContext(context.WithValue(ctx, requestRecordContextKey{}, rr))
+	return rr, req
+}
+
+func FromContext(ctx context.Context) RequestRecordFace {
+	return ctx.Value(sdk.ContextKey{}).(RequestRecordFace)
+}
+
+func IsWhitelisted(r *http.Request) bool {
+	_, ok := FromContext(r.Context()).(WhitelistedHTTPRequestRecord)
+	return ok
 }
 
 type HTTPRequestEvent struct {
@@ -51,28 +131,28 @@ type HTTPRequestEvent struct {
 	timestamp       time.Time
 }
 
-type userEventFace interface {
+type UserEventFace interface {
 	isUserEvent()
 }
 
-type userEvent struct {
-	userIdentifiers EventUserIdentifiersMap
-	timestamp       time.Time
-	ip              net.IP
+type UserEvent struct {
+	UserIdentifiers EventUserIdentifiersMap
+	Timestamp       time.Time
+	IP              net.IP
 }
 
-type authUserEvent struct {
-	*userEvent
-	loginSuccess bool
+type AuthUserEvent struct {
+	*UserEvent
+	LoginSuccess bool
 }
 
-func (_ *authUserEvent) isUserEvent() {}
+func (_ *AuthUserEvent) isUserEvent() {}
 
-type signupUserEvent struct {
-	*userEvent
+type SignupUserEvent struct {
+	*UserEvent
 }
 
-func (_ *signupUserEvent) isUserEvent() {}
+func (_ *SignupUserEvent) isUserEvent() {}
 
 type EventPropertyMap map[string]string
 
@@ -83,7 +163,7 @@ const (
 	sdkMethodTrack    = "track"
 )
 
-func (ctx *HTTPRequestRecord) NewCustomEvent(event string) types.CustomEvent {
+func (ctx *RequestRecord) NewCustomEvent(event string) types.CustomEvent {
 	evt := &HTTPRequestEvent{
 		method:    sdkMethodTrack,
 		event:     event,
@@ -93,7 +173,7 @@ func (ctx *HTTPRequestRecord) NewCustomEvent(event string) types.CustomEvent {
 	return evt
 }
 
-func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
+func (ctx *RequestRecord) Identify(id map[string]string) {
 	ctx.identifyOnce.Do(func() {
 		evt := &HTTPRequestEvent{
 			method:          sdkMethodIdentify,
@@ -106,15 +186,15 @@ func (ctx *HTTPRequestRecord) Identify(id map[string]string) {
 	})
 }
 
-func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
+func (ctx *RequestRecord) SecurityResponse() http.Handler {
 	if ctx.lastSecurityResponseHandler != nil {
 		return ctx.lastSecurityResponseHandler
 	}
 	agent := ctx.agent
 	ip := ctx.clientIP
-	action, exists, err := agent.actors.FindIP(ip)
+	action, exists, err := agent.FindActionByIP(ip)
 	if err != nil {
-		agent.logger.Error(err)
+		ctx.logger.Error(err)
 		return nil
 	}
 	if !exists {
@@ -122,12 +202,12 @@ func (ctx *HTTPRequestRecord) SecurityResponse() http.Handler {
 	}
 	ctx.lastSecurityResponseHandler, err = actor.NewIPActionHTTPHandler(action, ip)
 	if err != nil {
-		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for an ip security response: action `%v` - ip `%s`:", action.ActionID(), ip)))
+		ctx.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for an IP security response: action `%v` - IP `%s`:", action.ActionID(), ip)))
 	}
 	return ctx.lastSecurityResponseHandler
 }
 
-func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
+func (ctx *RequestRecord) UserSecurityResponse() http.Handler {
 	userID := ctx.userID
 	if userID == nil {
 		return nil
@@ -136,80 +216,82 @@ func (ctx *HTTPRequestRecord) UserSecurityResponse() http.Handler {
 		return ctx.lastUserSecurityResponseHandler
 	}
 	agent := ctx.agent
-	action, exists := agent.actors.FindUser(userID)
+	action, exists := agent.FindActionByUserID(userID)
 	if !exists {
 		return nil
 	}
 	var err error
 	ctx.lastUserSecurityResponseHandler, err = actor.NewUserActionHTTPHandler(action, userID)
 	if err != nil {
-		agent.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for a user security response: action `%v` - user `%v`:", action.ActionID(), userID)))
+		ctx.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not create the http handler for a user security response: action `%v` - user `%v`:", action.ActionID(), userID)))
 	}
 	return ctx.lastUserSecurityResponseHandler
 }
 
-func (ctx *HTTPRequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
+func (ctx *RequestRecord) NewUserAuth(id map[string]string, loginSuccess bool) {
 	if len(id) == 0 {
-		ctx.agent.logger.Info("TrackAuth(): user id is nil or empty")
+		ctx.logger.Info("TrackAuth(): user id is nil or empty")
 		return
 	}
 
-	event := &authUserEvent{
-		loginSuccess: loginSuccess,
-		userEvent: &userEvent{
-			ip:              ctx.clientIP,
-			userIdentifiers: id,
-			timestamp:       time.Now(),
+	event := &AuthUserEvent{
+		LoginSuccess: loginSuccess,
+		UserEvent: &UserEvent{
+			IP:              ctx.clientIP,
+			UserIdentifiers: id,
+			Timestamp:       time.Now(),
 		},
 	}
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestRecord) NewUserSignup(id map[string]string) {
+func (ctx *RequestRecord) NewUserSignup(id map[string]string) {
 	if len(id) == 0 {
-		ctx.agent.logger.Info("TrackSignup(): user id is nil or empty")
+		ctx.logger.Info("TrackSignup(): user id is nil or empty")
 		return
 	}
 
-	event := &signupUserEvent{
-		userEvent: &userEvent{
-			ip:              ctx.clientIP,
-			userIdentifiers: id,
-			timestamp:       time.Now(),
+	event := &SignupUserEvent{
+		UserEvent: &UserEvent{
+			IP:              ctx.clientIP,
+			UserIdentifiers: id,
+			Timestamp:       time.Now(),
 		},
 	}
 	ctx.addUserEvent(event)
 }
 
-func (ctx *HTTPRequestRecord) Close() {
+func (ctx *RequestRecord) Close() {
 	if !ctx.shouldSend {
 		return
 	}
 
-	ctx.agent.AddHTTPRequestRecordEvent(NewHTTPRequestRecordEvent(ctx, ctx.agent.RulespackID()))
+	ctx.agent.AddHTTPRequestRecord(ctx)
 }
 
-func (ctx *HTTPRequestRecord) Whitelisted() bool {
+func (ctx *RequestRecord) Whitelisted() bool {
 	return false
 }
 
-func (ctx *HTTPRequestRecord) addSilentEvent(event *HTTPRequestEvent) {
+func (ctx *RequestRecord) addSilentEvent(event *HTTPRequestEvent) {
 	ctx.addEvent_(event, true)
 }
 
-func (ctx *HTTPRequestRecord) addEvent(event *HTTPRequestEvent) {
+func (ctx *RequestRecord) addEvent(event *HTTPRequestEvent) {
 	ctx.addEvent_(event, false)
 }
 
-func (ctx *HTTPRequestRecord) addEvent_(event *HTTPRequestEvent, silent bool) {
+func (ctx *RequestRecord) addEvent_(event *HTTPRequestEvent, silent bool) {
 	ctx.eventsLock.Lock()
 	defer ctx.eventsLock.Unlock()
 	ctx.events = append(ctx.events, event)
 	ctx.shouldSend = !silent
 }
 
-func (ctx *HTTPRequestRecord) addUserEvent(event userEventFace) {
-	ctx.agent.addUserEvent(event)
+func (ctx *RequestRecord) addUserEvent(event UserEventFace) {
+	// User events don't go through the request record event list but through
+	// aggregated metrics.
+	ctx.agent.AddUserEvent(event)
 }
 
 func (e *HTTPRequestEvent) WithTimestamp(t time.Time) {
@@ -275,19 +357,25 @@ func (e *HTTPRequestEvent) GetUserIdentifiers() *api.Struct {
 
 // WhitelistedHTTPRequestRecord is a request record whose methods do nothing in
 // order to whitelist the request.
-type WhitelistedHTTPRequestRecord struct{}
+type WhitelistedHTTPRequestRecord struct {
+	clientIP net.IP
+	request  *http.Request
+}
 
-func (WhitelistedHTTPRequestRecord) NewUserSignup(map[string]string)           {}
-func (WhitelistedHTTPRequestRecord) NewUserAuth(map[string]string, bool)       {}
-func (WhitelistedHTTPRequestRecord) Identify(map[string]string)                {}
-func (WhitelistedHTTPRequestRecord) SecurityResponse() http.Handler            { return nil }
-func (WhitelistedHTTPRequestRecord) UserSecurityResponse() http.Handler        { return nil }
-func (r WhitelistedHTTPRequestRecord) NewCustomEvent(string) types.CustomEvent { return r }
-func (WhitelistedHTTPRequestRecord) Close()                                    {}
-func (WhitelistedHTTPRequestRecord) WithTimestamp(time.Time)                   {}
-func (WhitelistedHTTPRequestRecord) WithProperties(types.EventProperties)      {}
-func (WhitelistedHTTPRequestRecord) WithUserIdentifiers(map[string]string)     {}
-func (WhitelistedHTTPRequestRecord) Whitelisted() bool                         { return true }
+func (WhitelistedHTTPRequestRecord) NewUserSignup(map[string]string)            {}
+func (WhitelistedHTTPRequestRecord) NewUserAuth(map[string]string, bool)        {}
+func (WhitelistedHTTPRequestRecord) Identify(map[string]string)                 {}
+func (WhitelistedHTTPRequestRecord) SecurityResponse() http.Handler             { return nil }
+func (WhitelistedHTTPRequestRecord) UserSecurityResponse() http.Handler         { return nil }
+func (rr WhitelistedHTTPRequestRecord) NewCustomEvent(string) types.CustomEvent { return rr }
+func (WhitelistedHTTPRequestRecord) Close()                                     {}
+func (WhitelistedHTTPRequestRecord) WithTimestamp(time.Time)                    {}
+func (WhitelistedHTTPRequestRecord) WithProperties(types.EventProperties)       {}
+func (WhitelistedHTTPRequestRecord) WithUserIdentifiers(map[string]string)      {}
+func (WhitelistedHTTPRequestRecord) Whitelisted() bool                          { return true }
+func (rr WhitelistedHTTPRequestRecord) ClientIP() net.IP                        { return rr.clientIP }
+func (rr WhitelistedHTTPRequestRecord) Request() *http.Request                  { return rr.request }
+func (WhitelistedHTTPRequestRecord) Events() []*HTTPRequestEvent                { return nil }
 
 type getClientIPConfigFace interface {
 	HTTPClientIPHeader() string
@@ -343,7 +431,7 @@ func getClientIP(req *http.Request, cfg getClientIPConfigFace) net.IP {
 		}
 	}
 
-	remoteIPStr, _ := splitHostPort(req.RemoteAddr)
+	remoteIPStr, _ := SplitHostPort(req.RemoteAddr)
 	if remoteIPStr == "" {
 		if privateIP != nil {
 			return privateIP
@@ -392,9 +480,9 @@ func isGlobal(ip net.IP) bool {
 
 func isPrivate(ip net.IP) bool {
 	var privateNetworks []*net.IPNet
-	// We cannot rely on `len(ip)` to know what type of IP address this is.
+	// We cannot rely on `len(IP)` to know what type of IP address this is.
 	// `net.ParseIP()` or `net.IPv4()` can return internal 16-byte representations
-	// of an IP address even if it is an IPv4. So the trick is to use `ip.To4()`
+	// of an IP address even if it is an IPv4. So the trick is to use `IP.To4()`
 	// which returns nil if the address in not an IPv4 address.
 	if ipv4 := ip.To4(); ipv4 != nil {
 		privateNetworks = config.IPv4PrivateNetworks
@@ -410,9 +498,9 @@ func isPrivate(ip net.IP) bool {
 	return false
 }
 
-// splitHostPort splits a network address of the form `host:port` or
+// SplitHostPort splits a network address of the form `host:port` or
 // `[host]:port` into `host` and `port`.
-func splitHostPort(addr string) (host string, port string) {
+func SplitHostPort(addr string) (host string, port string) {
 	i := strings.LastIndex(addr, "]:")
 	if i != -1 {
 		// ipv6

@@ -28,12 +28,9 @@ func GracefulStop() {
 	agent.GracefulStop()
 }
 
-type disabledAgent struct {
-}
+type disabledAgent struct{}
 
-func (_ disabledAgent) GracefulStop() {
-}
-
-func (a disabledAgent) NewRequestRecord(*http.Request) types.RequestRecord {
-	return nil
+func (_ disabledAgent) GracefulStop() {}
+func (a disabledAgent) NewRequestRecord(r *http.Request) (types.RequestRecord, *http.Request) {
+	return nil, r
 }
