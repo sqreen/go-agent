@@ -76,6 +76,12 @@ func Wrap(err error, message string) error {
 	return WithTimestamp(errors.Wrap(err, message))
 }
 
+// Wrapf annotates the given error `err` with a timestamp, a message and a stack
+// trace. The message is formatted by `fmt.Sprintf`.
+func Wrapf(err error, format string, args ...interface{}) error {
+	return Wrap(err, fmt.Sprintf(format, args...))
+}
+
 // StackTrace returns the earliest/deepest StackTrace attached to any of
 // the errors in the chain of Causes. If the error does not implement
 // Cause, the original error will be returned. If the error is nil,
