@@ -75,6 +75,12 @@ func MiddlewareWithError(next Handler) Handler {
 		r = req.Request()
 		// Wrap the response writer to monitor the http status codes.
 		w = ResponseWriter{w}
+
+		// Check the WAF
+		if err := waf(w, r); err != nil {
+			return AbortRequestError{}
+		}
+
 		// Add security headers
 		if err := addSecurityHeaders(w); err != nil {
 			return err
@@ -102,6 +108,27 @@ func MiddlewareWithError(next Handler) Handler {
 	})
 }
 
+// waf is dynamically instrumented when required in order to apply WAF
+// protection rules on the request. It blocks the request when necessary.
+func waf(w http.ResponseWriter, r *http.Request) (err error) {
+	{
+		type Epilog = func(*error)
+		type Prolog = func(*http.ResponseWriter, **http.Request) (Epilog, error)
+		prolog := wafHook.Prolog()
+		if prolog, ok := prolog.(Prolog); ok {
+			epilog, err := prolog(&w, &r)
+			if epilog != nil {
+				defer epilog(&err)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return
+}
+
 // Handler is equivalent to http.Handler but returns an error when the request
 // should no longer be handled.
 type Handler interface {
@@ -120,9 +147,7 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 // AbortRequestError is returned by handlers when some security response was
 // triggered and handled the response. The request handling should therefore
 // stop.
-type AbortRequestError struct {
-	Message string
-}
+type AbortRequestError struct{}
 
 func (AbortRequestError) Error() string {
 	return "request aborted"
@@ -156,11 +181,13 @@ func addSecurityHeaders(w http.ResponseWriter) (err error) {
 var (
 	addSecurityHeaderHook     *sqhook.Hook
 	responseWriterWriteHeader *sqhook.Hook
+	wafHook                   *sqhook.Hook
 )
 
 func init() {
 	addSecurityHeaderHook = sqhook.New(addSecurityHeaders)
 	responseWriterWriteHeader = sqhook.New(responseWriter.WriteHeader)
+	wafHook = sqhook.New(waf)
 }
 
 type ResponseWriter = responseWriter
