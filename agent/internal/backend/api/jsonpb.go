@@ -109,8 +109,28 @@ func (identify *RequestRecord_Observed_SDKEvent_Args_Identify) MarshalJSON() ([]
 	return args.MarshalJSON()
 }
 
+func (v *RuleData) UnmarshalJSON(data []byte) error {
+	var asArray struct {
+		Values []RuleDataEntry `json:"values"`
+	}
+	if err := json.Unmarshal(data, &asArray); err == nil {
+		v.Values = asArray.Values
+		return nil
+	}
+
+	var asStruct struct {
+		Values RuleDataEntry `json:"values"`
+	}
+	if err := json.Unmarshal(data, &asStruct); err != nil {
+		return err
+	}
+
+	v.Values = []RuleDataEntry{asStruct.Values}
+	return nil
+}
+
 // UnmarshalJSON parses rules data to their actual type. The actual type is
-// given by the json structure key `type`.
+// (rarely) given by the json structure key `type`.
 func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 	var discriminant struct {
 		Type string `json:"type"`
@@ -134,6 +154,8 @@ func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 		value = &CustomErrorPageRuleDataEntry{}
 	case RedirectionType:
 		value = &RedirectionRuleDataEntry{}
+	case WAFType:
+		value = &WAFRuleDataEntry{}
 	default:
 		return sqerrors.Errorf("unexpected type of rule data value `%s`", t)
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
-	"github.com/sqreen/go-agent/sdk"
 )
 
 type Agent interface {
@@ -37,12 +36,22 @@ type Logger interface {
 	plog.InfoLogger
 }
 
-// RequestRecordFace is the internal request record interface.
-type RequestRecordFace interface {
+// RequestRecordForAgentFace is the internal request record interface for the
+// agent.
+type RequestRecordForAgentFace interface {
 	types.RequestRecord
 	ClientIP() net.IP
 	Request() *http.Request
 	Events() []*HTTPRequestEvent
+	Attacks() []*AttackEvent
+}
+
+// RequestRecord is the internal request record interface.
+type RequestRecordFace interface {
+	types.RequestRecord
+	ClientIP() net.IP
+	Request() *http.Request
+	AddAttackEvent(attack *AttackEvent)
 }
 
 type RequestRecord struct {
@@ -51,6 +60,7 @@ type RequestRecord struct {
 	request      *http.Request
 	eventsLock   sync.Mutex
 	events       []*HTTPRequestEvent
+	attacks      []*AttackEvent
 	identifyOnce sync.Once
 	// User-identifiers globally associated to this request using `Identify()`
 	userID map[string]string
@@ -69,6 +79,13 @@ type RequestRecord struct {
 	clientIP net.IP
 }
 
+func (rr *RequestRecord) AddAttackEvent(attack *AttackEvent) {
+	rr.eventsLock.Lock()
+	defer rr.eventsLock.Unlock()
+	rr.attacks = append(rr.attacks, attack)
+	rr.shouldSend = true
+}
+
 func (rr *RequestRecord) ClientIP() net.IP {
 	return rr.clientIP
 }
@@ -81,7 +98,11 @@ func (rr *RequestRecord) Events() []*HTTPRequestEvent {
 	return rr.events
 }
 
-type requestRecordContextKey struct{}
+func (rr *RequestRecord) Attacks() []*AttackEvent {
+	return rr.attacks
+}
+
+type RequestRecordContextKey struct{}
 
 func NewRequestRecord(agent Agent, logger Logger, req *http.Request, cfg getClientIPConfigFace) (RequestRecordFace, *http.Request) {
 	clientIP := getClientIP(req, cfg)
@@ -110,12 +131,12 @@ func NewRequestRecord(agent Agent, logger Logger, req *http.Request, cfg getClie
 	// get it without going through the SDK - we don't want users to be able
 	// to access the internal request record from the SDK API.
 	ctx := req.Context()
-	req = req.WithContext(context.WithValue(ctx, requestRecordContextKey{}, rr))
+	req = req.WithContext(context.WithValue(ctx, RequestRecordContextKey{}, rr))
 	return rr, req
 }
 
 func FromContext(ctx context.Context) RequestRecordFace {
-	return ctx.Value(sdk.ContextKey{}).(RequestRecordFace)
+	return ctx.Value(RequestRecordContextKey{}).(RequestRecordFace)
 }
 
 func IsWhitelisted(r *http.Request) bool {
@@ -129,6 +150,14 @@ type HTTPRequestEvent struct {
 	properties      types.EventProperties
 	userIdentifiers EventUserIdentifiersMap
 	timestamp       time.Time
+}
+
+type AttackEvent struct {
+	Rule      string
+	Test      bool
+	Blocked   bool
+	Timestamp time.Time
+	Info      interface{}
 }
 
 type UserEventFace interface {
@@ -376,6 +405,7 @@ func (WhitelistedHTTPRequestRecord) Whitelisted() bool                          
 func (rr WhitelistedHTTPRequestRecord) ClientIP() net.IP                        { return rr.clientIP }
 func (rr WhitelistedHTTPRequestRecord) Request() *http.Request                  { return rr.request }
 func (WhitelistedHTTPRequestRecord) Events() []*HTTPRequestEvent                { return nil }
+func (WhitelistedHTTPRequestRecord) AddAttackEvent(*AttackEvent)                {}
 
 type getClientIPConfigFace interface {
 	HTTPClientIPHeader() string
