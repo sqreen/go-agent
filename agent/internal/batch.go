@@ -90,11 +90,11 @@ func (f apiStackFrame) GetLineNumber() uint32 {
 type HTTPRequestRecordEvent struct {
 	logger      plog.ErrorLogger
 	cfg         *config.Config
-	rr          record.RequestRecordFace
+	rr          record.RequestRecordForAgentFace
 	rulespackID string
 }
 
-func NewHTTPRequestRecordEvent(rr record.RequestRecordFace, rulespackID string, cfg *config.Config, logger plog.ErrorLogger) *HTTPRequestRecordEvent {
+func NewHTTPRequestRecordEvent(rr record.RequestRecordForAgentFace, rulespackID string, cfg *config.Config, logger plog.ErrorLogger) *HTTPRequestRecordEvent {
 	return &HTTPRequestRecordEvent{
 		cfg:         cfg,
 		logger:      logger,
@@ -185,7 +185,35 @@ func (r *HTTPRequestRecordEvent) GetObserved() api.RequestRecord_Observed {
 		events = append(events, api.NewRequestRecord_Observed_SDKEventFromFace(event))
 	}
 
-	return api.RequestRecord_Observed{
-		Sdk: events,
+	attacks := make([]*api.RequestRecord_Observed_Attack, 0, len(r.rr.Attacks()))
+	for _, event := range r.rr.Attacks() {
+		attacks = append(attacks, api.NewRequestRecord_Observed_AttackFromFace((*AttackEventAPIAdaptor)(event)))
 	}
+
+	return api.RequestRecord_Observed{
+		Sdk:     events,
+		Attacks: attacks,
+	}
+}
+
+type AttackEventAPIAdaptor record.AttackEvent
+
+func (a *AttackEventAPIAdaptor) GetRuleName() string {
+	return a.Rule
+}
+
+func (a *AttackEventAPIAdaptor) GetTest() bool {
+	return a.Test
+}
+
+func (a *AttackEventAPIAdaptor) GetInfo() interface{} {
+	return a.Info
+}
+
+func (a *AttackEventAPIAdaptor) GetTime() time.Time {
+	return a.Timestamp
+}
+
+func (a *AttackEventAPIAdaptor) GetBlock() bool {
+	return a.Blocked
 }

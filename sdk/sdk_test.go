@@ -15,6 +15,7 @@ import (
 	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/sqreen/go-agent/tools/testlib/testmock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +54,7 @@ func TestTrackEvent(t *testing.T) {
 	agent := &testlib.AgentMockup{}
 	defer agent.AssertExpectations(t)
 	sdk.SetAgent(agent)
-	record := &testlib.HTTPRequestRecordMockup{}
+	record := &testmock.RequestRecordMockup{}
 	defer record.AssertExpectations(t)
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()
 
@@ -145,7 +146,7 @@ func TestForUser(t *testing.T) {
 	agent := &testlib.AgentMockup{}
 	defer agent.AssertExpectations(t)
 	sdk.SetAgent(agent)
-	record := &testlib.HTTPRequestRecordMockup{}
+	record := &testmock.RequestRecordMockup{}
 	defer record.AssertExpectations(t)
 	req := newTestRequest()
 	agent.ExpectNewRequestRecord(mock.Anything).Return(record).Once()

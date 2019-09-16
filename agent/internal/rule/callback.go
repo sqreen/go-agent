@@ -45,8 +45,10 @@ type CallbackContext struct {
 	metricsStores       map[string]*metrics.Store
 	defaultMetricsStore *metrics.Store
 	errorMetricsStore   *metrics.Store
-	logger              Logger
 	name                string
+	test                bool
+	logger              Logger
+	plog.ErrorLogger
 }
 
 func NewCallbackContext(r *api.Rule, logger Logger, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) *CallbackContext {
@@ -70,7 +72,9 @@ func NewCallbackContext(r *api.Rule, logger Logger, metricsEngine *metrics.Engin
 		defaultMetricsStore: defaultMetricsStore,
 		errorMetricsStore:   errorMetricsStore,
 		name:                r.Name,
+		test:                r.Test,
 		logger:              logger,
+		ErrorLogger:         logger,
 	}
 }
 
@@ -104,5 +108,17 @@ func (d *CallbackContext) PushMetricsValue(key interface{}, value uint64) {
 		default:
 			d.logger.Error(sqErr)
 		}
+	}
+}
+
+// NewAttack creates a new attack based on the rule context and the given
+// argument.
+func (ctx *CallbackContext) NewAttack(blocked bool, info interface{}) *record.AttackEvent {
+	return &record.AttackEvent{
+		Rule:      ctx.name,
+		Test:      ctx.test,
+		Blocked:   blocked,
+		Timestamp: time.Now(),
+		Info:      info,
 	}
 }
