@@ -17,7 +17,7 @@ func execIndexAccess(v interface{}, index interface{}) interface{} {
 		value := lvalue.MapIndex(reflect.ValueOf(index))
 		var zero reflect.Value
 		if value == zero {
-			return reflect.Zero(lvalue.Type().Elem()).Interface()
+			return nil
 		}
 		return value.Interface()
 	case reflect.Slice:
