@@ -9,6 +9,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/json-iterator/go v1.1.5 // indirect
 	github.com/kentik/patricia v0.0.0-20190405133149-20eb46c597b3
+	github.com/kr/pretty v0.1.0 // indirect
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/labstack/gommon v0.2.8 // indirect
 	github.com/mattn/go-colorable v0.0.9 // indirect
@@ -19,13 +20,15 @@ require (
 	github.com/onsi/gomega v1.4.3
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/viper v1.3.1
-	github.com/stretchr/objx v0.1.1 // indirect
-	github.com/stretchr/testify v1.3.0
+	github.com/sqreen/go-libsqreen v0.0.0-20190916143823-df5134f55751
+	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/stretchr/testify v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4 // indirect
 	golang.org/x/net v0.0.0-20190311183353-d8887717615a
 	golang.org/x/xerrors v0.0.0-20190315151331-d61658bd2e18
 	google.golang.org/grpc v1.20.1
-	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 )
