@@ -116,10 +116,10 @@ func TestBindingAccessor(t *testing.T) {
 			ExpectedValue: 2,
 		},
 		{
-			Title:         "non-existing map key gives the element type zero value",
+			Title:         "non-existing map key gives a nil interface{} value",
 			Expression:    `#.A['i dont exist']`,
 			Context:       struct{ A map[string]uint16 }{},
-			ExpectedValue: uint16(0),
+			ExpectedValue: (interface{})(nil),
 		},
 		{
 			Title:         "method",
@@ -375,8 +375,8 @@ func TestBindingAccessorUsage(t *testing.T) {
 
 		type MyRequestWrapper struct {
 			*http.Request //Access through embedding
-			ClientIP string
-			Helper   struct {
+			ClientIP      string
+			Helper        struct {
 				Query url.Values
 			}
 		}
@@ -413,7 +413,7 @@ func TestBindingAccessorUsage(t *testing.T) {
 			},
 			{
 				Expression:    "#.Request.Header['I-Dont-Exist']",
-				ExpectedValue: []string(nil),
+				ExpectedValue: (interface{})(nil),
 			},
 			{
 				Expression:    "#.Request.ClientIP",
