@@ -14,7 +14,7 @@ import (
 // NewAddSecurityHeadersCallbacks returns the native prolog and epilog callbacks
 // to be hooked to `sqhttp.MiddlewareWithError` in order to add HTTP headers
 // provided by the rule's data.
-func NewAddSecurityHeadersCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
+func NewAddSecurityHeadersCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {
 	var headers http.Header
 	if cfg := rule.Config(); cfg != nil {
 		cfg, ok := rule.Config().([]interface{})

@@ -22,8 +22,8 @@ func TestNewMonitorHTTPStatusCodeCallbacks(t *testing.T) {
 		EpilogType:    reflect.TypeOf(callback.MonitorHTTPStatusCodeEpilogCallbackType(nil)),
 		ValidTestCases: []ValidTestCase{
 			{
-				Rule: &FakeRule{},
-				TestCallbacks: func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback) {
+				Rule: &RuleContextMockup{},
+				TestCallback: func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
 					actualProlog, ok := prolog.(callback.MonitorHTTPStatusCodePrologCallbackType)
 					require.True(t, ok)
 					code := rand.Int()

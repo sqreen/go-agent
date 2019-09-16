@@ -33,14 +33,14 @@ func TestNewAddSecurityHeadersCallbacks(t *testing.T) {
 		},
 		ValidTestCases: []ValidTestCase{
 			{
-				Rule: &FakeRule{
+				Rule: &RuleContextMockup{
 					config: []interface{}{
 						[]string{"k", "v"},
 						[]string{"one", "two"},
 						[]string{"canonical-header", "the value"},
 					},
 				},
-				TestCallbacks: func(t *testing.T, _ *FakeRule, prolog sqhook.PrologCallback) {
+				TestCallback: func(t *testing.T, _ *RuleContextMockup, prolog sqhook.PrologCallback) {
 					expectedHeaders := http.Header{
 						"K":                []string{"v"},
 						"One":              []string{"two"},

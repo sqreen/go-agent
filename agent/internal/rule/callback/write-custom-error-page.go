@@ -16,7 +16,7 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
+func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {
 	var statusCode = 500
 	if cfg := rule.Config(); cfg != nil {
 		cfg, ok := cfg.(*api.CustomErrorPageRuleDataEntry)
