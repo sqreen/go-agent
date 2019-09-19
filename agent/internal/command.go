@@ -18,12 +18,12 @@ type CommandManager struct {
 
 // CommandHandler is a function pointer type to a command handler.
 // Command arguments need to be validated by the handler itself.
-type CommandHandler func(args []json.RawMessage) error
+type CommandHandler func(args []json.RawMessage) (output string, err error)
 
 // CommandManagerAgent defines the expected agent SDK and allows to easily
 // implement functional tests by mocking it up.
 type CommandManagerAgent interface {
-	InstrumentationEnable() error
+	InstrumentationEnable() (rulespackID string, err error)
 	InstrumentationDisable() error
 	ActionsReload() error
 	SetCIDRWhitelist([]string) error
@@ -61,8 +61,8 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 		if exists {
 			if lastUuid := done[cmd.Name]; lastUuid == "" {
 				// This command has not been done yet in this list of commands
-				err := handler(cmd.Params)
-				result = commandResult(m.logger, err)
+				output, err := handler(cmd.Params)
+				result = commandResult(m.logger, output, err)
 				// Set it as done by storing the uuid that performed it
 				done[cmd.Name] = cmd.Uuid
 			} else {
@@ -83,36 +83,36 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 	return results
 }
 
-func (m *CommandManager) InstrumentationEnable([]json.RawMessage) error {
+func (m *CommandManager) InstrumentationEnable([]json.RawMessage) (string, error) {
 	return m.agent.InstrumentationEnable()
 }
 
-func (m *CommandManager) InstrumentationRemove([]json.RawMessage) error {
-	return m.agent.InstrumentationDisable()
+func (m *CommandManager) InstrumentationRemove([]json.RawMessage) (string, error) {
+	return "", m.agent.InstrumentationDisable()
 }
 
-func (m *CommandManager) ActionsReload([]json.RawMessage) error {
-	return m.agent.ActionsReload()
+func (m *CommandManager) ActionsReload([]json.RawMessage) (string, error) {
+	return "", m.agent.ActionsReload()
 }
 
-func (m *CommandManager) IPSWhitelist(args []json.RawMessage) error {
+func (m *CommandManager) IPSWhitelist(args []json.RawMessage) (string, error) {
 	if argc := len(args); argc != 1 {
-		return fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
+		return "", fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
 	}
 	var cidrs []string
 	arg0 := args[0]
 	if err := json.Unmarshal(arg0, &cidrs); err != nil {
-		return err
+		return "", err
 	}
-	return m.agent.SetCIDRWhitelist(cidrs)
+	return "", m.agent.SetCIDRWhitelist(cidrs)
 }
 
-func (m *CommandManager) RulesReload([]json.RawMessage) error {
-	return m.agent.RulesReload()
+func (m *CommandManager) RulesReload([]json.RawMessage) (string, error) {
+	return "", m.agent.RulesReload()
 }
 
 // commandResult converts an error to a command result API object.
-func commandResult(logger *plog.Logger, err error) api.CommandResult {
+func commandResult(logger *plog.Logger, output string, err error) api.CommandResult {
 	if err != nil {
 		logger.Error(errors.Wrap(err, "command error"))
 		return api.CommandResult{
@@ -121,6 +121,7 @@ func commandResult(logger *plog.Logger, err error) api.CommandResult {
 		}
 	}
 	return api.CommandResult{
+		Output: output,
 		Status: true,
 	}
 }

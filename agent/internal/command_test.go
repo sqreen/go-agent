@@ -48,29 +48,35 @@ func TestCommandManager(t *testing.T) {
 	})
 
 	testCases := []struct {
-		Command           string
-		AgentExpectedCall func(args ...interface{}) *mock.Call
-		ExpectedArgs      []interface{}
-		Args              []json.RawMessage
-		BadArgs           [][]json.RawMessage
+		Command                string
+		ExpectedAgentCall      func(args ...interface{}) *mock.Call
+		ExpectedArgs           []interface{}
+		Args                   []json.RawMessage
+		BadArgs                [][]json.RawMessage
+		AgentCallReturnNoError []interface{}
+		AgentCallReturnError   []interface{}
+		ExpectedOutput         string
 	}{
 		{
-			Command:           "instrumentation_enable",
-			AgentExpectedCall: agent.ExpectInstrumentationEnable,
+			Command:                "instrumentation_enable",
+			ExpectedAgentCall:      agent.ExpectInstrumentationEnable,
+			AgentCallReturnNoError: []interface{}{"my pack id", nil},
+			AgentCallReturnError:   []interface{}{"", nil},
+			ExpectedOutput:         "my pack id",
 		},
 		{
 			Command:           "instrumentation_remove",
-			AgentExpectedCall: agent.ExpectInstrumentationDisable,
+			ExpectedAgentCall: agent.ExpectInstrumentationDisable,
 		},
 		{
 			Command:           "actions_reload",
-			AgentExpectedCall: agent.ExpectActionsReload,
+			ExpectedAgentCall: agent.ExpectActionsReload,
 		},
 		{
 			Command:           "ips_whitelist",
 			Args:              []json.RawMessage{json.RawMessage(`["a","b","c"]`)},
 			ExpectedArgs:      []interface{}{[]string{"a", "b", "c"}},
-			AgentExpectedCall: agent.ExpectSetCIDRWhitelist,
+			ExpectedAgentCall: agent.ExpectSetCIDRWhitelist,
 			BadArgs: [][]json.RawMessage{
 				{json.RawMessage(`"wrong type"`)},
 				{json.RawMessage(`[1,2,3]`)},
@@ -80,7 +86,7 @@ func TestCommandManager(t *testing.T) {
 		},
 		{
 			Command:           "rules_reload",
-			AgentExpectedCall: agent.ExpectRulesReload,
+			ExpectedAgentCall: agent.ExpectRulesReload,
 		},
 	}
 
@@ -89,7 +95,11 @@ func TestCommandManager(t *testing.T) {
 			t.Run("without errors", func(t *testing.T) {
 				agent.Reset()
 
-				tc.AgentExpectedCall(tc.ExpectedArgs...).Return(nil).Once()
+				ret := tc.AgentCallReturnNoError
+				if len(ret) == 0 {
+					ret = []interface{}{nil}
+				}
+				tc.ExpectedAgentCall(tc.ExpectedArgs...).Return(ret...).Once()
 				uuid := testlib.RandString(1, 126)
 				results := mng.Do([]api.CommandRequest{
 					{
@@ -103,7 +113,7 @@ func TestCommandManager(t *testing.T) {
 					map[string]api.CommandResult{
 						uuid: api.CommandResult{
 							Status: true,
-							Output: "",
+							Output: tc.ExpectedOutput,
 						},
 					},
 					results,
@@ -115,7 +125,14 @@ func TestCommandManager(t *testing.T) {
 				agent.Reset()
 
 				errorMsg := testlib.RandString(1, 126)
-				tc.AgentExpectedCall(tc.ExpectedArgs...).Return(errors.New(errorMsg)).Once()
+				expectedErr := errors.New(errorMsg)
+				ret := tc.AgentCallReturnError
+				if len(ret) == 0 {
+					ret = []interface{}{expectedErr}
+				} else {
+					ret[1] = expectedErr
+				}
+				tc.ExpectedAgentCall(tc.ExpectedArgs...).Return(ret...).Once()
 				uuid := testlib.RandString(1, 126)
 				results := mng.Do([]api.CommandRequest{
 					{
@@ -176,14 +193,18 @@ func TestCommandManager(t *testing.T) {
 
 			expectedResults[uuid] = api.CommandResult{
 				Status: true,
-				Output: "",
+				Output: tc.ExpectedOutput,
 			}
 
-			tc.AgentExpectedCall(tc.ExpectedArgs...).Return(nil).Once()
+			ret := tc.AgentCallReturnNoError
+			if len(ret) == 0 {
+				ret = []interface{}{nil}
+			}
+			tc.ExpectedAgentCall(tc.ExpectedArgs...).Return(ret...).Once()
 		}
 
 		// Also include wrong commands
-		for n := 0; n <= int(testlib.RandUint32(1)); n++ {
+		for n := 0; n <= int(testlib.RandUint32(1))%5; n++ {
 			uuid := testlib.RandString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
@@ -229,15 +250,19 @@ func TestCommandManager(t *testing.T) {
 
 			expectedResults[uuid] = api.CommandResult{
 				Status: true,
-				Output: "",
+				Output: tc.ExpectedOutput,
 			}
 
 			expectedResults[uuid2] = api.CommandResult{
 				Status: true,
-				Output: "",
+				Output: tc.ExpectedOutput,
 			}
 
-			tc.AgentExpectedCall(tc.ExpectedArgs...).Return(nil).Once() // Checks command are performed just once
+			ret := tc.AgentCallReturnNoError
+			if len(ret) == 0 {
+				ret = []interface{}{nil}
+			}
+			tc.ExpectedAgentCall(tc.ExpectedArgs...).Return(ret...).Once() // Checks command are performed just once
 		}
 
 		// Also include wrong commands
@@ -269,9 +294,9 @@ func (a *agentMockup) Reset() {
 	a.Mock = mock.Mock{}
 }
 
-func (a *agentMockup) InstrumentationEnable() error {
+func (a *agentMockup) InstrumentationEnable() (string, error) {
 	ret := a.Called()
-	return ret.Error(0)
+	return ret.String(0), ret.Error(1)
 }
 
 func (a *agentMockup) InstrumentationDisable() error {

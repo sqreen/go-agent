@@ -332,14 +332,14 @@ func makeAPIMetrics(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.
 	return metricsArray
 }
 
-func (a *Agent) InstrumentationEnable() error {
+func (a *Agent) InstrumentationEnable() (string, error) {
 	if err := a.RulesReload(); err != nil {
-		return err
+		return "", err
 	}
 	a.rules.Enable()
 	sdk.SetAgent(a)
 	a.logger.Debug("instrumentation enabled")
-	return nil
+	return a.RulespackID(), nil
 }
 
 // InstrumentationDisable disables the agent instrumentation, which includes for
