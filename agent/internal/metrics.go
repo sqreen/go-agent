@@ -8,10 +8,11 @@ import (
 	"encoding/json"
 
 	"github.com/sqreen/go-agent/agent/internal/metrics"
+	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
-func (a *Agent) addUserEvent(event userEventFace) {
+func (a *Agent) AddUserEvent(event record.UserEventFace) {
 	if a.config.Disable() || a.metrics == nil {
 		// Disabled or not yet initialized agent
 		return
@@ -20,19 +21,19 @@ func (a *Agent) addUserEvent(event userEventFace) {
 		store  *metrics.Store
 		logFmt string
 	)
-	var uevent *userEvent
+	var uevent *record.UserEvent
 	switch actual := event.(type) {
-	case *authUserEvent:
-		uevent = actual.userEvent
-		if actual.loginSuccess {
+	case *record.AuthUserEvent:
+		uevent = actual.UserEvent
+		if actual.LoginSuccess {
 			store = a.staticMetrics.sdkUserLoginSuccess
 			logFmt = "user event: user login success `%+v`"
 		} else {
 			store = a.staticMetrics.sdkUserLoginFailure
 			logFmt = "user event: user login failure `%+v`"
 		}
-	case *signupUserEvent:
-		uevent = actual.userEvent
+	case *record.SignupUserEvent:
+		uevent = actual.UserEvent
 		store = a.staticMetrics.sdkUserSignup
 		logFmt = "user event: user signup `%+v`"
 	default:
@@ -60,7 +61,7 @@ func (a *Agent) addUserEvent(event userEventFace) {
 	}
 }
 
-func (a *Agent) addWhitelistEvent(matchedWhitelistEntry string) {
+func (a *Agent) AddWhitelistEvent(matchedWhitelistEntry string) {
 	if a.config.Disable() || a.metrics == nil {
 		// Agent is disabled or not yet initialized
 		return
@@ -81,15 +82,15 @@ func (a *Agent) addWhitelistEvent(matchedWhitelistEntry string) {
 	}
 }
 
-func UserEventMetricsStoreKey(event *userEvent) (json.Marshaler, error) {
+func UserEventMetricsStoreKey(event *record.UserEvent) (json.Marshaler, error) {
 	var keys [][]interface{}
-	for prop, val := range event.userIdentifiers {
+	for prop, val := range event.UserIdentifiers {
 		keys = append(keys, []interface{}{prop, val})
 	}
 	jsonKeys, _ := json.Marshal(keys)
 	return userMetricsKey{
 		Keys: string(jsonKeys),
-		IP:   event.ip.String(),
+		IP:   event.IP.String(),
 	}, nil
 }
 

@@ -72,30 +72,44 @@ func (e *Engine) SetRules(packID string, rules []api.Rule, errorMetricsStore *me
 }
 
 func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
-	for hook, prolog := range descriptors {
+	// Firstly update already enabled hookpoints with their new callbacks in order
+	// to avoid having a blank without any callback. This case happens when a rule
+	// is updated.
+	disabledDescriptors := e.hooks
+	for hook, descr := range descriptors {
 		if e.enabled {
-			// TODO: chain multiple callbacks per hookpoint using a callback of callbacks
-			//       Attach the callback to the hook
-			err := hook.Attach(prolog)
+			// Attach the callback to the hook, possibly overwriting the previous one.
+			err := hook.Attach(descr.Prolog())
 			if err != nil {
 				e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
 				continue
 			}
 		}
-		// Remove from the previous rules pack the entries that were redefined in
-		// this one.
-		delete(e.hooks, hook)
+
+		// Now close the previously attached callback and then remove it from the
+		// set of previous descriptors as it should now only contain disabled hook
+		// points from previous rules that are no longer present.
+		if prevDescr, exists := disabledDescriptors[hook]; exists {
+			delete(disabledDescriptors, hook)
+			if err := prevDescr.Close(); err != nil {
+				e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: error while closing the callback of hook `%v`", hook)))
+			}
+		}
 	}
 
-	// Disable previously enabled rules that were not replaced by new ones.
-	for hook := range e.hooks {
+	// Close the previous descriptors that are now disabled.
+	for hook, descr := range disabledDescriptors {
 		err := hook.Attach(nil)
 		if err != nil {
 			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
 			continue
 		}
+		if err := descr.Close(); err != nil {
+			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: error while closing the callback of hook `%v`", hook)))
+		}
 	}
-	// Save the rules pack ID and the list of enabled hooks
+
+	// Save the rules pack ID and the new set of enabled hooks
 	e.packID = packID
 	e.hooks = descriptors
 }
@@ -128,9 +142,13 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 		}
 
 		// Instantiate the callback
-		nextProlog := hookDescriptors.Get(hook)
+		descr := hookDescriptors.Get(hook)
+		var nextProlog sqhook.PrologCallback
+		if descr != nil {
+			nextProlog = descr.Prolog()
+		}
 		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine, errorMetricsStore)
-		prolog, err := NewCallbacks(hookpoint.Callback, ruleDescriptor, nextProlog)
+		prolog, err := NewCallback(hookpoint.Callback, ruleDescriptor, nextProlog)
 		if err != nil {
 			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not instantiate the callbacks", r.Name)))
 			continue
@@ -148,10 +166,10 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 
 // Enable the hooks of the ongoing configured rules.
 func (e *Engine) Enable() {
-	for hook, prolog := range e.hooks {
-		err := hook.Attach(prolog)
+	for hook, descr := range e.hooks {
+		err := hook.Attach(descr.Prolog())
 		if err != nil {
-			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks `%v` to hook `%v`", prolog, hook)))
+			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callback `%v` to hook `%v`", descr.Prolog(), hook)))
 		}
 	}
 	e.enabled = true
@@ -168,12 +186,57 @@ func (e *Engine) Disable() {
 	e.enabled = false
 }
 
-type hookDescriptors map[*sqhook.Hook]sqhook.PrologCallback
+type hookDescriptors map[*sqhook.Hook]CallbackObject
 
-func (m hookDescriptors) Set(hook *sqhook.Hook, prolog sqhook.PrologCallback) {
-	m[hook] = prolog
+type noopCloserCallbackObject struct {
+	prolog sqhook.PrologCallback
 }
 
-func (m hookDescriptors) Get(hook *sqhook.Hook) sqhook.PrologCallback {
+func (cbo noopCloserCallbackObject) Prolog() sqhook.PrologCallback {
+	return cbo.prolog
+}
+
+func (cbo noopCloserCallbackObject) Close() error {
+	return nil
+}
+
+// chainedCallbackObject is the set of callbacks attached to a hookpoint.
+// Callbacks already have a reference to the next callback, and it is their
+// responsibility to call it. But closing them is done agent-side using this
+// chain.
+// FIXME: better design to simplify and unify this
+type chainedCallbackObject struct {
+	current, next CallbackObject
+}
+
+func (c *chainedCallbackObject) Prolog() sqhook.PrologCallback {
+	return c.current.Prolog()
+}
+
+func (c *chainedCallbackObject) Close() error {
+	err1 := c.current.Close()
+	var err2 error
+	if c.next != nil {
+		err2 = c.next.Close()
+	}
+	// FIXME: create a "error set" error type
+	if err1 != nil {
+		return err1
+	}
+	return err2
+}
+
+func (m hookDescriptors) Set(hook *sqhook.Hook, cb interface{}) {
+	var callback CallbackObject
+	if cbo, ok := cb.(CallbackObject); ok {
+		callback = cbo
+	} else {
+		callback = noopCloserCallbackObject{cb}
+	}
+	current := m[hook]
+	m[hook] = &chainedCallbackObject{current: callback, next: current}
+}
+
+func (m hookDescriptors) Get(hook *sqhook.Hook) CallbackObject {
 	return m[hook]
 }

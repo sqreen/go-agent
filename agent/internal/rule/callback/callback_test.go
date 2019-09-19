@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
 	"github.com/stretchr/testify/mock"
@@ -23,15 +24,16 @@ type TestConfig struct {
 }
 
 type ValidTestCase struct {
-	Rule          *FakeRule
-	TestCallbacks func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback)
+	Rule                       *RuleContextMockup
+	TestCallback               func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback)
+	ExpectAbortedCallbackChain bool
 }
 
 func RunCallbackTest(t *testing.T, config TestConfig) {
 	for _, data := range config.InvalidTestCases {
 		data := data
 		t.Run("with incorrect data", func(t *testing.T) {
-			prolog, err := config.CallbacksCtor(&FakeRule{config: data}, nil)
+			prolog, err := config.CallbacksCtor(&RuleContextMockup{config: data}, nil)
 			require.Error(t, err)
 			require.Nil(t, prolog)
 		})
@@ -44,8 +46,12 @@ func RunCallbackTest(t *testing.T, config TestConfig) {
 				// Instantiate the callback with the given correct rule data
 				prolog, err := config.CallbacksCtor(tc.Rule, nil)
 				require.NoError(t, err)
+				if actual, ok := prolog.(rule.CallbackObject); ok {
+					prolog = actual.Prolog()
+					defer actual.Close()
+				}
 				checkCallbacksValues(t, config, prolog)
-				tc.TestCallbacks(t, tc.Rule, prolog)
+				tc.TestCallback(t, tc.Rule, prolog)
 			})
 
 			t.Run("with next callback", func(t *testing.T) {
@@ -67,10 +73,22 @@ func RunCallbackTest(t *testing.T, config TestConfig) {
 
 					prolog, err := config.CallbacksCtor(tc.Rule, nextProlog)
 					require.NoError(t, err)
+					if actual, ok := prolog.(rule.CallbackObject); ok {
+						prolog = actual.Prolog()
+						defer actual.Close()
+					}
+
 					checkCallbacksValues(t, config, prolog)
 					require.NotNil(t, prolog)
-					tc.TestCallbacks(t, tc.Rule, prolog)
-					require.True(t, called)
+					tc.TestCallback(t, tc.Rule, prolog)
+
+					// Check the next prolog call when expected, ie. when the callback
+					// did not abort.
+					if tc.ExpectAbortedCallbackChain {
+						require.False(t, called)
+					} else {
+						require.True(t, called)
+					}
 				})
 
 				t.Run("with correct next epilog", func(t *testing.T) {
@@ -90,10 +108,23 @@ func RunCallbackTest(t *testing.T, config TestConfig) {
 
 					prolog, err := config.CallbacksCtor(tc.Rule, nextProlog)
 					require.NoError(t, err)
+					if actual, ok := prolog.(rule.CallbackObject); ok {
+						prolog = actual.Prolog()
+						defer actual.Close()
+					}
+
 					checkCallbacksValues(t, config, prolog)
-					tc.TestCallbacks(t, tc.Rule, prolog)
-					require.True(t, calledProlog)
-					require.True(t, calledEpilog)
+					tc.TestCallback(t, tc.Rule, prolog)
+
+					// Check the next prolog call when expected, ie. when the callback
+					// did not abort.
+					if tc.ExpectAbortedCallbackChain {
+						require.False(t, calledProlog)
+						require.False(t, calledEpilog)
+					} else {
+						require.True(t, calledProlog)
+						require.True(t, calledEpilog)
+					}
 				})
 			})
 		})
@@ -106,15 +137,34 @@ func checkCallbacksValues(t *testing.T, config TestConfig, prolog sqhook.PrologC
 	}
 }
 
-type FakeRule struct {
+type RuleContextMockup struct {
 	config interface{}
 	mock.Mock
 }
 
-func (r *FakeRule) PushMetricsValue(key interface{}, value uint64) {
+func (m *RuleContextMockup) BlockingMode() bool {
+	return m.Called().Bool(0)
+}
+
+func (m *RuleContextMockup) ExpectBlockingMode() *mock.Call {
+	return m.On("BlockingMode")
+}
+
+func (mockup *RuleContextMockup) Error(err error) {
+}
+
+func (r *RuleContextMockup) PushMetricsValue(key interface{}, value uint64) {
 	r.Called(key, value)
 }
 
-func (r *FakeRule) Config() interface{} {
+func (r *RuleContextMockup) Config() interface{} {
 	return r.config
+}
+
+func (r *RuleContextMockup) NewAttack(blocked bool, info interface{}) *record.AttackEvent {
+	return r.Called(blocked, info).Get(0).(*record.AttackEvent)
+}
+
+func (r *RuleContextMockup) ExpectNewAttack(blocked bool, info interface{}) *mock.Call {
+	return r.On("NewAttack", blocked, info)
 }

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
@@ -139,6 +141,18 @@ type Agent struct {
 	rules         *rule.Engine
 }
 
+func (a *Agent) FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error) {
+	return a.actors.FindIP(ip)
+}
+
+func (a *Agent) FindActionByUserID(userID map[string]string) (action actor.Action, exists bool) {
+	return a.actors.FindUser(userID)
+}
+
+func (a *Agent) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
+	return a.actors.IsIPWhitelisted(ip)
+}
+
 type staticMetrics struct {
 	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, whitelistedIP, errors *metrics.Store
 }
@@ -191,22 +205,9 @@ func New(cfg *config.Config) *Agent {
 	}
 }
 
-func (a *Agent) NewRequestRecord(req *http.Request) types.RequestRecord {
-	clientIP := getClientIP(req, a.config)
-	whitelisted, matched, err := a.actors.IsIPWhitelisted(clientIP)
-	if err != nil {
-		a.logger.Error(err)
-		whitelisted = false
-	}
-	if whitelisted {
-		a.addWhitelistEvent(matched)
-		return &WhitelistedHTTPRequestRecord{}
-	}
-	return &HTTPRequestRecord{
-		request:  req,
-		agent:    a,
-		clientIP: clientIP,
-	}
+func (a *Agent) NewRequestRecord(req *http.Request) (types.RequestRecord, *http.Request) {
+	rr, req := record.NewRequestRecord(a, a.logger, req, a.config)
+	return rr, req
 }
 
 func (a *Agent) Serve() error {
@@ -498,12 +499,12 @@ func (m *eventManager) send(client *backend.Client, batch []Event) {
 	}
 }
 
-func (a *Agent) AddHTTPRequestRecordEvent(e *HTTPRequestRecordEvent) {
+func (a *Agent) AddHTTPRequestRecord(rr *record.RequestRecord) {
 	if a.config.Disable() || a.eventMng == nil {
 		// Disabled or not yet initialized agent
 		return
 	}
-	a.eventMng.add(e)
+	a.eventMng.add(NewHTTPRequestRecordEvent(rr, a.RulespackID(), a.config, a.logger))
 }
 
 func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {

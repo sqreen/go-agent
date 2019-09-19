@@ -17,7 +17,7 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and headers in order to perform an HTTP
 // redirection to the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
+func NewWriteHTTPRedirectionCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {
 	var redirectionURL string
 	if cfg := rule.Config(); cfg != nil {
 		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)
