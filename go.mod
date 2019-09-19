@@ -22,7 +22,7 @@ require (
 	github.com/onsi/gomega v1.4.3
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/viper v1.3.1
-	github.com/sqreen/go-libsqreen v0.0.0-20190916143823-df5134f55751
+	github.com/sqreen/go-libsqreen v0.2.0
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
