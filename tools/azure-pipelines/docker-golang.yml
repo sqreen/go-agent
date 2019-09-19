@@ -1,0 +1,25 @@
+parameters:
+  name: ''
+  vmImage: ''
+  go: [ '1.13', '1.12', '1.11' ]
+  targets:
+    GOARCH: [ amd64 ]
+
+jobs:
+  - job: ${{ parameters.name }}
+    pool:
+      vmImage: ${{ parameters.vmImage }}
+    strategy:
+      matrix:
+        ${{ each go in parameters.go }}:
+          ${{ each goarch in parameters.targets.GOARCH }}:
+            ${{ format('go{0}_{1}', go, goarch) }}:
+              containerImage: golang:${{ go }}
+              GOARCH: ${{ goarch }}
+    container:
+      image: $(containerImage)
+      env:
+        GOARCH: $(GOARCH)
+    steps:
+      - script: go env
+      - script: go test -v -x ./...
