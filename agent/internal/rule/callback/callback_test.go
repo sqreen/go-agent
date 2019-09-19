@@ -142,6 +142,14 @@ type RuleContextMockup struct {
 	mock.Mock
 }
 
+func (m *RuleContextMockup) BlockingMode() bool {
+	return m.Called().Bool(0)
+}
+
+func (m *RuleContextMockup) ExpectBlockingMode() *mock.Call {
+	return m.On("BlockingMode")
+}
+
 func (mockup *RuleContextMockup) Error(err error) {
 }
 

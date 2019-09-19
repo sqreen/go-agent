@@ -171,6 +171,7 @@ type Rule struct {
 	Conditions RuleConditions     `json:"conditions"`
 	Callbacks  RuleCallbacks      `json:"callbacks"`
 	Test       bool               `json:"test"`
+	Block      bool               `json:"block"`
 }
 
 type RuleConditions struct{}

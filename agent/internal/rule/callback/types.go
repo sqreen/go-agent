@@ -17,6 +17,10 @@ type Context interface {
 	PushMetricsValue(key interface{}, value uint64)
 	// NewAttack creates and returns a new attack event linked to the rule.
 	NewAttack(blocked bool, infos interface{}) *record.AttackEvent
+	// BlockingMode returns true when a callback should block when an attack is
+	// detected. It should monitor otherwise.
+	// FIXME: rather implement a method allowing to report or block a request
+	BlockingMode() bool
 	// ErrorLogger allows to log errors from callbacks. It is restricted to
 	// errors only as logs are expensive and should not be used for debugging
 	// logs.
