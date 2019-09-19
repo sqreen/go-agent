@@ -67,6 +67,7 @@ func TestInAppWAFCallback(t *testing.T) {
 			},
 		},
 		ValidTestCases: []ValidTestCase{
+			// -- Blocking Mode
 			// Block action
 			{
 				Rule: &RuleContextMockup{
@@ -79,7 +80,7 @@ func TestInAppWAFCallback(t *testing.T) {
 				},
 				TestCallback: testInAppWAFCallback(&http.Request{
 					Header: http.Header{"User-Agent": []string{"Arachni"}},
-				}, sqhook.AbortError, true),
+				}, sqhook.AbortError, true, true),
 				ExpectAbortedCallbackChain: true,
 			},
 			// Monitor action
@@ -94,7 +95,7 @@ func TestInAppWAFCallback(t *testing.T) {
 				},
 				TestCallback: testInAppWAFCallback(&http.Request{
 					Header: http.Header{"User-Agent": []string{"Arachni"}},
-				}, nil, true),
+				}, nil, true, true),
 			},
 			// No action
 			{
@@ -108,13 +109,56 @@ func TestInAppWAFCallback(t *testing.T) {
 				},
 				TestCallback: testInAppWAFCallback(&http.Request{
 					Header: http.Header{"User-Agent": []string{"go-http-client"}},
-				}, nil, false),
+				}, nil, false, true),
+			},
+			// -- Monitoring Mode
+			// Block action
+			{
+				Rule: &RuleContextMockup{
+					config: &api.WAFRuleDataEntry{
+						BindingAccessors: []string{
+							`#.Request.UserAgent`,
+						},
+						WAFRules: `{"rules": [{"rule_id": "1","filters": [{"operator": "@rx","targets": ["#.Request.UserAgent"],"value": "Arachni"}]}],"flows": [{"name": "arachni_detection","steps": [{"id": "start","rule_ids": ["1"],"on_match": "exit_block"}]}]}`,
+					},
+				},
+				TestCallback: testInAppWAFCallback(&http.Request{
+					Header: http.Header{"User-Agent": []string{"Arachni"}},
+				}, nil, true, false),
+			},
+			// Monitor action
+			{
+				Rule: &RuleContextMockup{
+					config: &api.WAFRuleDataEntry{
+						BindingAccessors: []string{
+							`#.Request.UserAgent`,
+						},
+						WAFRules: `{"rules": [{"rule_id": "1","filters": [{"operator": "@rx","targets": ["#.Request.UserAgent"],"value": "Arachni"}]}],"flows": [{"name": "arachni_detection","steps": [{"id": "start","rule_ids": ["1"],"on_match": "exit_monitor"}]}]}`,
+					},
+				},
+				TestCallback: testInAppWAFCallback(&http.Request{
+					Header: http.Header{"User-Agent": []string{"Arachni"}},
+				}, nil, true, false),
+			},
+			// No action
+			{
+				Rule: &RuleContextMockup{
+					config: &api.WAFRuleDataEntry{
+						BindingAccessors: []string{
+							`#.Request.UserAgent`,
+						},
+						WAFRules: `{"rules": [{"rule_id": "1","filters": [{"operator": "@rx","targets": ["#.Request.UserAgent"],"value": "Arachni"}]}],"flows": [{"name": "arachni_detection","steps": [{"id": "start","rule_ids": ["1"],"on_match": "exit_monitor"}]}]}`,
+					},
+				},
+				TestCallback: testInAppWAFCallback(&http.Request{
+					Header: http.Header{"User-Agent": []string{"go-http-client"}},
+				}, nil, false, false),
 			},
 		},
 	})
 }
 
-func testInAppWAFCallback(req *http.Request, expectedErr error, shouldReportAttack bool) func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
+func testInAppWAFCallback(req *http.Request, expectedErr error, shouldReportAttack, blockingMode bool) func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
 	return func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
 		actualProlog, ok := prolog.(callback.WAFPrologCallbackType)
 		require.True(t, ok)
@@ -127,14 +171,15 @@ func testInAppWAFCallback(req *http.Request, expectedErr error, shouldReportAtta
 		// Prepare the test
 		rr.ExpectClientIP().Return(net.IP{1, 2, 3, 4})
 		rec := httptest.NewRecorder()
-		var w http.ResponseWriter = rec
+		rule.ExpectBlockingMode().Return(blockingMode).Once()
 		if shouldReportAttack {
 			attack := &record.AttackEvent{}
-			rule.ExpectNewAttack(expectedErr == sqhook.AbortError, mock.Anything).Return(attack).Once()
+			rule.ExpectNewAttack(expectedErr == sqhook.AbortError && blockingMode, mock.Anything).Return(attack).Once()
 			rr.ExpectAddAttackEvent(attack).Once()
 		}
 
 		// Call the callback
+		var w http.ResponseWriter = rec
 		epilog, err := actualProlog(&w, &req)
 
 		// Check it behaves as expected

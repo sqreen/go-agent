@@ -85,27 +85,26 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 				args[expr] = value
 			}
 
-			// FIXME: hard 500us value
-			action, info, err := wafRule.Run(args, 500*time.Microsecond)
+			// FIXME: hard 5ms value
+			action, info, err := wafRule.Run(args, 5*time.Millisecond)
 			if err != nil {
 				ctx.Error(sqerrors.Wrap(err, "waf rule execution error"))
 			} else {
-				switch action {
-				case waf_types.BlockAction:
+				info := api.WAFAttackInfos{WAFData: string(info)}
+				if ctx.BlockingMode() && action == waf_types.BlockAction {
 					// Write the blocking response.
 					httphandler.WriteResponse(*w, *r, nil, http.StatusBadRequest, nil)
 					// Report the event
-					rr.AddAttackEvent(ctx.NewAttack(true, api.WAFAttackInfos{WAFData: string(info)}))
+					rr.AddAttackEvent(ctx.NewAttack(true, info))
 					// Return the epilog and abort the call.
 					return func(err *error) {
 						// An error needs to be written in order to abort handling the
 						// request.
 						*err = WAFProtectionError
 					}, sqhook.AbortError
-
-				case waf_types.MonitorAction:
+				} else if action == waf_types.BlockAction || action == waf_types.MonitorAction {
 					// Report the event
-					rr.AddAttackEvent(ctx.NewAttack(false, api.WAFAttackInfos{WAFData: string(info)}))
+					rr.AddAttackEvent(ctx.NewAttack(false, info))
 				}
 			}
 
