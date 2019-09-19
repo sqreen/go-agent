@@ -78,9 +78,8 @@ func flatValues(v reflect.Value) []interface{} {
 	var values []interface{}
 	switch v.Kind() {
 	case reflect.Map:
-		iter := v.MapRange()
-		for iter.Next() {
-			values = append(values, flatValues(iter.Value())...)
+		for _, k := range v.MapKeys() {
+			values = append(values, flatValues(v.MapIndex(k))...)
 		}
 
 	case reflect.Struct:
