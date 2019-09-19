@@ -1,0 +1,38 @@
+trigger:
+  - master
+  - dev
+
+jobs:
+  - template: tools/azure-pipelines/docker-golang.yml
+    parameters:
+      name: Linux
+      vmImage: ubuntu-latest
+      go: [1.13, 1.12, 1.11]
+      targets:
+        GOARCH: [ amd64, 386 ]
+
+  - template: tools/azure-pipelines/docker-golang.yml
+    parameters:
+      name: Windows
+      vmImage: windows-latest
+      go: [1.13, 1.12, 1.11]
+      targets:
+        GOARCH: [ amd64, 386 ]
+
+  - job: MacOS_amd64
+    pool:
+      vmImage: macOS-latest
+    steps:
+      - script: |
+          go env
+          clang -v
+          go test -v -x ./...
+
+  - job: MacOS_386
+    pool:
+      vmImage: macOS-latest
+    steps:
+      - script: |
+          go env
+          clang -v
+          env GOARCH=386 go test -v -x ./...
