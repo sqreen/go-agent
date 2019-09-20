@@ -1,4 +1,4 @@
-![Sqreen](https://s3-eu-west-1.amazonaws.com/sqreen-assets/npm/20171113/sqreen_horizontal_250.png)
+![Sqreen](https://sqreen-assets.s3-eu-west-1.amazonaws.com/logos/sqreen-logo-264-1.svg)
 
 # [Sqreen](https://www.sqreen.com/)'s Application Security Management for Go
 
@@ -9,22 +9,25 @@
 [![codecov](https://codecov.io/gh/sqreen/go-agent/branch/master/graph/badge.svg)](https://codecov.io/gh/sqreen/go-agent)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sqreen/go-agent)](https://goreportcard.com/report/github.com/sqreen/go-agent)
 
-Sqreen monitors your application security and helps you easily protect it from
-common vulnerabilities or advanced attacks.
+After performance monitoring (APM), error and log monitoring it’s time to add a
+security component into your app. Sqreen’s microagent automatically monitors
+sensitive app’s routines, blocks attacks and reports actionable infos to your
+dashboard.
 
-- Gain visibility into your application security.
-- One-click protection from common vulnerabilities.
-- Easily enforce custom protection rules into your app.
-- Identify malicious users before they cause harm.
-- Integrate with your workflow.
+![Dashboard](https://sqreen-assets.s3-eu-west-1.amazonaws.com/miscellaneous/dashboard.gif)
 
-![Dashboard](https://d33wubrfki0l68.cloudfront.net/0fe441513f505601d03b25249deddd8fd1eb2a49/e2da6/img/new/illustrations/dashboard-mockup.png)
+Sqreen provides automatic defense against attacks:
 
-Sqreen also protects applications against common security threats such as
-database injections, cross-site scripting attacks, scans, or authentication
-activity inside the application to detect and block account takeover attacks. It
-monitors functions in the application (I/O, authentication, network, command
-execution, etc.) and provides dedicated security logic at run-time.
+- Protect with security modules: RASP (Runtime Application Self-Protection),
+  in-app WAF (Web Application Firewall), Account takeovers and more.
+
+- Sqreen’s modules adapt to your application stack with no need of configuration.
+
+- Prevent attacks from the OWASP Top 10 (Injections, XSS and more), 0-days,
+  data Leaks, and more.
+  
+- Create security automation playbooks that automatically react against
+  your advanced business-logic threats.
 
 For more details, visit [sqreen.com](https://www.sqreen.com/)
 
@@ -33,7 +36,7 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
 1. Download the Go agent and the SDK using `go get`:
 
     ```sh
-    $ go get github.com/sqreen/go-agent/...
+    $ go get github.com/sqreen/go-agent@v0.1.0-beta.6
     ```
 
 1. Import the package `agent` in your `main` package of your app:
@@ -59,9 +62,7 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
    - [sqhttp](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp) for the standard net/http package.
    - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin)
    - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho)
-   - Coming soon: [Iris](https://github.com/sqreen/go-agent/pull/22),
-     [gRPC](https://github.com/sqreen/go-agent/pull/23) (please upvote if
-     interested ;)).
+   - [gRPC](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgrpc)
    
    If your framework is not in the list, it is usually possible to use the
    standard `net/http` middleware. If not, please open an issue in this
