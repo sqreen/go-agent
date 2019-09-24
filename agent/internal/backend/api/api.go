@@ -24,14 +24,15 @@ type AppLoginRequest struct {
 }
 
 type AppLoginRequest_VariousInfos struct {
-	Time time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-	Pid  uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid"`
-	Ppid uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid"`
-	Euid uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid"`
-	Egid uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid"`
-	Uid  uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid"`
-	Gid  uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
-	Name string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
+	Time             time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
+	Pid              uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid"`
+	Ppid             uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid"`
+	Euid             uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid"`
+	Egid             uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid"`
+	Uid              uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid"`
+	Gid              uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
+	Name             string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
+	LibSqreenVersion *string   `json:"libsqreen_version"`
 }
 
 type AppLoginResponse struct {
@@ -413,6 +414,7 @@ type AppLoginRequest_VariousInfosFace interface {
 	GetUid() uint32
 	GetGid() uint32
 	GetName() string
+	GetLibSqreenVersion() *string
 }
 
 func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFace) *AppLoginRequest_VariousInfos {
@@ -425,6 +427,7 @@ func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFa
 	this.Uid = that.GetUid()
 	this.Gid = that.GetGid()
 	this.Name = that.GetName()
+	this.LibSqreenVersion = that.GetLibSqreenVersion()
 	return this
 }
 

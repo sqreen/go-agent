@@ -16,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-libsqreen/waf"
 )
 
 type Info struct {
@@ -48,6 +49,7 @@ type ProcessInfo struct {
 	name                            string
 	time                            time.Time
 	pid, ppid, euid, egid, uid, gid uint32
+	libSqreenVersion                *string
 }
 
 func (i *Info) GetProcessInfo() *ProcessInfo {
@@ -84,6 +86,10 @@ func (p *ProcessInfo) GetUid() uint32 {
 
 func (p *ProcessInfo) GetGid() uint32 {
 	return p.gid
+}
+
+func (p *ProcessInfo) GetLibSqreenVersion() *string {
+	return waf.Version()
 }
 
 func GoVersion() string {
