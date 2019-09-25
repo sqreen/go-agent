@@ -85,8 +85,11 @@ func TestCommandManager(t *testing.T) {
 			},
 		},
 		{
-			Command:           "rules_reload",
-			ExpectedAgentCall: agent.ExpectRulesReload,
+			Command:                "rules_reload",
+			ExpectedAgentCall:      agent.ExpectRulesReload,
+			AgentCallReturnNoError: []interface{}{"my pack id", nil},
+			AgentCallReturnError:   []interface{}{"", nil},
+			ExpectedOutput:         "my pack id",
 		},
 	}
 
@@ -314,9 +317,9 @@ func (a *agentMockup) SetCIDRWhitelist(cidrs []string) error {
 	return ret.Error(0)
 }
 
-func (a *agentMockup) RulesReload() error {
+func (a *agentMockup) RulesReload() (string, error) {
 	ret := a.Called()
-	return ret.Error(0)
+	return ret.String(0), ret.Error(1)
 }
 
 func (a *agentMockup) ExpectInstrumentationEnable(...interface{}) *mock.Call {

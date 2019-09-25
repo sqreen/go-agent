@@ -333,13 +333,14 @@ func makeAPIMetrics(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.
 }
 
 func (a *Agent) InstrumentationEnable() (string, error) {
-	if err := a.RulesReload(); err != nil {
+	rulespackId, err := a.RulesReload()
+	if err != nil {
 		return "", err
 	}
 	a.rules.Enable()
 	sdk.SetAgent(a)
 	a.logger.Debug("instrumentation enabled")
-	return a.RulespackID(), nil
+	return rulespackId, nil
 }
 
 // InstrumentationDisable disables the agent instrumentation, which includes for
@@ -366,11 +367,11 @@ func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
 	return a.actors.SetCIDRWhitelist(cidrs)
 }
 
-func (a *Agent) RulesReload() error {
+func (a *Agent) RulesReload() (string, error) {
 	rulespack, err := a.client.RulesPack()
 	if err != nil {
 		a.logger.Error(err)
-		return err
+		return "", err
 	}
 
 	// Insert local rules if any
@@ -390,7 +391,7 @@ func (a *Agent) RulesReload() error {
 	}
 
 	a.rules.SetRules(rulespack.PackID, rulespack.Rules, a.staticMetrics.errors)
-	return nil
+	return rulespack.PackID, nil
 }
 
 func (a *Agent) GracefulStop() {
