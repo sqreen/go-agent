@@ -32,7 +32,7 @@ func newActionTreeV4(maxStoreActions int) *actionTreeV4 {
 // addAction adds an action for the given CIDR IPv4. Only one action is stored
 // per CIDR IPv4.
 func (t *actionTreeV4) addAction(ip *patricia.IPv4Address, action Action) error {
-	if len(t.actions) >= math.MaxUint32 {
+	if uint64(len(t.actions)) >= uint64(math.MaxUint32) {
 		return errors.Errorf("too many actions: the number of actions exceeds the maximum index value")
 	}
 	if len(t.actions) >= t.maxStoreActions {
