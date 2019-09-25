@@ -24,14 +24,15 @@ type AppLoginRequest struct {
 }
 
 type AppLoginRequest_VariousInfos struct {
-	Time time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-	Pid  uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid"`
-	Ppid uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid"`
-	Euid uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid"`
-	Egid uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid"`
-	Uid  uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid"`
-	Gid  uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
-	Name string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
+	Time             time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
+	Pid              uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid"`
+	Ppid             uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid"`
+	Euid             uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid"`
+	Egid             uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid"`
+	Uid              uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid"`
+	Gid              uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
+	Name             string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
+	LibSqreenVersion *string   `json:"libsqreen_version"`
 }
 
 type AppLoginResponse struct {
@@ -170,6 +171,8 @@ type Rule struct {
 	Signature  RuleSignature      `json:"signature"`
 	Conditions RuleConditions     `json:"conditions"`
 	Callbacks  RuleCallbacks      `json:"callbacks"`
+	Test       bool               `json:"test"`
+	Block      bool               `json:"block"`
 }
 
 type RuleConditions struct{}
@@ -208,6 +211,7 @@ type RuleDataEntry Struct
 const (
 	CustomErrorPageType = "custom_error_page"
 	RedirectionType     = "redirection"
+	WAFType             = "waf"
 )
 
 type CustomErrorPageRuleDataEntry struct {
@@ -216,6 +220,11 @@ type CustomErrorPageRuleDataEntry struct {
 
 type RedirectionRuleDataEntry struct {
 	RedirectionURL string `json:"redirection_url"`
+}
+
+type WAFRuleDataEntry struct {
+	BindingAccessors []string `json:"binding_accessors"`
+	WAFRules         string   `json:"waf_rules"`
 }
 
 type Dependency struct {
@@ -278,12 +287,15 @@ type RequestRecord_Observed struct {
 }
 
 type RequestRecord_Observed_Attack struct {
-	RuleName  string    `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
-	Test      bool      `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
-	Infos     string    `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
-	Backtrace []string  `protobuf:"bytes,4,rep,name=backtrace,proto3" json:"backtrace"`
-	Time      time.Time `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
-	Block     bool      `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
+	RuleName string      `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
+	Test     bool        `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
+	Infos    interface{} `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
+	Time     time.Time   `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
+	Block    bool        `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
+}
+
+type WAFAttackInfos struct {
+	WAFData string `json:"waf_data"`
 }
 
 type RequestRecord_Observed_SDKEvent struct {
@@ -402,6 +414,7 @@ type AppLoginRequest_VariousInfosFace interface {
 	GetUid() uint32
 	GetGid() uint32
 	GetName() string
+	GetLibSqreenVersion() *string
 }
 
 func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFace) *AppLoginRequest_VariousInfos {
@@ -414,6 +427,7 @@ func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFa
 	this.Uid = that.GetUid()
 	this.Gid = that.GetGid()
 	this.Name = that.GetName()
+	this.LibSqreenVersion = that.GetLibSqreenVersion()
 	return this
 }
 
@@ -652,8 +666,7 @@ func NewRequestRecord_ObservedFromFace(that RequestRecord_ObservedFace) *Request
 type RequestRecord_Observed_AttackFace interface {
 	GetRuleName() string
 	GetTest() bool
-	GetInfos() string
-	GetBacktrace() []string
+	GetInfo() interface{}
 	GetTime() time.Time
 	GetBlock() bool
 }
@@ -662,10 +675,9 @@ func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_Attack
 	this := &RequestRecord_Observed_Attack{}
 	this.RuleName = that.GetRuleName()
 	this.Test = that.GetTest()
-	this.Infos = that.GetInfos()
-	this.Backtrace = that.GetBacktrace()
 	this.Time = that.GetTime()
 	this.Block = that.GetBlock()
+	this.Infos = that.GetInfo()
 	return this
 }
 

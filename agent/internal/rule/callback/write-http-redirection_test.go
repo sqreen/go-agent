@@ -31,10 +31,10 @@ func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
 		},
 		ValidTestCases: []ValidTestCase{
 			{
-				Rule: &FakeRule{
+				Rule: &RuleContextMockup{
 					config: &api.RedirectionRuleDataEntry{"http://sqreen.com"},
 				},
-				TestCallbacks: func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback) {
+				TestCallback: func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
 					// Call it and check the behaviour follows the rule's data
 					actualProlog, ok := prolog.(callback.WriteHTTPRedirectionPrologCallbackType)
 					require.True(t, ok)

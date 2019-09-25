@@ -37,9 +37,10 @@ func NewHTTPRequest(req *http.Request) *HTTPRequest {
 	ctx = context.WithValue(ctx, contextKey, record)
 	// Set the request context with the new one.
 	req = req.WithContext(ctx)
+	rr, req := agent.NewRequestRecord(req)
 	// Set the record pointer value using the new request.
 	*record = HTTPRequestRecord{
-		record: agent.NewRequestRecord(req),
+		record: rr,
 	}
 
 	return &HTTPRequest{

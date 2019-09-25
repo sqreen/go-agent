@@ -1,3 +1,30 @@
+# v0.1.0-beta.7
+
+## Breaking Changes
+
+- CGO bindings are now involved in the compilation of the agent and will require
+  the `gcc` compiler and the C library headers. Note that compiling the agent
+  without CGO (`CGO_ENABLED=0`) is still possible but will disable some agent
+  features; in this case the new WAF feature described below.
+
+## New Feature
+
+- Add support for the In-App WAF: an out-of-the-box Web-Application Firewall
+  leveraging the full application context, that is fail-safe, has limited false
+  positives and won’t require heavy fine-tuning. Only darwin/amd64 and
+  linux/amd64 targets are supported so far. Any other target will get this
+  feature disabled. More targets will be added in future versions. (#77)
+
+## Minor Change
+
+- Increase the internal timeout value of the HTTP client to Sqreen's backend in
+  order to be more resilient to normal networking delays.
+
+## Fix
+
+- Fix a compilation error on 32-bit target architectures.
+
+
 # v0.1.0-beta.6
 
 ## New Features

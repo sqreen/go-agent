@@ -47,13 +47,10 @@ type HTTPAPIEndpoint struct {
 // Error metrics store period.
 const ErrorMetricsPeriod = time.Minute
 
-// Default value of network timeouts.
-const DefaultNetworkTimeout = 5 * time.Second
-
 // Backend client configuration.
 var (
 	// Timeout value of a HTTP request. See http.Client.Timeout.
-	BackendHTTPAPIRequestTimeout = DefaultNetworkTimeout
+	BackendHTTPAPIRequestTimeout = 30 * time.Second
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {

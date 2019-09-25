@@ -26,28 +26,31 @@ func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 		},
 		ValidTestCases: []ValidTestCase{
 			{
-				Rule:          &FakeRule{},
-				TestCallbacks: testWriteCustomErrorPageCallbacks(500),
+				Rule:         &RuleContextMockup{},
+				TestCallback: testWriteCustomErrorPageCallbacks(500),
 			},
 			{
-				Rule: &FakeRule{
+				Rule: &RuleContextMockup{
 					config: &api.CustomErrorPageRuleDataEntry{StatusCode: 33},
 				},
-				TestCallbacks: testWriteCustomErrorPageCallbacks(33),
+				TestCallback: testWriteCustomErrorPageCallbacks(33),
 			},
 		},
 	})
 }
 
-func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *FakeRule, prolog sqhook.PrologCallback) {
-	return func(t *testing.T, _ *FakeRule, prolog sqhook.PrologCallback) {
+func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
+	return func(t *testing.T, _ *RuleContextMockup, prolog sqhook.PrologCallback) {
 		actualProlog, ok := prolog.(callback.WriteCustomErrorPagePrologCallbackType)
 		require.True(t, ok)
 		var (
 			statusCode int
 			body       []byte
 		)
+
+		// Call the prolog callback
 		epilog, err := actualProlog(nil, nil, nil, &statusCode, &body)
+
 		// Check it behaves as expected
 		require.NoError(t, err)
 		require.Equal(t, expectedStatusCode, statusCode)
@@ -55,7 +58,6 @@ func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T
 
 		// Test the epilog if any
 		if epilog != nil {
-			require.True(t, ok)
 			epilog()
 		}
 	}

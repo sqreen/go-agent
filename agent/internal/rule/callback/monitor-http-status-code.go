@@ -9,7 +9,7 @@ import (
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
 )
 
-func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog sqhook.PrologCallback, err error) {
+func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {
 	// Next callbacks to call
 	actualNextProlog, ok := nextProlog.(MonitorHTTPStatusCodePrologCallbackType)
 	if nextProlog != nil && !ok {
