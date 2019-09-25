@@ -23,7 +23,7 @@ import (
 )
 
 func TestInAppWAFCallback(t *testing.T) {
-	if waf.Version() != nil {
+	if waf.Version() == nil {
 		t.SkipNow()
 	}
 
