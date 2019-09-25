@@ -41,11 +41,8 @@ func TestUsage(t *testing.T) {
 			store.Add("key 1", 1)
 			// Should be started but still not expired
 			require.False(t, store.Ready())
-			time.Sleep(time.Microsecond)
-			// Should be still not expired
-			require.False(t, store.Ready())
 			time.Sleep(time.Millisecond)
-			// Now should be expired
+			// Should be now expired
 			require.True(t, store.Ready())
 			// Flushing the store should give the map and "restart" the store
 			old := store.Flush()
