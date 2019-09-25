@@ -17,11 +17,16 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
 	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
 	"github.com/sqreen/go-agent/tools/testlib/testmock"
+	"github.com/sqreen/go-libsqreen/waf"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInAppWAFCallback(t *testing.T) {
+	if waf.Version() != nil {
+		t.SkipNow()
+	}
+
 	RunCallbackTest(t, TestConfig{
 		CallbacksCtor: callback.NewWAFCallback,
 		ExpectProlog:  true,
