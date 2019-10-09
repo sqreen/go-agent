@@ -4,10 +4,10 @@
 
 [![Release](https://img.shields.io/github/release/sqreen/go-agent.svg)](https://github.com/sqreen/go-agent/releases)
 [![GoDoc](https://godoc.org/github.com/sqreen/go-agent?status.svg)](https://godoc.org/github.com/sqreen/go-agent)
-[![Sourcegraph](https://sourcegraph.com/github.com/sqreen/go-agent/-/badge.svg)](https://sourcegraph.com/github.com/sqreen/go-agent?badge)
-[![pipeline status](https://gitlab.com/sqreen/agents/go-agent/badges/master/pipeline.svg)](https://gitlab.com/sqreen/agents/go-agent/pipelines)
-[![codecov](https://codecov.io/gh/sqreen/go-agent/branch/master/graph/badge.svg)](https://codecov.io/gh/sqreen/go-agent)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sqreen/go-agent)](https://goreportcard.com/report/github.com/sqreen/go-agent)
+[![codecov](https://codecov.io/gh/sqreen/go-agent/branch/master/graph/badge.svg)](https://codecov.io/gh/sqreen/go-agent)
+[![Build Status](https://dev.azure.com/sqreenci/Go%20Agent/_apis/build/status/sqreen.go-agent?branchName=master)](https://dev.azure.com/sqreenci/Go%20Agent/_build/latest?definitionId=8&branchName=master)
+[![Sourcegraph](https://sourcegraph.com/github.com/sqreen/go-agent/-/badge.svg)](https://sourcegraph.com/github.com/sqreen/go-agent?badge)
 
 After performance monitoring (APM), error and log monitoring it’s time to add a
 security component into your app. Sqreen’s microagent automatically monitors
