@@ -225,6 +225,7 @@ type RedirectionRuleDataEntry struct {
 type WAFRuleDataEntry struct {
 	BindingAccessors []string `json:"binding_accessors"`
 	WAFRules         string   `json:"waf_rules"`
+	Timeout          uint64   `json:"max_budget_ms"`
 }
 
 type Dependency struct {
