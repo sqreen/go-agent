@@ -36,7 +36,7 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
 1. Download the Go agent and the SDK using `go get`:
 
     ```sh
-    $ go get github.com/sqreen/go-agent@v0.1.0-beta.6
+    $ go get -v github.com/sqreen/go-agent@v0.1.0-beta.8
     ```
 
 1. Import the package `agent` in your `main` package of your app:
@@ -59,10 +59,9 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
    variable `SQREEN_CONFIG_FILE`.
 
 1. Set up Sqreen's middleware functions according to the web framework you use:
-   - [sqhttp](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp) for the standard net/http package.
-   - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin)
-   - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho)
-   - [gRPC](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgrpc)
+   - [sqhttp](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp) for the standard `net/http` package.
+   - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin) for `github.com/gin-gonic/gin`.
+   - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho) for `github.com/labstack/echo`.
    
    If your framework is not in the list, it is usually possible to use the
    standard `net/http` middleware. If not, please open an issue in this

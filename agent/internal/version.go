@@ -4,4 +4,4 @@
 
 package internal
 
-const version = "0.1.0-beta.7"
+const version = "0.1.0-beta.8"
