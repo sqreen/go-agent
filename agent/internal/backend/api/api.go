@@ -99,6 +99,7 @@ type ExceptionEvent struct {
 	Message     string           `json:"message"`
 	RulespackID string           `json:"rulespack_id"`
 	Context     ExceptionContext `json:"context"`
+	Infos       interface{}      `json:"infos,omitempty"`
 }
 
 type ExceptionEventFace interface {
@@ -107,6 +108,7 @@ type ExceptionEventFace interface {
 	GetMessage() string
 	GetRulespackID() string
 	GetContext() ExceptionContext
+	GetInfos() interface{}
 }
 
 func NewExceptionEventFromFace(e ExceptionEventFace) *ExceptionEvent {
@@ -116,6 +118,7 @@ func NewExceptionEventFromFace(e ExceptionEventFace) *ExceptionEvent {
 		Message:     e.GetMessage(),
 		Context:     e.GetContext(),
 		RulespackID: e.GetRulespackID(),
+		Infos:       e.GetInfos(),
 	}
 }
 

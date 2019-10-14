@@ -94,7 +94,7 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 
 			action, info, err := wafRule.Run(args, timeout)
 			if err != nil {
-				ctx.Error(sqerrors.Wrap(err, "waf rule execution error"))
+				ctx.Error(sqerrors.Wrap(newWAFRunError(err, args, timeout), "waf rule execution error"))
 			} else if err == waf_types.ErrTimeout {
 				// no-op: we don't log on the hot path unless an error occurred
 			} else {
@@ -122,6 +122,18 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 			return next(w, r)
 		},
 	}
+}
+
+type wafRunErrorInfo struct {
+	Input   waf_types.RunInput
+	Timeout time.Duration
+}
+
+func newWAFRunError(err error, args waf_types.RunInput, timeout time.Duration) error {
+	return sqerrors.WithInfo(err, wafRunErrorInfo{
+		Input:   args,
+		Timeout: timeout,
+	})
 }
 
 type wafCallbackObject struct {
