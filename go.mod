@@ -22,7 +22,7 @@ require (
 	github.com/onsi/gomega v1.4.3
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/viper v1.3.1
-	github.com/sqreen/go-libsqreen v0.3.2
+	github.com/sqreen/go-libsqreen v0.4.0
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -33,4 +33,5 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
+	gopkg.in/yaml.v2 v2.2.4 // indirect
 )

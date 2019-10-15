@@ -55,7 +55,14 @@ func NewWAFCallback(rule Context, nextProlog sqhook.PrologCallback) (callback in
 		return nil, sqerrors.Errorf("unexpected next prolog type `%T`", nextProlog)
 	}
 
-	return newWAFPrologCallback(rule, wafRule, bindingAccessors, actualNextProlog), nil
+	var timeout time.Duration
+	if cfg.Timeout != 0 {
+		timeout = time.Duration(cfg.Timeout) * time.Millisecond
+	} else {
+		timeout = 5 * time.Millisecond
+	}
+
+	return newWAFPrologCallback(rule, wafRule, bindingAccessors, timeout, actualNextProlog), nil
 }
 
 type WAFPrologCallbackType = func(*http.ResponseWriter, **http.Request) (WAFEpilogCallbackType, error)
@@ -63,7 +70,7 @@ type WAFEpilogCallbackType = func(*error)
 
 var WAFProtectionError = errors.New("waf protection triggered")
 
-func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, next WAFPrologCallbackType) *wafCallbackObject {
+func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, next WAFPrologCallbackType) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
 		prolog: func(w *http.ResponseWriter, r **http.Request) (WAFEpilogCallbackType, error) {
@@ -85,10 +92,11 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 				args[expr] = value
 			}
 
-			// FIXME: hard 5ms value
-			action, info, err := wafRule.Run(args, 5*time.Millisecond)
+			action, info, err := wafRule.Run(args, timeout)
 			if err != nil {
-				ctx.Error(sqerrors.Wrap(err, "waf rule execution error"))
+				ctx.Error(sqerrors.Wrap(newWAFRunError(err, args, timeout), "waf rule execution error"))
+			} else if err == waf_types.ErrTimeout {
+				// no-op: we don't log on the hot path unless an error occurred
 			} else {
 				info := api.WAFAttackInfos{WAFData: string(info)}
 				if ctx.BlockingMode() && action == waf_types.BlockAction {
@@ -114,6 +122,18 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 			return next(w, r)
 		},
 	}
+}
+
+type wafRunErrorInfo struct {
+	Input   waf_types.RunInput
+	Timeout time.Duration
+}
+
+func newWAFRunError(err error, args waf_types.RunInput, timeout time.Duration) error {
+	return sqerrors.WithInfo(err, wafRunErrorInfo{
+		Input:   args,
+		Timeout: timeout,
+	})
 }
 
 type wafCallbackObject struct {

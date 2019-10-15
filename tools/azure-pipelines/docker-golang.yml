@@ -19,7 +19,9 @@ jobs:
     container:
       image: $(containerImage)
       env:
+        GOPROXY: direct
+        GOSUMDB: off
         GOARCH: $(GOARCH)
     steps:
       - script: go env
-      - script: go test -v -x ./...
+      - script: go test -v ./...

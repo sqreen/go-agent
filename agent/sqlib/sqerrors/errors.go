@@ -58,6 +58,37 @@ func (e *withTimestamp) Format(f fmt.State, c rune) {
 	}
 }
 
+type Informer interface {
+	Info() interface{}
+}
+
+type withInfo struct {
+	error
+	info interface{}
+}
+
+// WithInfo annotates the given error `err` with extra information giving more
+// extra context to the error. The returned error value implements interface
+// Info.
+func WithInfo(err error, info interface{}) error {
+	return &withInfo{
+		error: err,
+		info:  info,
+	}
+}
+
+func (e *withInfo) Info() interface{} {
+	return e.info
+}
+
+func (e *withInfo) Unwrap() error {
+	return e.error
+}
+
+func (e *withInfo) Cause() error {
+	return e.Unwrap()
+}
+
 // New returns a new error annotated with a timestamp, a message and a stack
 // trace.
 func New(message string) error {
@@ -104,4 +135,28 @@ loop:
 		}
 	}
 	return topStackInfo
+}
+
+// Info returns the earliest/deepest information attached to any of the errors
+// in the chain of Causes. If the error does not implement Cause, the original
+// error will be returned. If the error is nil, nil will be returned without
+// further investigation.
+func Info(err error) interface{} {
+	var info interface{}
+loop:
+	for {
+		infoErr, ok := err.(Informer)
+		if ok {
+			info = infoErr.Info()
+		}
+		switch actual := err.(type) {
+		case Causer:
+			err = actual.Cause()
+		case xerrors.Wrapper:
+			err = actual.Unwrap()
+		default:
+			break loop
+		}
+	}
+	return info
 }

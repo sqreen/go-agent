@@ -73,6 +73,10 @@ func (e *ExceptionEvent) GetBacktrace() []api.StackFrame {
 	return bt
 }
 
+func (e *ExceptionEvent) GetInfos() interface{} {
+	return sqerrors.Info(e.err)
+}
+
 type apiStackFrame sqerrors.Frame
 
 func (f apiStackFrame) GetMethod() string {
