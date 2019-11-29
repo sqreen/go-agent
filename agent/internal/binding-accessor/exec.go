@@ -6,6 +6,7 @@ package bindingaccessor
 
 import (
 	"reflect"
+	"unicode"
 
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
@@ -66,71 +67,140 @@ loop:
 	return m.Call(nil)[0].Interface()
 }
 
-func execFlatKeys(v interface{}) interface{} {
-	return flatKeys(reflect.ValueOf(v))
+func execFlatKeys(ctx Context, v interface{}, maxDepth, maxElements int) interface{} {
+	if v == nil {
+		return nil
+	}
+	return flatKeys(reflect.ValueOf(v), maxDepth, &maxElements)
 }
 
-func execFlatValues(v interface{}) interface{} {
-	return flatValues(reflect.ValueOf(v))
+func execFlatValues(ctx Context, v interface{}, maxDepth, maxElements int) interface{} {
+	if v == nil {
+		return nil
+	}
+	return flatValues(reflect.ValueOf(v), maxDepth, &maxElements)
 }
 
-func flatValues(v reflect.Value) []interface{} {
-	var values []interface{}
+func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}) {
 	switch v.Kind() {
 	case reflect.Map:
+		if depth == 0 {
+			// do not traverse this value
+			break
+		}
 		for _, k := range v.MapKeys() {
-			values = append(values, flatValues(v.MapIndex(k))...)
+			values = append(values, flatValues(v.MapIndex(k), depth-1, elements)...)
+			if *elements == 0 {
+				break
+			}
 		}
 
 	case reflect.Struct:
+		if depth == 0 {
+			// do not traverse this value
+			break
+		}
+		t := v.Type()
 		for i := 0; i < v.NumField(); i++ {
-			values = append(values, flatValues(v.Field(i))...)
+			f := t.Field(i)
+			if !unicode.IsUpper(rune(f.Name[0])) {
+				// ignore private fields as their values cannot be traversed
+				// (value.Field() panics).
+				continue
+			}
+			values = append(values, flatValues(v.Field(i), depth-1, elements)...)
+			if *elements == 0 {
+				break
+			}
 		}
 
+	case reflect.Array:
+		fallthrough
 	case reflect.Slice:
+		if depth == 0 {
+			// do not traverse this value
+			break
+		}
 		for i := 0; i < v.Len(); i++ {
-			values = append(values, flatValues(v.Index(i))...)
+			values = append(values, flatValues(v.Index(i), depth-1, elements)...)
+			if *elements == 0 {
+				break
+			}
 		}
 
 	case reflect.Ptr:
+		if v.IsNil() {
+			return []interface{}{v.Interface()}
+		}
 		fallthrough
 	case reflect.Interface:
-		return flatValues(v.Elem())
+		// do not count this step as a deeper level (no depth -= 1)
+		return flatValues(v.Elem(), depth, elements)
 
 	default:
+		*elements -= 1
 		values = []interface{}{v.Interface()}
 	}
 
 	return values
 }
 
-func flatKeys(v reflect.Value) []interface{} {
+func flatKeys(v reflect.Value, depth int, elements *int) []interface{} {
+	if depth == 0 || *elements == 0 {
+		return nil
+	}
+	depth -= 1
+
 	var values []interface{}
 	switch v.Kind() {
 	case reflect.Map:
 		for _, k := range v.MapKeys() {
 			values = append(values, k.Interface())
+			*elements -= 1
+			if *elements == 0 {
+				break
+			}
+			values = append(values, flatKeys(v.MapIndex(k), depth, elements)...)
+			if *elements == 0 {
+				break
+			}
 		}
 
 	case reflect.Struct:
 		t := v.Type()
 		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			if !unicode.IsUpper(rune(f.Name[0])) {
+				// ignore private fields as their values cannot be traversed
+				// (value.Field() panics).
+				continue
+			}
 			values = append(values, t.Field(i).Name)
-			values = append(values, flatKeys(v.Field(i))...)
+			*elements -= 1
+			values = append(values, flatKeys(v.Field(i), depth, elements)...)
+			if *elements == 0 {
+				break
+			}
 		}
 
+	case reflect.Array:
+		fallthrough
 	case reflect.Slice:
 		for i := 0; i < v.Len(); i++ {
-			values = append(values, flatKeys(v.Index(i))...)
+			values = append(values, flatKeys(v.Index(i), depth, elements)...)
+			if *elements == 0 {
+				break
+			}
 		}
 
 	case reflect.Ptr:
 		fallthrough
 	case reflect.Interface:
-		return flatKeys(v.Elem())
+		// traverse the interface and don't count this iteration in the depth count
+		return flatKeys(v.Elem(), depth+1, elements)
 
 	default:
-		values = []interface{}(nil)
+		return nil
 	}
 
 	return values

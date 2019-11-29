@@ -88,7 +88,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 			Headers: http.Header{
 				"Content-Type": []string{`application/x-www-form-urlencoded`},
 			},
-			Body: strings.NewReader("z=post&both=y&prio=2&=nokey&orphan;empty=&"),
+			Body: strings.NewReader(`z=post&both=y&prio=2&=nokey&orphan;empty=&`),
 			BindingAccessors: map[string]interface{}{
 				`#.Method`:                       "POST",
 				`#.Host`:                         "sqreen.com",
@@ -96,7 +96,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.Header['Content-Type']`:       []string{`application/x-www-form-urlencoded`},
 				`#.URL.RequestURI`:               "/admin/news",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", ""},
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "empty", "z", "both", "prio", "", "orphan"},
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "z", "both", "prio", "", "orphan", "empty"},
 			},
 		},
 		{
@@ -158,6 +158,6 @@ loop:
 				continue loop
 			}
 		}
-		require.Failf(t, "missing expected value `%v`", "", f)
+		require.Failf(t, "missing expected value", "expected `%v` having type `%T`", f, f)
 	}
 }

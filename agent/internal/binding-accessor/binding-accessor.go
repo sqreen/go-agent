@@ -35,8 +35,10 @@ type BindingAccessorFunc func(ctx Context) (value interface{}, err error)
 // map access, etc.).
 type valueFunc func(ctx Context) (value interface{})
 
-// A transformationFunc value transforms an input value to another output value
-type transformationFunc func(valueIn interface{}) (valueOut interface{})
+// A transformationFunc value transforms an input value to another output value.
+// The traversal of the input value cannot be deeper than maxDepth, and the
+// output value cannot exceed maxElements.
+type transformationFunc func(ctx Context, valueIn interface{}, maxDepth, maxElements int) (valueOut interface{})
 
 // Compile returns the compiled binding accessor expression function.
 func Compile(expr string) (program BindingAccessorFunc, err error) {
@@ -64,7 +66,7 @@ func Compile(expr string) (program BindingAccessorFunc, err error) {
 	}, nil
 }
 
-func compileExpr(expr string) (func(ctx Context) (value interface{}), error) {
+func compileExpr(expr string) (valueFunc, error) {
 	buf := strings.TrimSpace(expr)
 	// Get the first operand
 	valueFn, buf, err := compileOperand(buf)
@@ -93,6 +95,11 @@ func compileExpr(expr string) (func(ctx Context) (value interface{}), error) {
 	return valueFn, nil
 }
 
+const (
+	newValueMaxDepth    = 10
+	newValueMaxElements = 150
+)
+
 func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 	pipeline := strings.Split(buf, "|")
 	for _, tr := range pipeline {
@@ -102,7 +109,7 @@ func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 		}
 		lastValueFn := valueFn
 		valueFn = func(ctx Context) interface{} {
-			return trFn(lastValueFn(ctx))
+			return trFn(ctx, lastValueFn(ctx), newValueMaxDepth, newValueMaxElements)
 		}
 	}
 	return valueFn, nil
