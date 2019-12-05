@@ -1,6 +1,6 @@
 module github.com/sqreen/go-agent
 
-go 1.10
+go 1.12
 
 require (
 	github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7 // indirect

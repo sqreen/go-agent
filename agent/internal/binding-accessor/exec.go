@@ -88,8 +88,8 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 			// do not traverse this value
 			break
 		}
-		for _, k := range v.MapKeys() {
-			values = append(values, flatValues(v.MapIndex(k), depth-1, elements)...)
+		for iter := v.MapRange(); iter.Next(); {
+			values = append(values, flatValues(iter.Value(), depth-1, elements)...)
 			if *elements == 0 {
 				break
 			}
@@ -154,13 +154,14 @@ func flatKeys(v reflect.Value, depth int, elements *int) []interface{} {
 	var values []interface{}
 	switch v.Kind() {
 	case reflect.Map:
-		for _, k := range v.MapKeys() {
+		for iter := v.MapRange(); iter.Next(); {
+			k := iter.Key()
 			values = append(values, k.Interface())
 			*elements -= 1
 			if *elements == 0 {
 				break
 			}
-			values = append(values, flatKeys(v.MapIndex(k), depth, elements)...)
+			values = append(values, flatKeys(iter.Value(), depth, elements)...)
 			if *elements == 0 {
 				break
 			}
