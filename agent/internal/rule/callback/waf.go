@@ -21,6 +21,8 @@ import (
 	waf_types "github.com/sqreen/go-libsqreen/waf/types"
 )
 
+const defaultMaxWAFTimeBudget = 3 * time.Millisecond
+
 func NewWAFCallback(rule Context, nextProlog sqhook.PrologCallback) (callback interface{}, err error) {
 	cfg, ok := rule.Config().(*api.WAFRuleDataEntry)
 	if !ok {
@@ -59,7 +61,7 @@ func NewWAFCallback(rule Context, nextProlog sqhook.PrologCallback) (callback in
 	if cfg.Timeout != 0 {
 		timeout = time.Duration(cfg.Timeout) * time.Millisecond
 	} else {
-		timeout = 5 * time.Millisecond
+		timeout = defaultMaxWAFTimeBudget
 	}
 
 	return newWAFPrologCallback(rule, wafRule, bindingAccessors, timeout, actualNextProlog), nil
@@ -77,7 +79,7 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 			req := *r
 			rr := record.FromContext(req.Context())
 			baCtx := bindingaccessor.MakeBindingAccessorContext(req, rr.ClientIP().String())
-			args := make(waf_types.RunInput, len(bindingAccessors))
+			args := make(waf_types.DataSet, len(bindingAccessors))
 			for expr, ba := range bindingAccessors {
 				value, err := ba(baCtx)
 				if err != nil {
@@ -125,11 +127,11 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 }
 
 type wafRunErrorInfo struct {
-	Input   waf_types.RunInput
+	Input   waf_types.DataSet
 	Timeout time.Duration
 }
 
-func newWAFRunError(err error, args waf_types.RunInput, timeout time.Duration) error {
+func newWAFRunError(err error, args waf_types.DataSet, timeout time.Duration) error {
 	return sqerrors.WithInfo(err, wafRunErrorInfo{
 		Input:   args,
 		Timeout: timeout,
