@@ -5,6 +5,7 @@
 package bindingaccessor_test
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -32,7 +33,7 @@ func TestBindingAccessor(t *testing.T) {
 		Expression               string
 		Context                  interface{}
 		ExpectedValue            interface{}
-		ExpectedExecutionError   bool
+		ExpectedExecutionError   interface{}
 		ExpectedCompilationError bool
 	}{
 		{
@@ -337,6 +338,49 @@ func TestBindingAccessor(t *testing.T) {
 			Context:                struct{ Foo []int }{Foo: []int{1, 2, 3}},
 			ExpectedExecutionError: true,
 		},
+		{
+			Title:                  "more than max execution depth",
+			Expression:             `#[0][0][0][0][0][0][0][0][0][0][0]`,
+			Context:                [][][][][][][][][][][]int{{{{{{{{{{{33}}}}}}}}}}},
+			ExpectedExecutionError: bindingaccessor.ErrMaxExecutionDepth,
+		},
+		{
+			Title:                  "less than max execution depth",
+			Expression:             `#[0][0][0][0][0][0][0][0][0][0]`,
+			Context:                [][][][][][][][][][][]int{{{{{{{{{{{33}}}}}}}}}}},
+			ExpectedValue:          []int{33},
+			ExpectedExecutionError: false,
+		},
+		{
+			Title:      "more than max execution depth",
+			Expression: `#.A.B.C.D.E.F.G.H.I.J.K.L`,
+			Context: struct {
+				A struct {
+					B struct {
+						C struct {
+							D struct {
+								E struct {
+									F struct {
+										G struct {
+											H struct {
+												I struct {
+													J struct {
+														K struct {
+															L int
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}{},
+			ExpectedExecutionError: bindingaccessor.ErrMaxExecutionDepth,
+		},
 	} {
 		tc := tc
 		t.Run(tc.Title, func(t *testing.T) {
@@ -349,8 +393,18 @@ func TestBindingAccessor(t *testing.T) {
 			}
 
 			v, err := p(tc.Context)
-			if tc.ExpectedExecutionError {
-				require.Error(t, err)
+			if tc.ExpectedExecutionError != nil {
+				switch actual := tc.ExpectedExecutionError.(type) {
+				case bool:
+					if actual {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+					}
+				case error:
+					require.Error(t, err)
+					errors.Is(err, actual)
+				}
 				return
 			}
 
