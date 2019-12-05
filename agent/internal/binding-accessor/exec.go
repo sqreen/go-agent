@@ -88,6 +88,8 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 			// do not traverse this value
 			break
 		}
+		// Pre-allocate entries for at least one value per map entry
+		values = make([]interface{}, 0, v.Len())
 		for iter := v.MapRange(); iter.Next(); {
 			values = append(values, flatValues(iter.Value(), depth-1, elements)...)
 			if *elements == 0 {
@@ -101,7 +103,10 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 			break
 		}
 		t := v.Type()
-		for i := 0; i < v.NumField(); i++ {
+		// Pre-allocate entries for at least one value per map entry
+		l := v.NumField()
+		values = make([]interface{}, 0, l)
+		for i := 0; i < l; i++ {
 			f := t.Field(i)
 			if !unicode.IsUpper(rune(f.Name[0])) {
 				// ignore private fields as their values cannot be traversed
@@ -121,7 +126,10 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 			// do not traverse this value
 			break
 		}
-		for i := 0; i < v.Len(); i++ {
+		// Pre-allocate entries for at least one value per map entry
+		l := v.Len()
+		values = make([]interface{}, 0, l)
+		for i := 0; i < l; i++ {
 			values = append(values, flatValues(v.Index(i), depth-1, elements)...)
 			if *elements == 0 {
 				break
@@ -142,6 +150,9 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 		values = []interface{}{v.Interface()}
 	}
 
+	if len(values) == 0 {
+		return nil
+	}
 	return values
 }
 
@@ -154,6 +165,9 @@ func flatKeys(v reflect.Value, depth int, elements *int) []interface{} {
 	var values []interface{}
 	switch v.Kind() {
 	case reflect.Map:
+		// Pre-allocate entries for at least one value per map entry
+		l := v.Len()
+		values = make([]interface{}, 0, l)
 		for iter := v.MapRange(); iter.Next(); {
 			k := iter.Key()
 			values = append(values, k.Interface())
@@ -169,7 +183,10 @@ func flatKeys(v reflect.Value, depth int, elements *int) []interface{} {
 
 	case reflect.Struct:
 		t := v.Type()
-		for i := 0; i < t.NumField(); i++ {
+		// Pre-allocate entries for at least one value per map entry
+		l := v.NumField()
+		values = make([]interface{}, 0, l)
+		for i := 0; i < l; i++ {
 			f := t.Field(i)
 			if !unicode.IsUpper(rune(f.Name[0])) {
 				// ignore private fields as their values cannot be traversed
@@ -204,5 +221,8 @@ func flatKeys(v reflect.Value, depth int, elements *int) []interface{} {
 		return nil
 	}
 
+	if len(values) == 0 {
+		return nil
+	}
 	return values
 }
