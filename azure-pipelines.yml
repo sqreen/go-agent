@@ -5,19 +5,31 @@ trigger:
 jobs:
   - template: tools/azure-pipelines/docker-golang.yml
     parameters:
-      name: Linux
+      name: Debian_Linux
       vmImage: ubuntu-latest
-      go: [ 1.13, 1.12 ]
-      targets:
-        GOARCH: [ amd64, 386 ]
+      go:
+        versions: [ 1.13, 1.12 ]
+        targets:
+          GOARCH: [ amd64, 386 ]
 
-  - template: tools/azure-pipelines/docker-golang.yml
+  - template: tools/azure-pipelines/test-go-versions.yml
+    parameters:
+      name: Alpine_Linux
+      vmImage: ubuntu-latest
+      go:
+        container: julio/azure-pipelines-golang
+        versions: [ 1.13-alpine, 1.12-alpine ]
+        targets:
+          GOARCH: [ amd64 ]
+
+  - template: tools/azure-pipelines/test-go-versions.yml
     parameters:
       name: Windows
       vmImage: windows-latest
-      go: [ 1.13, 1.12 ]
-      targets:
-        GOARCH: [ amd64, 386 ]
+      go:
+        versions: [ 1.13, 1.12 ]
+        targets:
+          GOARCH: [ amd64, 386 ]
 
   - job: MacOS_amd64
     pool:

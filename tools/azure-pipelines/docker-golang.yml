@@ -1,26 +1,28 @@
 parameters:
   name: ''
   vmImage: ''
-  go: [ 1.13, 1.12 ]
-  targets:
-    GOARCH: [ amd64 ]
+  continueOnError: false
+  go:
+    container: golang
+    versions: [ 1.13, 1.12 ]
+    targets:
+      GOARCH: [ amd64 ]
 
 jobs:
   - job: ${{ parameters.name }}
+    continueOnError: ${{ parameters.continueOnError }}
     pool:
       vmImage: ${{ parameters.vmImage }}
     strategy:
       matrix:
-        ${{ each go in parameters.go }}:
-          ${{ each goarch in parameters.targets.GOARCH }}:
-            ${{ format('go{0}_{1}', go, goarch) }}:
-              containerImage: golang:${{ go }}
+        ${{ each goVersion in parameters.go.versions }}:
+          ${{ each goarch in parameters.go.targets.GOARCH }}:
+            ${{ format('go{0}_{1}', goVersion, goarch) }}:
+              GOVERSION: ${{ goVersion }}
               GOARCH: ${{ goarch }}
     container:
-      image: $(containerImage)
+      image: ${{ parameters.go.container }}:$(GOVERSION)
       env:
-        GOPROXY: direct
-        GOSUMDB: off
         GOARCH: $(GOARCH)
     steps:
       - script: go env
