@@ -8,6 +8,7 @@ jobs:
       name: Debian_Linux
       vmImage: ubuntu-latest
       go:
+        container: golang
         versions: [ 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
@@ -27,6 +28,7 @@ jobs:
       name: Windows
       vmImage: windows-latest
       go:
+        container: golang
         versions: [ 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
