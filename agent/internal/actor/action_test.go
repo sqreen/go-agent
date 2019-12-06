@@ -26,6 +26,7 @@ func TestAction(t *testing.T) {
 			})
 			t.Run("expired", func(t *testing.T) {
 				action := withDuration(action, 0)
+				time.Sleep(time.Millisecond)
 				require.True(t, action.Expired())
 			})
 		})
@@ -76,6 +77,7 @@ func TestAction(t *testing.T) {
 				})
 				t.Run("expired", func(t *testing.T) {
 					action := withDuration(action, 0)
+					time.Sleep(time.Millisecond)
 					require.True(t, action.Expired())
 				})
 			})
