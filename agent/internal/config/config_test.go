@@ -138,7 +138,7 @@ func TestUserConfig(t *testing.T) {
 		require.Equal(cwdToken, token)
 
 		tmpToken := "tmp-token"
-		tmpDir := "./" + testlib.RandUTF8String(4)
+		tmpDir := "./" + testlib.RandPrintableUSASCIIString(4)
 		tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
 		defer os.Remove(tmpFile)
 		os.Setenv("SQREEN_CONFIG_FILE", tmpFile)
