@@ -1,7 +1,7 @@
 parameters:
   name: ''
   vmImage: ''
-  go: [ '1.13', '1.12', '1.11' ]
+  go: [ 1.13, 1.12 ]
   targets:
     GOARCH: [ amd64 ]
 
