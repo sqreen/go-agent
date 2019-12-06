@@ -5,7 +5,6 @@
 package bindingaccessor_test
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 
 	bindingaccessor "github.com/sqreen/go-agent/agent/internal/binding-accessor"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 )
 
 type contextWithMethods struct{}
@@ -403,7 +403,7 @@ func TestBindingAccessor(t *testing.T) {
 					}
 				case error:
 					require.Error(t, err)
-					errors.Is(err, actual)
+					xerrors.Is(err, actual)
 				}
 				return
 			}
