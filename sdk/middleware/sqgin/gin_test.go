@@ -23,7 +23,7 @@ func TestMiddleware(t *testing.T) {
 		sdk.SetAgent(agent)
 
 		req, _ := http.NewRequest("GET", "/", nil)
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		// Create a Gin router
 		router := gin.New()
 		// Add an endpoint accessing the SDK handle
@@ -44,7 +44,7 @@ func TestMiddleware(t *testing.T) {
 		sdk.SetAgent(nil)
 
 		req, _ := http.NewRequest("GET", "/", nil)
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		// Create a Gin router
 		router := gin.New()
 		// Attach our middleware
@@ -70,7 +70,7 @@ func TestMiddleware(t *testing.T) {
 		defer record.AssertExpectations(t)
 
 		req, _ := http.NewRequest("GET", "/", nil)
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		// Create a Gin router
 		router := gin.New()
 		// Attach our middleware

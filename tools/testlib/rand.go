@@ -6,23 +6,60 @@ package testlib
 
 import (
 	"math/rand"
+	"unicode"
 
-	fuzz "github.com/google/gofuzz"
+	"golang.org/x/net/http/httpguts"
 )
 
-func RandString(size ...int) string {
-	fuzzer := fuzz.New().NumElements(2, 2048).NilChance(0)
-	if len(size) == 1 {
-		n := size[0]
-		fuzzer.NumElements(n, n)
-	} else if len(size) == 2 {
-		from := size[0]
-		to := size[1]
-		fuzzer.NumElements(from, to)
+func RandHTTPHeaderValue(length ...int) string {
+	str := RandPrintableUSASCIIString(length...)
+	if !httpguts.ValidHeaderFieldValue(str) {
+		panic("unexpected invalid HTTP header value")
 	}
-	var buf []byte
-	fuzzer.Fuzz(&buf)
+	return str
+}
+
+func RandPrintableUSASCIIString(length ...int) string {
+	numChars := randStringLength(length...)
+	buf := make([]byte, numChars)
+	for i := 0; i < numChars; i++ {
+		// Any printable USASCII character: between 32 and MaxASCII
+		buf[i] = byte(32) + byte(rand.Intn(unicode.MaxASCII-32))
+	}
 	return string(buf)
+}
+
+func RandUTF8String(length ...int) string {
+	numChars := randStringLength(length...)
+	codePoints := make([]rune, numChars)
+	for i := 0; i < numChars; i++ {
+		// Get a random utf8 character code point which is any value between 0 and
+		// 0x10FFFF, including non-printable and control characters
+		codePoints[i] = rune(rand.Intn(unicode.MaxRune))
+	}
+	return string(codePoints)
+}
+
+func randStringLength(size ...int) (length int) {
+	var from, to int
+	if len(size) == 1 {
+		// String length up to the given max length value
+		to = size[0]
+	} else if len(size) == 2 {
+		// String length between the given boundaries
+		from = size[0]
+		to = size[1]
+	} else {
+		// String length up to 1024 characters
+		to = rand.Intn(1024)
+	}
+	upTo := to - from
+	if upTo == 0 {
+		// Avoid Intn(0) which panics
+		return from
+	}
+	return from + rand.Intn(upTo)
+
 }
 
 func RandUint32(boundaries ...uint32) uint32 {

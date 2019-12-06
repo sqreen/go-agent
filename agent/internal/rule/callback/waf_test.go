@@ -45,7 +45,7 @@ func TestInAppWAFCallback(t *testing.T) {
 			&RuleContextMockup{
 				config: &api.WAFRuleDataEntry{
 					BindingAccessors: []string{
-						`#.Request.'UserAgent`,
+						`#.Request.UserAgent`,
 					},
 					WAFRules: `{"rules": [{"rule_id": "1","filters": [{"operator": "@rx","targets": ["#.Request.UserAgent"],"value": "Arachni"}]}],"flows": [{"name": "arachni_detection","steps": [{"id": "start","rule_ids": ["1"],"on_match": "exit_block"}]}]}`,
 				},

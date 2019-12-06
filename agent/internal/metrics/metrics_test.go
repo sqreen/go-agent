@@ -359,7 +359,7 @@ func BenchmarkStore(b *testing.B) {
 		b.Run("structure key type", func(b *testing.B) {
 			b.Run("non existing keys", func(b *testing.B) {
 				key := structKeyType{
-					s: testlib.RandString(50),
+					s: testlib.RandPrintableUSASCIIString(50),
 				}
 
 				b.Run("using MetricsStore", func(b *testing.B) {
@@ -384,7 +384,7 @@ func BenchmarkStore(b *testing.B) {
 			b.Run("already existing key", func(b *testing.B) {
 				key := structKeyType{
 					n: 42,
-					s: testlib.RandString(50),
+					s: testlib.RandPrintableUSASCIIString(50),
 				}
 				b.Run("using MetricsStore", func(b *testing.B) {
 					store := engine.NewStore("id", time.Minute)
@@ -470,7 +470,7 @@ func BenchmarkStore(b *testing.B) {
 							b.SetParallelism(p)
 							b.RunParallel(func(pb *testing.PB) {
 								key := structKeyType{
-									s: testlib.RandString(50),
+									s: testlib.RandPrintableUSASCIIString(50),
 								}
 								for pb.Next() {
 									_ = store.Add(key, 1)
@@ -485,7 +485,7 @@ func BenchmarkStore(b *testing.B) {
 							b.SetParallelism(p)
 							b.RunParallel(func(pb *testing.PB) {
 								key := structKeyType{
-									s: testlib.RandString(50),
+									s: testlib.RandPrintableUSASCIIString(50),
 								}
 								for pb.Next() {
 									store.Store(key, 1)
@@ -497,7 +497,7 @@ func BenchmarkStore(b *testing.B) {
 
 					b.Run("same key", func(b *testing.B) {
 						key := structKeyType{
-							s: testlib.RandString(50),
+							s: testlib.RandPrintableUSASCIIString(50),
 							n: 42,
 						}
 

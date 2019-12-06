@@ -21,7 +21,7 @@ import (
 
 func TestNewECDSAPublicKey(t *testing.T) {
 	t.Run("invalid  format pubkey", func(t *testing.T) {
-		_, err := rule.NewECDSAPublicKey(testlib.RandString(0, 100))
+		_, err := rule.NewECDSAPublicKey(testlib.RandPrintableUSASCIIString(0, 100))
 		require.Error(t, err)
 	})
 

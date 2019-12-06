@@ -36,11 +36,11 @@ func TestCommandManager(t *testing.T) {
 	})
 
 	t.Run("unknown command", func(t *testing.T) {
-		uuid := testlib.RandString(1, 126)
+		uuid := testlib.RandPrintableUSASCIIString(1, 126)
 		results := mng.Do([]api.CommandRequest{
 			{
 				Uuid: uuid,
-				Name: testlib.RandString(1, 50),
+				Name: testlib.RandPrintableUSASCIIString(1, 50),
 			},
 		})
 		require.False(t, results[uuid].Status)
@@ -103,7 +103,7 @@ func TestCommandManager(t *testing.T) {
 					ret = []interface{}{nil}
 				}
 				tc.ExpectedAgentCall(tc.ExpectedArgs...).Return(ret...).Once()
-				uuid := testlib.RandString(1, 126)
+				uuid := testlib.RandPrintableUSASCIIString(1, 126)
 				results := mng.Do([]api.CommandRequest{
 					{
 						Uuid:   uuid,
@@ -127,7 +127,7 @@ func TestCommandManager(t *testing.T) {
 			t.Run("with errors", func(t *testing.T) {
 				agent.Reset()
 
-				errorMsg := testlib.RandString(1, 126)
+				errorMsg := testlib.RandPrintableUSASCIIString(1, 126)
 				expectedErr := errors.New(errorMsg)
 				ret := tc.AgentCallReturnError
 				if len(ret) == 0 {
@@ -136,7 +136,7 @@ func TestCommandManager(t *testing.T) {
 					ret[1] = expectedErr
 				}
 				tc.ExpectedAgentCall(tc.ExpectedArgs...).Return(ret...).Once()
-				uuid := testlib.RandString(1, 126)
+				uuid := testlib.RandPrintableUSASCIIString(1, 126)
 				results := mng.Do([]api.CommandRequest{
 					{
 						Uuid:   uuid,
@@ -160,7 +160,7 @@ func TestCommandManager(t *testing.T) {
 						agent.Reset()
 						// No agent calls are expected
 
-						uuid := testlib.RandString(1, 126)
+						uuid := testlib.RandPrintableUSASCIIString(1, 126)
 						results := mng.Do([]api.CommandRequest{
 							{
 								Uuid:   uuid,
@@ -186,7 +186,7 @@ func TestCommandManager(t *testing.T) {
 
 		// Generate the list of commands and the expected results
 		for _, tc := range testCases {
-			uuid := testlib.RandString(1, 126)
+			uuid := testlib.RandPrintableUSASCIIString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
 				Uuid:   uuid,
@@ -208,11 +208,11 @@ func TestCommandManager(t *testing.T) {
 
 		// Also include wrong commands
 		for n := 0; n <= int(testlib.RandUint32(1))%5; n++ {
-			uuid := testlib.RandString(1, 126)
+			uuid := testlib.RandPrintableUSASCIIString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
 				Uuid: uuid,
-				Name: testlib.RandString(1, 50),
+				Name: testlib.RandPrintableUSASCIIString(1, 50),
 			})
 
 			expectedResults[uuid] = api.CommandResult{
@@ -236,8 +236,8 @@ func TestCommandManager(t *testing.T) {
 
 		// Generate the list of commands and the expected results
 		for _, tc := range testCases {
-			uuid := testlib.RandString(1, 126)
-			uuid2 := testlib.RandString(1, 126)
+			uuid := testlib.RandPrintableUSASCIIString(1, 126)
+			uuid2 := testlib.RandPrintableUSASCIIString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
 				Uuid:   uuid,
@@ -270,11 +270,11 @@ func TestCommandManager(t *testing.T) {
 
 		// Also include wrong commands
 		for n := 0; n <= int(testlib.RandUint32(1)); n++ {
-			uuid := testlib.RandString(1, 126)
+			uuid := testlib.RandPrintableUSASCIIString(1, 126)
 
 			commands = append(commands, api.CommandRequest{
 				Uuid: uuid,
-				Name: testlib.RandString(1, 50),
+				Name: testlib.RandPrintableUSASCIIString(1, 50),
 			})
 
 			expectedResults[uuid] = api.CommandResult{
