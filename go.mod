@@ -6,7 +6,7 @@ require (
 	github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7 // indirect
 	github.com/gin-gonic/gin v1.3.0
 	github.com/gogo/protobuf v1.2.0
-	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
+	github.com/google/gofuzz v1.0.0
 	github.com/google/uuid v1.1.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/json-iterator/go v1.1.5 // indirect
@@ -22,12 +22,13 @@ require (
 	github.com/onsi/gomega v1.4.3
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/viper v1.3.1
-	github.com/sqreen/go-libsqreen v0.4.0
+	github.com/sqreen/go-libsqreen v0.4.1-0.20191205212953-d9f1f1e83a1c
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4 // indirect
-	golang.org/x/net v0.0.0-20190311183353-d8887717615a
+	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
+	golang.org/x/tools v0.0.0-20191015211201-9c6d90b5a7d0
 	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7
 	google.golang.org/grpc v1.20.1
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
