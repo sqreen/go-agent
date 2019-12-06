@@ -11,24 +11,24 @@ import (
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 )
 
-func execIndexAccess(v interface{}, index interface{}) interface{} {
+func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 	lvalue := reflect.ValueOf(v)
 	switch lvalue.Kind() {
 	case reflect.Map:
 		value := lvalue.MapIndex(reflect.ValueOf(index))
 		var zero reflect.Value
 		if value == zero {
-			return nil
+			return nil, nil
 		}
-		return value.Interface()
+		return value.Interface(), nil
 	case reflect.Slice:
-		return lvalue.Index(index.(int)).Interface()
+		return lvalue.Index(index.(int)).Interface(), nil
 	default:
-		panic(sqerrors.Errorf("cannot index value `%v` of type `%T` with index `%v` of type `%T`", v, v, index, index))
+		return nil, sqerrors.Errorf("cannot index value `%v` of type `%T` with index `%v` of type `%T`", v, v, index, index)
 	}
 }
 
-func execFieldAccess(value interface{}, field string) interface{} {
+func execFieldAccess(value interface{}, field string) (interface{}, error) {
 	root := reflect.ValueOf(value)
 	v := root
 loop:
@@ -46,7 +46,7 @@ loop:
 	// Try to access a field first
 	zero := reflect.Value{}
 	if f := v.FieldByName(field); f != zero {
-		return f.Interface()
+		return f.Interface(), nil
 	}
 
 	// Otherwise a method on the unreferenced value
@@ -57,14 +57,14 @@ loop:
 	}
 
 	if m == zero {
-		panic(sqerrors.Errorf("no field nor method `%s` found in value of type `%T`", field, value))
+		return nil, sqerrors.Errorf("no field nor method `%s` found in value of type `%T`", field, value)
 	}
 
 	// Call the the method which is expected to take no argument and to return a
 	// single value. This line can panic on purpose as this is the primary way
-	// of the `reflect` package for error management. Panics are caught by the
-	// root binding accessor function and returned as an error.
-	return m.Call(nil)[0].Interface()
+	// of the `reflect` package for error management. Panics are therefore caught
+	// by the root binding accessor function and returned as an error.
+	return m.Call(nil)[0].Interface(), nil
 }
 
 func execFlatKeys(ctx Context, v interface{}, maxDepth, maxElements int) interface{} {

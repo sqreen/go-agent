@@ -25,8 +25,8 @@ import (
 type Context interface{}
 
 // BindingAccessorFunc is a compiled binding accessor expression function.
-// If the binding accessor execution panics, it is recovered and returned
-// through the error return value.
+// Errors or panics during the binding accessor execution are returned as an
+// error.
 type BindingAccessorFunc func(ctx Context) (value interface{}, err error)
 
 // A valueFunc value is a compiled binding accessor expression. Executing it
@@ -34,7 +34,7 @@ type BindingAccessorFunc func(ctx Context) (value interface{}, err error)
 // be combined together in order to represent a whole binding accessor
 // expression through different function closures (field access, array access,
 // map access, etc.).
-type valueFunc func(ctx Context, maxDepth int) (value interface{})
+type valueFunc func(ctx Context, maxDepth int) (value interface{}, err error)
 
 // A transformationFunc value transforms an input value to another output value.
 // The traversal of the input value cannot be deeper than maxDepth, and the
@@ -42,10 +42,11 @@ type valueFunc func(ctx Context, maxDepth int) (value interface{})
 type transformationFunc func(ctx Context, valueIn interface{}, maxDepth, maxElements int) (valueOut interface{})
 
 // Maximum binding accessor execution depth. The binding accessor execution
-// traverses Go values. It cannot go deeper than this value. It panics a
-// `ErrMaxExecutionDepth` error when it is reached.
+// traverses Go values. It cannot go deeper than this value.
 const maxExecutionDepth = 10
 
+// ErrMaxExecutionDepth is returned by the BindingAccessorFunc when the
+// binding accessor execution reached the maximum depth `maxExecutionDepth`.
 var ErrMaxExecutionDepth = errors.New("maximum binding accessor execution depth reached")
 
 // Compile returns the compiled binding accessor expression function.
@@ -66,8 +67,9 @@ func Compile(expr string) (program BindingAccessorFunc, err error) {
 		// Panics are how `reflect` returns forbidden and unexpected accesses.
 		// We need to catch any panic and return it as an error.
 		err = sqsafe.Call(func() error {
-			value = exprFn(ctx, maxExecutionDepth)
-			return nil
+			var err error
+			value, err = exprFn(ctx, maxExecutionDepth)
+			return err
 		})
 		if err != nil {
 			return nil, sqerrors.Wrap(err, "binding accessor execution error")
@@ -118,8 +120,12 @@ func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 			return nil, err
 		}
 		lastValueFn := valueFn
-		valueFn = func(ctx Context, depth int) interface{} {
-			return trFn(ctx, lastValueFn(ctx, depth), newValueMaxDepth, newValueMaxElements)
+		valueFn = func(ctx Context, depth int) (value interface{}, err error) {
+			v, err := lastValueFn(ctx, depth)
+			if err != nil {
+				return nil, err
+			}
+			return trFn(ctx, v, newValueMaxDepth, newValueMaxElements), nil
 		}
 	}
 	return valueFn, nil
@@ -132,11 +138,15 @@ func compileField(valueFn valueFunc, buf string) (valueFunc, string, error) {
 		return nil, buf, sqerrors.New("unexpected empty field name")
 	}
 
-	return func(ctx Context, depth int) interface{} {
+	return func(ctx Context, depth int) (value interface{}, err error) {
 		if depth == 0 {
-			panic(ErrMaxExecutionDepth)
+			return nil, ErrMaxExecutionDepth
 		}
-		return execFieldAccess(valueFn(ctx, depth-1), field)
+		v, err := valueFn(ctx, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		return execFieldAccess(v, field)
 	}, buf, nil
 }
 
@@ -176,8 +186,8 @@ func compileIdentifier(buf string) (valueFunc, string, error) {
 
 	var valueFn valueFunc
 	if identifier == "#" {
-		valueFn = func(ctx Context, depth int) interface{} {
-			return ctx
+		valueFn = func(ctx Context, depth int) (interface{}, error) {
+			return ctx, nil
 		}
 	} else {
 		return nil, buf, sqerrors.Errorf("unknown identifier `%s`", identifier)
@@ -204,11 +214,15 @@ func compileIndex(valueFn valueFunc, buf string) (valueFunc, string, error) {
 		buf = buf[1:]
 	}
 
-	return func(ctx Context, depth int) interface{} {
+	return func(ctx Context, depth int) (interface{}, error) {
 		if depth == 0 {
-			panic(ErrMaxExecutionDepth)
+			return nil, ErrMaxExecutionDepth
 		}
-		return execIndexAccess(valueFn(ctx, depth-1), index)
+		v, err := valueFn(ctx, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		return execIndexAccess(v, index)
 	}, buf, nil
 }
 

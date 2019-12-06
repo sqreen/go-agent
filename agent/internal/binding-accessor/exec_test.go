@@ -397,10 +397,10 @@ func TestFlatValues(t *testing.T) {
 
 		t.Run("map", func(t *testing.T) {
 			v := map[string]mytype{
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
 			}
 			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedValues(4), out)
@@ -433,10 +433,10 @@ func TestFlatValues(t *testing.T) {
 				// The other two will be zero values
 			},
 			F4: map[string]mytype{
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
 			},
 		}
 		out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
@@ -498,10 +498,10 @@ func TestFlatValues(t *testing.T) {
 				// The other two will be zero values
 			},
 			F4: map[string]mytype{
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
-				testlib.RandString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
+				testlib.RandPrintableUSASCIIString(): myValue,
 			},
 		}
 		allExpectedValues := append(expectedValues(9), expectedZeroValues(2)...)
