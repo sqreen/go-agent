@@ -12,7 +12,7 @@ jobs:
         targets:
           GOARCH: [ amd64, 386 ]
 
-  - template: tools/azure-pipelines/test-go-versions.yml
+  - template: tools/azure-pipelines/docker-golang.yml
     parameters:
       name: Alpine_Linux
       vmImage: ubuntu-latest
@@ -22,7 +22,7 @@ jobs:
         targets:
           GOARCH: [ amd64 ]
 
-  - template: tools/azure-pipelines/test-go-versions.yml
+  - template: tools/azure-pipelines/docker-golang.yml
     parameters:
       name: Windows
       vmImage: windows-latest
