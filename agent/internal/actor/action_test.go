@@ -17,7 +17,7 @@ import (
 
 func TestAction(t *testing.T) {
 	t.Run("Blocking action", func(t *testing.T) {
-		action := newBlockAction(testlib.RandString(1, 20))
+		action := newBlockAction(testlib.RandPrintableUSASCIIString(1, 20))
 
 		t.Run("with duration", func(t *testing.T) {
 			t.Run("not expired", func(t *testing.T) {
@@ -26,6 +26,7 @@ func TestAction(t *testing.T) {
 			})
 			t.Run("expired", func(t *testing.T) {
 				action := withDuration(action, 0)
+				time.Sleep(time.Millisecond)
 				require.True(t, action.Expired())
 			})
 		})
@@ -44,7 +45,7 @@ func TestAction(t *testing.T) {
 			})
 
 			t.Run("Block User", func(t *testing.T) {
-				handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandString(1, 250)})
+				handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandPrintableUSASCIIString(1, 250)})
 				require.NoError(t, err)
 				require.NotNil(t, handler)
 				// Use the handler
@@ -59,13 +60,13 @@ func TestAction(t *testing.T) {
 
 	t.Run("Redirection action", func(t *testing.T) {
 		t.Run("invalid location url", func(t *testing.T) {
-			action, err := newRedirectAction(testlib.RandString(1, 20), "http//toto")
+			action, err := newRedirectAction(testlib.RandPrintableUSASCIIString(1, 20), "http//toto")
 			require.Nil(t, action)
 			require.Error(t, err)
 		})
 
 		t.Run("valid location url", func(t *testing.T) {
-			action, err := newRedirectAction(testlib.RandString(1, 20), "http://sqreen.com")
+			action, err := newRedirectAction(testlib.RandPrintableUSASCIIString(1, 20), "http://sqreen.com")
 			require.NotNil(t, action)
 			require.NoError(t, err)
 
@@ -76,6 +77,7 @@ func TestAction(t *testing.T) {
 				})
 				t.Run("expired", func(t *testing.T) {
 					action := withDuration(action, 0)
+					time.Sleep(time.Millisecond)
 					require.True(t, action.Expired())
 				})
 			})
@@ -95,7 +97,7 @@ func TestAction(t *testing.T) {
 				})
 
 				t.Run("Redirect User", func(t *testing.T) {
-					handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandString(1, 250)})
+					handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandPrintableUSASCIIString(1, 250)})
 					require.NoError(t, err)
 					require.NotNil(t, handler)
 					// Use the handler

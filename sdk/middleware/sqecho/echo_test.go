@@ -23,7 +23,7 @@ import (
 
 func TestMiddleware(t *testing.T) {
 	t.Run("without middleware", func(t *testing.T) {
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
 		agent := &testlib.AgentMockup{}
@@ -53,7 +53,7 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("without agent", func(t *testing.T) {
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
 		sdk.SetAgent(nil)
@@ -83,7 +83,7 @@ func TestMiddleware(t *testing.T) {
 
 	t.Run("without security response", func(t *testing.T) {
 		t.Run("without handler error", func(t *testing.T) {
-			body := testlib.RandString(1, 100)
+			body := testlib.RandUTF8String(4096)
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
 			agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
@@ -115,7 +115,7 @@ func TestMiddleware(t *testing.T) {
 		})
 
 		t.Run("with a handler error", func(t *testing.T) {
-			body := testlib.RandString(1, 100)
+			body := testlib.RandUTF8String(4096)
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
 			agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
@@ -143,7 +143,7 @@ func TestMiddleware(t *testing.T) {
 
 	t.Run("with a security response", func(t *testing.T) {
 		t.Run("with ip response", func(t *testing.T) {
-			body := testlib.RandString(1, 100)
+			body := testlib.RandUTF8String(4096)
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
 			status := http.StatusBadRequest
@@ -173,7 +173,7 @@ func TestMiddleware(t *testing.T) {
 		})
 
 		t.Run("with user response", func(t *testing.T) {
-			body := testlib.RandString(1, 100)
+			body := testlib.RandUTF8String(4096)
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 
 			status := http.StatusBadRequest

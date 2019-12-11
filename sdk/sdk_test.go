@@ -6,7 +6,7 @@ package sdk_test
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -70,20 +70,20 @@ func TestTrackEvent(t *testing.T) {
 	defer sqReq.Close()
 	record.ExpectClose()
 
-	eventID := testlib.RandString(2, 50)
+	eventID := testlib.RandPrintableUSASCIIString(2, 50)
 	record.ExpectTrackEvent(eventID).Return(record).Once()
 
 	sqEvent := sqreen.TrackEvent(eventID)
 	require.NotNil(t, sqEvent)
 
 	t.Run("with user identifiers", func(t *testing.T) {
-		userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+		userID := sdk.EventUserIdentifiersMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 		record.ExpectWithUserIdentifiers(userID).Once()
 		sqEvent = sqEvent.WithUserIdentifiers(userID)
 		require.NotNil(t, sqEvent)
 
 		t.Run("chain with properties", func(t *testing.T) {
-			props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+			props := sdk.EventPropertyMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 			record.ExpectWithProperties(props).Once()
 			sqEvent = sqEvent.WithProperties(props)
 			require.NotNil(t, sqEvent)
@@ -99,13 +99,13 @@ func TestTrackEvent(t *testing.T) {
 
 	t.Run("with properties", func(t *testing.T) {
 		require := require.New(t)
-		props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+		props := sdk.EventPropertyMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 		record.ExpectWithProperties(props).Once()
 		sqEvent = sqEvent.WithProperties(props)
 		require.NotNil(sqEvent)
 
 		t.Run("chain with user identifiers", func(t *testing.T) {
-			userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+			userID := sdk.EventUserIdentifiersMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 			record.ExpectWithUserIdentifiers(userID).Once()
 			sqEvent = sqEvent.WithUserIdentifiers(userID)
 			require.NotNil(t, sqEvent)
@@ -127,14 +127,14 @@ func TestTrackEvent(t *testing.T) {
 		require.NotNil(sqEvent)
 
 		t.Run("chain with user identifiers", func(t *testing.T) {
-			userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+			userID := sdk.EventUserIdentifiersMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 			record.ExpectWithUserIdentifiers(userID).Once()
 			sqEvent = sqEvent.WithUserIdentifiers(userID)
 			require.NotNil(sqEvent)
 		})
 
 		t.Run("chain with properties", func(t *testing.T) {
-			props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+			props := sdk.EventPropertyMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 			record.ExpectWithProperties(props).Once()
 			sqEvent = sqEvent.WithProperties(props)
 			require.NotNil(sqEvent)
@@ -162,7 +162,7 @@ func TestForUser(t *testing.T) {
 	defer sqReq.Close()
 	record.ExpectClose()
 
-	userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+	userID := sdk.EventUserIdentifiersMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 
 	sqUser := sqreen.ForUser(userID)
 	require.NotNil(t, sqUser)
@@ -216,14 +216,14 @@ func TestForUser(t *testing.T) {
 	})
 
 	t.Run("TrackEvent", func(t *testing.T) {
-		eventID := testlib.RandString(2, 50)
+		eventID := testlib.RandPrintableUSASCIIString(2, 50)
 		record.ExpectTrackEvent(eventID).Once()
 		record.ExpectWithUserIdentifiers(userID).Once()
 		sqEvent := sqUser.TrackEvent(eventID)
 		require.NotNil(t, sqEvent)
 
 		t.Run("with properties", func(t *testing.T) {
-			props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+			props := sdk.EventPropertyMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 			record.ExpectWithProperties(props).Once()
 			sqEvent = sqEvent.WithProperties(props)
 			require.NotNil(t, sqEvent)
@@ -243,7 +243,7 @@ func TestForUser(t *testing.T) {
 			require.NotNil(t, sqEvent)
 
 			t.Run("chain with properties", func(t *testing.T) {
-				props := sdk.EventPropertyMap{testlib.RandString(2, 50): testlib.RandString(2, 50)}
+				props := sdk.EventPropertyMap{testlib.RandPrintableUSASCIIString(2, 50): testlib.RandPrintableUSASCIIString(2, 50)}
 				record.ExpectWithProperties(props).Once()
 				sqEvent = sqEvent.WithProperties(props)
 				require.NotNil(t, sqEvent)
@@ -269,13 +269,13 @@ func (whitelistedRecord) WithUserIdentifiers(id map[string]string)        {}
 func TestDisabled(t *testing.T) {
 	useTheSDK := func(t *testing.T, sqreen *sdk.HTTPRequestRecord) func() {
 		return func() {
-			event := sqreen.TrackEvent(testlib.RandString(0, 50))
+			event := sqreen.TrackEvent(testlib.RandPrintableUSASCIIString(0, 50))
 			event = event.WithTimestamp(time.Now())
-			userID := sdk.EventUserIdentifiersMap{testlib.RandString(2, 30): testlib.RandString(2, 30)}
+			userID := sdk.EventUserIdentifiersMap{testlib.RandPrintableUSASCIIString(2, 30): testlib.RandPrintableUSASCIIString(2, 30)}
 			event = event.WithUserIdentifiers(userID)
-			props := sdk.EventPropertyMap{testlib.RandString(2, 30): testlib.RandString(2, 30)}
+			props := sdk.EventPropertyMap{testlib.RandPrintableUSASCIIString(2, 30): testlib.RandPrintableUSASCIIString(2, 30)}
 			event = event.WithProperties(props)
-			uid := sdk.EventUserIdentifiersMap{testlib.RandString(2, 30): testlib.RandString(2, 30)}
+			uid := sdk.EventUserIdentifiersMap{testlib.RandPrintableUSASCIIString(2, 30): testlib.RandPrintableUSASCIIString(2, 30)}
 			sqUser := sqreen.ForUser(uid)
 			sqUser = sqUser.TrackSignup()
 			sqUser = sqUser.TrackAuth(true)
@@ -285,7 +285,7 @@ func TestDisabled(t *testing.T) {
 			match, err := sqUser.MatchSecurityResponse()
 			require.False(t, match)
 			require.NoError(t, err)
-			sqUserEvent := sqUser.TrackEvent(testlib.RandString(0, 50))
+			sqUserEvent := sqUser.TrackEvent(testlib.RandPrintableUSASCIIString(0, 50))
 			sqUserEvent = sqUserEvent.WithProperties(props)
 			sqUserEvent = sqUserEvent.WithTimestamp(time.Now())
 			sqreen.Close()
@@ -316,14 +316,16 @@ func TestDisabled(t *testing.T) {
 }
 
 func TestEventPropertyMap(t *testing.T) {
-	key := testlib.RandString(1, 100)
-	value := testlib.RandString(1, 100)
+	key := testlib.RandPrintableUSASCIIString(1, 100)
+	value := testlib.RandPrintableUSASCIIString(1, 100)
 	props := sdk.EventPropertyMap{
 		key: value,
 	}
 	buf, err := props.MarshalJSON()
 	require.NoError(t, err)
-	require.Equal(t, string(buf), fmt.Sprintf(`{"%s":"%s"}`, key, value))
+	expected, err := json.Marshal(map[string]string{key: value})
+	require.NoError(t, err)
+	require.Equal(t, string(expected), string(buf))
 }
 
 func newTestRequest() *http.Request {

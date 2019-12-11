@@ -40,7 +40,8 @@ type httpRequestBindingAccessorCache struct {
 
 type HTTPRequestFilteredParams struct {
 	// Form contains the Form field value of a http.Request after calling
-	// `ParseForm()`. It therefore also includes que URL query values too.
+	// `ParseForm()`, which includes request values such as URLquery values or
+	// url-encoded form values. The multi-part form data is not included.
 	Form url.Values
 }
 

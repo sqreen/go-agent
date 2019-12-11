@@ -5,7 +5,9 @@
 package bindingaccessor_test
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +20,14 @@ import (
 
 func TestRequestBindingAccessors(t *testing.T) {
 	expectedClientIP := "64.81.32.89"
+
+	var multipartFormBody bytes.Buffer
+	mp := multipart.NewWriter(&multipartFormBody)
+	f1, err := mp.CreateFormField("field 1")
+	require.NoError(t, err)
+	f1.Write([]byte("value 1"))
+	mp.Close()
+	multipartContentTypeHeader := mp.FormDataContentType()
 
 	for _, tc := range []struct {
 		Title            string
@@ -58,16 +68,17 @@ func TestRequestBindingAccessors(t *testing.T) {
 			Method: "POST",
 			URL:    "http://sqreen.com/admin/news?user=root&password=root",
 			Headers: http.Header{
-				"Content-Type": []string{`multipart/form-data; boundary="foo123"`},
+				"Content-Type": []string{mp.FormDataContentType()},
 			},
+			Body: &multipartFormBody,
 			BindingAccessors: map[string]interface{}{
 				`#.Method`:                       "POST",
 				`#.Host`:                         "sqreen.com",
 				`#.ClientIP`:                     expectedClientIP,
-				`#.Header['Content-Type']`:       []string{`multipart/form-data; boundary="foo123"`},
+				`#.Header['Content-Type']`:       []string{multipartContentTypeHeader},
 				`#.URL.RequestURI`:               "/admin/news?user=root&password=root",
-				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root"},
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password"},
+				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root"},             // The multipart form data is not included for now
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password"}, // The multipart form data is not included for now
 			},
 		},
 		{
@@ -75,17 +86,17 @@ func TestRequestBindingAccessors(t *testing.T) {
 			Method: "POST",
 			URL:    "http://sqreen.com/admin/news",
 			Headers: http.Header{
-				"Content-Type": []string{`application/x-www-form-urlencoded; param=value`},
+				"Content-Type": []string{`application/x-www-form-urlencoded`},
 			},
-			Body: strings.NewReader("z=post&both=y&prio=2&=nokey&orphan;empty=&"),
+			Body: strings.NewReader(`z=post&both=y&prio=2&=nokey&orphan;empty=&`),
 			BindingAccessors: map[string]interface{}{
 				`#.Method`:                       "POST",
 				`#.Host`:                         "sqreen.com",
 				`#.ClientIP`:                     expectedClientIP,
-				`#.Header['Content-Type']`:       []string{`application/x-www-form-urlencoded; param=value`},
+				`#.Header['Content-Type']`:       []string{`application/x-www-form-urlencoded`},
 				`#.URL.RequestURI`:               "/admin/news",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", ""},
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "empty", "z", "both", "prio", "", "orphan"},
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "z", "both", "prio", "", "orphan", "empty"},
 			},
 		},
 		{
@@ -93,14 +104,14 @@ func TestRequestBindingAccessors(t *testing.T) {
 			Method: "POST",
 			URL:    "http://sqreen.com/admin/news?sqreen=okay",
 			Headers: http.Header{
-				"Content-Type": []string{`application/x-www-form-urlencoded; param=value`},
+				"Content-Type": []string{`application/x-www-form-urlencoded`},
 			},
 			Body: strings.NewReader("z=post&both=y&prio=2&=nokey&orphan;empty=&"),
 			BindingAccessors: map[string]interface{}{
 				`#.Method`:                       "POST",
 				`#.Host`:                         "sqreen.com",
 				`#.ClientIP`:                     expectedClientIP,
-				`#.Header['Content-Type']`:       []string{`application/x-www-form-urlencoded; param=value`},
+				`#.Header['Content-Type']`:       []string{`application/x-www-form-urlencoded`},
 				`#.URL.RequestURI`:               "/admin/news?sqreen=okay",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", "", "okay"},
 				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "empty", "z", "both", "prio", "", "orphan", "sqreen"},
@@ -147,6 +158,6 @@ loop:
 				continue loop
 			}
 		}
-		require.Failf(t, "missing expected value `%v`", "", f)
+		require.Failf(t, "missing expected value", "expected `%v` having type `%T`", f, f)
 	}
 }

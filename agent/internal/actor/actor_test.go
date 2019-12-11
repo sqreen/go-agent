@@ -301,7 +301,7 @@ func TestStore(t *testing.T) {
 			{
 				name: "Malformed",
 				actions: map[*api.ActionsPackResponse_Action][]net.IP{
-					NewBlockIPAction(testlib.RandString(2, 20)): nil,
+					NewBlockIPAction(testlib.RandPrintableUSASCIIString(2, 20)): nil,
 				},
 			},
 
@@ -610,8 +610,8 @@ func RandUser() map[string]string {
 	count := int(1 + rand.Uint32()%10)
 	user := make(map[string]string, count)
 	for n := 0; n < count; n++ {
-		k := testlib.RandString(1, 50)
-		v := testlib.RandString(1, 50)
+		k := testlib.RandPrintableUSASCIIString(1, 50)
+		v := testlib.RandPrintableUSASCIIString(1, 50)
 		user[k] = v
 	}
 	return user

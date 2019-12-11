@@ -33,8 +33,8 @@ func TestClient(t *testing.T) {
 	t.Run("AppLogin", func(t *testing.T) {
 		g := NewGomegaWithT(t)
 
-		token := testlib.RandString(2, 50)
-		appName := testlib.RandString(2, 50)
+		token := testlib.RandHTTPHeaderValue(2, 50)
+		appName := testlib.RandHTTPHeaderValue(2, 50)
 
 		statusCode := http.StatusOK
 
@@ -180,14 +180,14 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 
 	loginReq := NewRandomAppLoginRequest()
 	loginRes := NewRandomAppLoginResponse()
-	loginRes.SessionId = testlib.RandString(2, 50)
+	loginRes.SessionId = testlib.RandHTTPHeaderValue(2, 50)
 	loginRes.Status = true
 	server.AppendHandlers(ghttp.RespondWithJSONEncoded(http.StatusOK, loginRes))
 
 	client = backend.NewClient(server.URL(), cfg, logger)
 
-	token := testlib.RandString(2, 50)
-	appName := testlib.RandString(2, 50)
+	token := testlib.RandHTTPHeaderValue(2, 50)
+	appName := testlib.RandHTTPHeaderValue(2, 50)
 	_, err := client.AppLogin(loginReq, token, appName)
 	if err != nil {
 		panic(err)
