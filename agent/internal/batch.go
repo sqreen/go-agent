@@ -5,13 +5,11 @@
 package internal
 
 import (
-	"encoding/hex"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
@@ -119,64 +117,8 @@ func (r *HTTPRequestRecordEvent) GetClientIp() string {
 	return r.rr.ClientIP().String()
 }
 
-func (r *HTTPRequestRecordEvent) GetRequest() api.RequestRecord_Request {
-	req := r.rr.Request()
-
-	trackedHeaders := config.TrackedHTTPHeaders
-	if extraHeader := r.cfg.HTTPClientIPHeader(); extraHeader != "" {
-		trackedHeaders = append(trackedHeaders, extraHeader)
-	}
-	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
-	for _, header := range trackedHeaders {
-		if value := req.Header.Get(header); value != "" {
-			headers = append(headers, api.RequestRecord_Request_Header{
-				Key:   header,
-				Value: value,
-			})
-		}
-	}
-
-	remoteIP, remotePort := record.SplitHostPort(req.RemoteAddr)
-	_, hostPort := record.SplitHostPort(req.Host)
-
-	var scheme string
-	if req.TLS != nil {
-		scheme = "https"
-	} else {
-		scheme = "http"
-	}
-
-	requestId := req.Header.Get("X-Request-Id")
-	if requestId == "" {
-		uuid, err := uuid.NewRandom()
-		if err != nil {
-			// Log the error and continue.
-			r.logger.Error(errors.Wrap(err, "could not generate a request id "))
-			requestId = ""
-		}
-		requestId = hex.EncodeToString(uuid[:])
-	}
-
-	var referer string
-	if !r.cfg.StripHTTPReferer() {
-		referer = req.Referer()
-	}
-
-	// FIXME: create it from an interface for compile-time error-checking.
-	return api.RequestRecord_Request{
-		Rid:        requestId,
-		Headers:    headers,
-		Verb:       req.Method,
-		RawPath:    req.RequestURI,
-		Path:       req.URL.Path,
-		Host:       req.Host,
-		Port:       hostPort,
-		RemoteIp:   remoteIP,
-		RemotePort: remotePort,
-		Scheme:     scheme,
-		UserAgent:  req.UserAgent(),
-		Referer:    referer,
-	}
+func (e *HTTPRequestRecordEvent) GetRequest() api.RequestRecord_Request {
+	return *api.NewRequestRecord_RequestFromFace(&RequestAPIAdaptor{HTTPRequestRecordEvent: e})
 }
 
 func (r *HTTPRequestRecordEvent) GetResponse() api.RequestRecord_Response {
@@ -220,4 +162,105 @@ func (a *AttackEventAPIAdaptor) GetTime() time.Time {
 
 func (a *AttackEventAPIAdaptor) GetBlock() bool {
 	return a.Blocked
+}
+
+type RequestAPIAdaptor struct {
+	*HTTPRequestRecordEvent
+	cache struct {
+		remoteIP, remotePort, hostPort string
+	}
+}
+
+func (a *RequestAPIAdaptor) request() *http.Request {
+	return a.rr.Request()
+}
+
+func (a *RequestAPIAdaptor) GetRid() string {
+	return a.request().Header.Get("X-Request-Id")
+}
+
+func (a *RequestAPIAdaptor) GetHeaders() []api.RequestRecord_Request_Header {
+	req := a.request()
+	trackedHeaders := config.TrackedHTTPHeaders
+	if extraHeader := a.cfg.HTTPClientIPHeader(); extraHeader != "" {
+		trackedHeaders = append(trackedHeaders, extraHeader)
+	}
+	headers := make([]api.RequestRecord_Request_Header, 0, len(req.Header))
+	for _, header := range trackedHeaders {
+		if value := req.Header.Get(header); value != "" {
+			headers = append(headers, api.RequestRecord_Request_Header{
+				Key:   header,
+				Value: value,
+			})
+		}
+	}
+	return headers
+}
+
+func (a *RequestAPIAdaptor) GetVerb() string {
+	return a.request().Method
+}
+
+func (a *RequestAPIAdaptor) GetPath() string {
+	return a.request().URL.Path
+}
+
+func (a *RequestAPIAdaptor) GetRawPath() string {
+	return a.request().RequestURI
+}
+
+func (a *RequestAPIAdaptor) GetHost() string {
+	return a.request().Host
+}
+
+func (a *RequestAPIAdaptor) GetPort() string {
+	if a.cache.hostPort == "" {
+		_, a.cache.hostPort = record.SplitHostPort(a.request().Host)
+	}
+	return a.cache.hostPort
+}
+
+func (a *RequestAPIAdaptor) GetRemoteIp() string {
+	if a.cache.remoteIP == "" {
+		a.cache.remoteIP, a.cache.remotePort = record.SplitHostPort(a.request().RemoteAddr)
+	}
+	return a.cache.remoteIP
+}
+
+func (a *RequestAPIAdaptor) GetRemotePort() string {
+	if a.cache.remotePort != "" {
+		a.cache.remoteIP, a.cache.remotePort = record.SplitHostPort(a.request().RemoteAddr)
+	}
+	return a.cache.remotePort
+}
+
+func (a *RequestAPIAdaptor) GetScheme() string {
+	if a.request().TLS != nil {
+		return "https"
+	} else {
+		return "http"
+	}
+}
+
+func (a *RequestAPIAdaptor) GetUserAgent() string {
+	return a.request().UserAgent()
+}
+
+func (a *RequestAPIAdaptor) GetReferer() string {
+	if a.cfg.StripHTTPReferer() {
+		return ""
+	}
+	return a.request().Referer()
+}
+
+func (a *RequestAPIAdaptor) GetParameters() api.RequestRecord_Request_Parameters {
+	req := a.request()
+	// .Form and .PostForm are taken as is, without calling `ParseForm()` so
+	// that we take what has been done during the request handling.
+	// So they can be nil even if there were form parameters in the
+	// body.
+	return api.RequestRecord_Request_Parameters{
+		Query: req.Form,
+		Form:  req.PostForm,
+	}
 }
