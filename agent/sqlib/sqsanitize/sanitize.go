@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
 )
 
 // Scrubber scrubs values according to the key and value regular expressions
@@ -55,8 +56,14 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 	}, nil
 }
 
-func (s *Scrubber) Scrub(v interface{}) bool {
-	return s.scrubValue(reflect.ValueOf(v))
+// Scrub a given value using Go reflect package, therefore ignoring unexported
+// struct fields. It cannot panic. An error is returned if the underlying
+// `reflect` package panics.
+func (s *Scrubber) Scrub(v interface{}) error {
+	return sqsafe.Call(func() error {
+		_ = s.scrubValue(reflect.ValueOf(v))
+		return nil
+	})
 }
 
 func (s *Scrubber) scrubValue(v reflect.Value) bool {
