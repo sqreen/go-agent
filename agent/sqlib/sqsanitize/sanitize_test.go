@@ -25,7 +25,8 @@ func TestGoAssumptions(t *testing.T) {
 func TestScrubber(t *testing.T) {
 	expectedMask := `<Redacted by Sqreen>`
 
-	randString := testlib.RandUTF8String(512, 1024)
+	//randString := testlib.RandUTF8String(512, 1024)
+	randString := "toto"
 
 	t.Run("NewScrubber", func(t *testing.T) {
 		type args struct {
@@ -145,7 +146,8 @@ func TestScrubber(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
 				require.NoError(t, err)
-				s.Scrub(&tc.value)
+				err = s.Scrub(&tc.value)
+				require.NoError(t, err)
 				require.Equal(t, tc.expected, tc.value)
 			})
 
@@ -153,163 +155,739 @@ func TestScrubber(t *testing.T) {
 	})
 
 	t.Run("Scrub", func(t *testing.T) {
-		type myStruct struct {
-			a string
-			B string
-			C int
-			D string
-			E *myStruct
+		// The following test checks the scrubbed value when using the key regexp,
+		// or the value regexp or both.
+		type expectedValues struct {
+			withValueRE      interface{}
+			withKeyRE        interface{}
+			withBothRE       interface{}
+			withBothDisabled interface{}
 		}
-
-		type TestCase struct {
+		type testCase struct {
 			name     string
 			value    interface{}
-			expected interface{}
+			expected expectedValues
 		}
 
+		// Given the following regular expressions
+		keyRegexp := `(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`
 		valueRegexp := `^everything$`
 
-		tests := []TestCase{
+		type EmbeddedStruct struct {
+			Authorization []string // exported matching field
+			authorization []string // unexported matching field
+			F             string   // exported field
+			f             string   // unexported field
+		}
+		// alternative names to avoid name collisions in the type definition
+		type EmbeddedStruct2 EmbeddedStruct
+		type embeddedStruct EmbeddedStruct
+		type embeddedStruct2 EmbeddedStruct
+
+		type myStruct struct {
+			PassWORD         string    // matching exported string field
+			Secret_          []string  // matching exported field with strings
+			password         string    // unexported matching string field
+			ApiKey           int       // non-string matching int field
+			a                string    // unexported string value
+			B                string    // exported string value
+			C                int       // exported non-string
+			D                string    // exported string value
+			E                *myStruct // recursive pointer
+			EmbeddedStruct             // exported embedded struct
+			*EmbeddedStruct2           // exported embedded struct pointer
+			embeddedStruct             // unexported embedded struct
+			*embeddedStruct2           // unexported embedded struct pointer
+		}
+
+		tests := []testCase{
 			{
-				name:     "string",
-				value:    "",
-				expected: "",
-			},
-			{
-				name:     "string",
-				value:    "not everything",
-				expected: "not everything",
-			},
-			{
-				name:     "string",
-				value:    "everything",
-				expected: expectedMask,
-			},
-			{
-				name:     "slice",
-				value:    nil,
-				expected: nil,
-			},
-			{
-				name:     "slice",
-				value:    []string{},
-				expected: []string{},
-			},
-			{
-				name:     "slice",
-				value:    []string{"f", "fo", "foo"},
-				expected: []string{"f", "fo", "foo"},
-			},
-			{
-				name:     "slice",
-				value:    []string{"everything", "everithing", "not everything", "everything not", "everything"},
-				expected: []string{expectedMask, "everithing", "not everything", "everything not", expectedMask},
-			},
-			{
-				name:     "map",
-				value:    nil,
-				expected: nil,
-			},
-			{
-				name:     "map",
-				value:    map[string]string{},
-				expected: map[string]string{},
-			},
-			{
-				name:     "map",
-				value:    map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
-				expected: map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
-			},
-			{
-				name:     "map",
-				value:    map[string]string{"key": "everything"},
-				expected: map[string]string{"key": expectedMask},
-			},
-			{
-				name:     "map",
-				value:    map[string]string{"k1": "everything", "k2": "everithing", "k3": "not everything", "k4": "everything not", "k5": "everything"},
-				expected: map[string]string{"k1": expectedMask, "k2": "everithing", "k3": "not everything", "k4": "everything not", "k5": expectedMask},
-			},
-			{
-				name: "struct",
-				value: &myStruct{
-					a: "everything",
-					B: "everything",
-					C: 33,
-					D: "not everything",
-				},
-				expected: &myStruct{
-					a: "everything",
-					B: expectedMask,
-					C: 33,
-					D: "not everything",
+				name:  "string",
+				value: "",
+				expected: expectedValues{
+					withValueRE:      "",
+					withKeyRE:        "",
+					withBothRE:       "",
+					withBothDisabled: "",
 				},
 			},
 			{
+				name:  "string",
+				value: randString,
+				expected: expectedValues{
+					withValueRE:      randString,
+					withKeyRE:        randString,
+					withBothRE:       randString,
+					withBothDisabled: randString,
+				},
+			},
+			{
+				name:  "string",
+				value: "everything",
+				expected: expectedValues{
+					withValueRE:      expectedMask,
+					withKeyRE:        "everything",
+					withBothRE:       expectedMask,
+					withBothDisabled: "everything",
+				},
+			},
+			{
+				name:  "slice",
+				value: nil,
+				expected: expectedValues{
+					withValueRE:      nil,
+					withKeyRE:        nil,
+					withBothRE:       nil,
+					withBothDisabled: nil,
+				},
+			},
+			{
+				name:  "slice",
+				value: []string{},
+				expected: expectedValues{
+					withValueRE:      []string{},
+					withKeyRE:        []string{},
+					withBothRE:       []string{},
+					withBothDisabled: []string{},
+				},
+			},
+			{
+				name:  "slice",
+				value: []string{"f", "fo", "foo"},
+				expected: expectedValues{
+					withValueRE:      []string{"f", "fo", "foo"},
+					withKeyRE:        []string{"f", "fo", "foo"},
+					withBothRE:       []string{"f", "fo", "foo"},
+					withBothDisabled: []string{"f", "fo", "foo"},
+				},
+			},
+			{
+				name:  "slice",
+				value: func() interface{} { return []string{"everything", "everithing", "not everything", "everything not", "everything"} },
+				expected: expectedValues{
+					withValueRE:      []string{expectedMask, "everithing", "not everything", "everything not", expectedMask},
+					withKeyRE:        []string{"everything", "everithing", "not everything", "everything not", "everything"},
+					withBothRE:       []string{expectedMask, "everithing", "not everything", "everything not", expectedMask},
+					withBothDisabled: []string{"everything", "everithing", "not everything", "everything not", "everything"},
+				},
+			},
+			{
+				name:  "map",
+				value: nil,
+				expected: expectedValues{
+					withValueRE:      nil,
+					withKeyRE:        nil,
+					withBothRE:       nil,
+					withBothDisabled: nil,
+				},
+			},
+			{
+				name:  "map",
+				value: map[string]string{},
+				expected: expectedValues{
+					withValueRE:      map[string]string{},
+					withKeyRE:        map[string]string{},
+					withBothRE:       map[string]string{},
+					withBothDisabled: map[string]string{},
+				},
+			},
+			{
+				name:  "map",
+				value: map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
+				expected: expectedValues{
+					withValueRE:      map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
+					withKeyRE:        map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
+					withBothRE:       map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
+					withBothDisabled: map[string]string{"k1": "v1", "k2": "v2", "k3": "v3"},
+				},
+			},
+			{
+				name:  "map",
+				value: func() interface{} { return map[string]string{"key": "everything"} },
+				expected: expectedValues{
+					withValueRE:      map[string]string{"key": expectedMask},
+					withKeyRE:        map[string]string{"key": "everything"},
+					withBothRE:       map[string]string{"key": expectedMask},
+					withBothDisabled: map[string]string{"key": "everything"},
+				},
+			},
+			{
+				name: "map",
+				value: func() interface{} {
+					return map[string]string{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
+					}
+				},
+				expected: expectedValues{
+					withValueRE: map[string]string{
+						"key":    expectedMask,
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": expectedMask,
+					},
+					withKeyRE: map[string]string{
+						"key":    "everything",
+						"passwd": expectedMask,
+						"apikey": expectedMask,
+						"k4":     "not everything",
+						"secret": expectedMask,
+					},
+					withBothRE: map[string]string{
+						"key":    expectedMask,
+						"passwd": expectedMask,
+						"apikey": expectedMask,
+						"k4":     "not everything",
+						"secret": expectedMask,
+					},
+					withBothDisabled: map[string]string{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
+					},
+				},
+			},
+			{
+				name: "map of string pointers",
+				value: func() interface{} {
+					// New local variable to avoid modifying &randString
+					// This test will modify &myRandString (a *string value)
+					myRandString := randString
+					return map[string]*string{
+						"passwd": &myRandString,
+						"apikey": &myRandString,
+					}
+				},
+				expected: expectedValues{
+					withValueRE: map[string]*string{
+						"passwd": &randString,
+						"apikey": &randString,
+					},
+					withKeyRE: map[string]*string{
+						"passwd": &expectedMask,
+						"apikey": &expectedMask,
+					},
+					withBothRE: map[string]*string{
+						"passwd": &expectedMask,
+						"apikey": &expectedMask,
+					},
+					withBothDisabled: map[string]*string{
+						"passwd": &randString,
+						"apikey": &randString,
+					},
+				},
+			},
+			//{ TODO
+			//	name: "map of interface values",
+			//	value: func() interface{} {
+			//		// New local variable to avoid modifying &randString
+			//		// This test will modify &myRandString (a *string value)
+			//		//myRandString := randString
+			//		return map[string]interface{}{
+			//			//"passwd": &myRandString,
+			//			"apikey": randString,
+			//		}
+			//	},
+			//	expected: expectedValues{
+			//		withValueRE: map[string]interface{}{
+			//			//"passwd": &randString,
+			//			"apikey": randString,
+			//		},
+			//		withKeyRE: map[string]interface{}{
+			//			//"passwd": &expectedMask,
+			//			"apikey": expectedMask,
+			//		},
+			//		withBothRE: map[string]interface{}{
+			//			//"passwd": &expectedMask,
+			//			"apikey": expectedMask,
+			//		},
+			//		withBothDisabled: map[string]interface{}{
+			//			//"passwd": &randString,
+			//			"apikey": randString,
+			//		},
+			//	},
+			//},
+			{
 				name: "struct",
-				value: &myStruct{
-					E: &myStruct{
+				value: func() interface{} {
+					return &myStruct{
+						PassWORD: randString,
+						password: randString,
+						Secret_:  []string{randString, "everything"},
+						ApiKey:   9838923,
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						PassWORD: randString,
+						password: randString,
+						Secret_:  []string{randString, expectedMask},
+						ApiKey:   9838923,
+					},
+					withKeyRE: &myStruct{
+						PassWORD: expectedMask,
+						password: randString,
+						Secret_:  []string{expectedMask, expectedMask},
+						ApiKey:   9838923,
+					},
+					withBothRE: &myStruct{
+						PassWORD: expectedMask,
+						password: randString,
+						Secret_:  []string{expectedMask, expectedMask},
+						ApiKey:   9838923,
+					},
+					withBothDisabled: &myStruct{
+						PassWORD: randString,
+						password: randString,
+						Secret_:  []string{randString, "everything"},
+						ApiKey:   9838923,
+					},
+				},
+			},
+			{
+				name: "struct",
+				value: func() interface{} {
+					return &myStruct{
+						a: "everything",
+						B: "everything",
+						C: 33,
+						D: "not everything",
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						a: "everything",
+						B: expectedMask,
+						C: 33,
+						D: "not everything",
+					},
+					withKeyRE: &myStruct{
+						a: "everything",
+						B: "everything",
+						C: 33,
+						D: "not everything",
+					},
+					withBothRE: &myStruct{
+						a: "everything",
+						B: expectedMask,
+						C: 33,
+						D: "not everything",
+					},
+					withBothDisabled: &myStruct{
 						a: "everything",
 						B: "everything",
 						C: 33,
 						D: "not everything",
 					},
 				},
-				expected: &myStruct{
-					E: &myStruct{
-						a: "everything",
-						B: expectedMask,
-						C: 33,
-						D: "not everything",
+			},
+			{
+				name: "struct",
+				value: func() interface{} {
+					return &myStruct{
+						E: &myStruct{
+							a: "everything",
+							B: "everything",
+							C: 33,
+							D: "not everything",
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						E: &myStruct{
+							a: "everything",
+							B: expectedMask,
+							C: 33,
+							D: "not everything",
+						},
+					},
+					withKeyRE: &myStruct{
+						E: &myStruct{
+							a: "everything",
+							B: "everything",
+							C: 33,
+							D: "not everything",
+						},
+					},
+					withBothRE: &myStruct{
+						E: &myStruct{
+							a: "everything",
+							B: expectedMask,
+							C: 33,
+							D: "not everything",
+						},
+					},
+					withBothDisabled: &myStruct{
+						E: &myStruct{
+							a: "everything",
+							B: "everything",
+							C: 33,
+							D: "not everything",
+						},
+					},
+				},
+			},
+			{
+				name: "exported embedded struct pointer",
+				value: func() interface{} {
+					return &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							F: "everything",
+							f: "everything",
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							F: expectedMask,
+							f: "everything",
+						},
+					},
+					withKeyRE: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							F: "everything",
+							f: "everything",
+						},
+					},
+					withBothRE: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							F: expectedMask,
+							f: "everything",
+						},
+					},
+					withBothDisabled: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							F: "everything",
+							f: "everything",
+						},
+					},
+				},
+			},
+			{
+				name: "exported embedded struct pointer",
+				value: func() interface{} {
+					return &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							Authorization: []string{randString, expectedMask, randString},
+							authorization: []string{randString, "everything", randString},
+							F:             expectedMask,
+							f:             "everything",
+						},
+					},
+					withKeyRE: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							Authorization: []string{expectedMask, expectedMask, expectedMask},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+					withBothRE: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							Authorization: []string{expectedMask, expectedMask, expectedMask},
+							authorization: []string{randString, "everything", randString},
+							F:             expectedMask,
+							f:             "everything",
+						},
+					},
+					withBothDisabled: &myStruct{
+						EmbeddedStruct2: &EmbeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+				},
+			},
+			{
+				name: "exported embedded struct",
+				value: func() interface{} {
+					return &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							F: "everything",
+							f: "everything",
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							F: expectedMask,
+							f: "everything",
+						},
+					},
+					withKeyRE: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							F: "everything",
+							f: "everything",
+						},
+					},
+					withBothRE: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							F: expectedMask,
+							f: "everything",
+						},
+					},
+					withBothDisabled: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							F: "everything",
+							f: "everything",
+						},
+					},
+				},
+			},
+			{
+				name: "exported embedded struct",
+				value: func() interface{} {
+					return &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							Authorization: []string{randString, expectedMask, randString},
+							authorization: []string{randString, "everything", randString},
+							F:             expectedMask,
+							f:             "everything",
+						},
+					},
+					withKeyRE: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							Authorization: []string{expectedMask, expectedMask, expectedMask},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+					withBothRE: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							Authorization: []string{expectedMask, expectedMask, expectedMask},
+							authorization: []string{randString, "everything", randString},
+							F:             expectedMask,
+							f:             "everything",
+						},
+					},
+					withBothDisabled: &myStruct{
+						EmbeddedStruct: EmbeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+				},
+			},
+			{
+				name: "unexported embedded struct",
+				value: func() interface{} {
+					return &myStruct{
+						embeddedStruct: embeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+						embeddedStruct2: &embeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						embeddedStruct: embeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+						embeddedStruct2: &embeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+					withKeyRE: &myStruct{
+						embeddedStruct: embeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+						embeddedStruct2: &embeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+					withBothRE: &myStruct{
+						embeddedStruct: embeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+						embeddedStruct2: &embeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+					},
+					withBothDisabled: &myStruct{
+						embeddedStruct: embeddedStruct{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
+						embeddedStruct2: &embeddedStruct2{
+							Authorization: []string{randString, "everything", randString},
+							authorization: []string{randString, "everything", randString},
+							F:             "everything",
+							f:             "everything",
+						},
 					},
 				},
 			},
 		}
 
-		s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), valueRegexp, expectedMask)
-		require.NoError(t, err)
-		for _, tc := range tests {
-			tc := tc
-			var value, expected interface{}
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				switch v := tc.value.(type) {
-				case string:
-					// Need a string that can be set - hence using the address of the
-					// local variable v
-					value = &v
-					// expected must have the *string type in order to have deep equal
-					// working
-					want := tc.expected.(string)
-					expected = &want
-				default:
-					value = tc.value
-					expected = tc.expected
-				}
-				err := s.Scrub(value)
-				require.NoError(t, err)
-				require.Equal(t, expected, value)
-			})
+		for _, keyRE := range []string{ /* disabled */ "", keyRegexp} {
+			keyRE := keyRE
+			withKeyRE := keyRE != ``
+			var state string
+			if withKeyRE {
+				state = "enabled"
+			} else {
+				state = "disabled"
+			}
+			name := fmt.Sprintf("with key regular expression %s", state)
+			t.Run(name, func(t *testing.T) {
+				for _, valueRE := range []string{ /* disabled */ "", valueRegexp} {
+					valueRE := valueRE
+					withValueRE := valueRE != ""
+					var state string
+					if withValueRE {
+						state = "enabled"
+					} else {
+						state = "disabled"
+					}
+					name := fmt.Sprintf("with value regular expression %s", state)
+					t.Run(name, func(t *testing.T) {
+						t.Parallel()
 
+						s, err := sqsanitize.NewScrubber(keyRE, valueRE, expectedMask)
+						require.NoError(t, err)
+
+						for _, tc := range tests {
+							tc := tc
+							var value, expected interface{}
+							t.Run(tc.name, func(t *testing.T) {
+								t.Parallel()
+
+								switch v := tc.value.(type) {
+								case string:
+									// Need a string that can be set - hence using the address of the
+									// local variable v
+									value = &v
+									// expected must have the *string type in order to have deep equal
+									// working
+									var want string
+									if withKeyRE && withValueRE {
+										want = tc.expected.withBothRE.(string)
+									} else if withKeyRE {
+										want = tc.expected.withKeyRE.(string)
+									} else if withValueRE {
+										want = tc.expected.withValueRE.(string)
+									} else {
+										want = tc.expected.withBothDisabled.(string)
+									}
+									expected = &want
+
+								case func() interface{}:
+									value = v()
+									if withKeyRE && withValueRE {
+										expected = tc.expected.withBothRE
+									} else if withKeyRE {
+										expected = tc.expected.withKeyRE
+									} else if withValueRE {
+										expected = tc.expected.withValueRE
+									} else {
+										expected = tc.expected.withBothDisabled
+									}
+
+								default:
+									value = tc.value
+									if withKeyRE && withValueRE {
+										expected = tc.expected.withBothRE
+									} else if withKeyRE {
+										expected = tc.expected.withKeyRE
+									} else if withValueRE {
+										expected = tc.expected.withValueRE
+									} else {
+										expected = tc.expected.withBothDisabled
+									}
+								}
+								err := s.Scrub(value)
+								require.NoError(t, err)
+								require.Equal(t, expected, value)
+							})
+						}
+					})
+				}
+			})
 		}
 	})
 
 	t.Run("Usage", func(t *testing.T) {
-		s, err := sqsanitize.NewScrubber("", "forbidden", expectedMask)
+		s, err := sqsanitize.NewScrubber("(?i)password", "forbidden", expectedMask)
 		require.NoError(t, err)
 
 		t.Run("URL Values", func(t *testing.T) {
 			values := url.Values{
-				"password": []string{"no", "pass", randString, "forbidden", randString}, // TODO
-				"other":    []string{"forbidden", "whatforbidden", randString, "key"},
-				"":         []string{"forbidden", "forbiddenwhat", randString, "key"},
+				"Password":   []string{"no", "pass", randString, "forbidden", randString},
+				"_paSSwoRD ": []string{"no", "pass", randString, "forbidden", randString},
+				fmt.Sprintf("%spassword%s", randString, randString): []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
+				"other": []string{"forbidden", "whatforbidden", randString, "key"},
+				"":      []string{"forbidden", "forbiddenwhat", randString, "key"},
 			}
 			err := s.Scrub(values)
 			require.NoError(t, err)
 			expected := url.Values{
-				"password": []string{"no", "pass", randString, expectedMask, randString}, // TODO
-				"other":    []string{expectedMask, "what" + expectedMask, randString, "key"},
-				"":         []string{expectedMask, expectedMask + "what", randString, "key"},
+				"Password":   []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
+				"_paSSwoRD ": []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
+				fmt.Sprintf("%spassword%s", randString, randString): []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
+				"other": []string{expectedMask, "what" + expectedMask, randString, "key"},
+				"":      []string{expectedMask, expectedMask + "what", randString, "key"},
 			}
 			require.Equal(t, expected, values)
 		})

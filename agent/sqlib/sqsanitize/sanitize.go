@@ -25,6 +25,9 @@ type Scrubber struct {
 	valueRegexp regex
 	// redactValueMask is the string replacing a scrubbed value.
 	redactedValueMask string
+	// scrubEveryString is true when every string of a value must be scrubbed.
+	// It is used when a key matches keyRegexp.
+	scrubEveryString bool
 }
 
 // NewScrubber returns a new scrubber configured to redact values matching the
@@ -52,11 +55,11 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 	}, nil
 }
 
-func (p *Scrubber) Scrub(v interface{}) error {
-	return p.scrubValue(reflect.ValueOf(v))
+func (s *Scrubber) Scrub(v interface{}) error {
+	return s.scrubValue(reflect.ValueOf(v))
 }
 
-func (p *Scrubber) scrubValue(v reflect.Value) error {
+func (s *Scrubber) scrubValue(v reflect.Value) error {
 walk:
 	switch v.Kind() {
 	case reflect.Ptr:
@@ -66,23 +69,36 @@ walk:
 	case reflect.Array:
 		fallthrough
 	case reflect.Slice:
-		return p.scrubSlice(v)
+		return s.scrubSlice(v)
 
 	case reflect.Map:
-		return p.scrubMap(v)
+		return s.scrubMap(v)
 
 	case reflect.Struct:
-		return p.scrubStruct(v)
+		return s.scrubStruct(v)
 
 	case reflect.String:
-		return p.scrubString(v)
+		return s.scrubString(v)
 	}
 	return nil
 }
 
-func (p *Scrubber) scrubString(v reflect.Value) error {
+func (s *Scrubber) scrubString(v reflect.Value) error {
+	// No need to scrub empty strings
+	if v.Len() == 0 {
+		return nil
+	}
+
+	// If scrubEveryString is true, scrub everything regardless of the value
+	// regexp
+	if s.scrubEveryString {
+		v.SetString(s.redactedValueMask)
+		return nil
+	}
+
+	// Scrub the substrings matching the value regular expression
 	str := v.String()
-	redacted := p.valueRegexp.ReplaceAllString(str, p.redactedValueMask)
+	redacted := s.valueRegexp.ReplaceAllString(str, s.redactedValueMask)
 	if str != redacted {
 		v.SetString(redacted)
 	}
@@ -90,12 +106,14 @@ func (p *Scrubber) scrubString(v reflect.Value) error {
 }
 
 func (s *Scrubber) scrubSlice(v reflect.Value) error {
-	// TODO: ignore when unsupported type or return false to stop the recursion?
-	// if _, ok := supported[v.Type().Kind]; !ok { ///// }
 	l := v.Len()
 	for i := 0; i < l; i++ {
-		// Scrub &v[i]
-		if err := s.scrubValue(v.Index(i).Addr()); err != nil {
+		e := v.Index(i)
+		if !e.CanSet() {
+			//Scrub &v[i]
+			e = e.Addr()
+		}
+		if err := s.scrubValue(e); err != nil {
 			return err
 		}
 	}
@@ -104,22 +122,37 @@ func (s *Scrubber) scrubSlice(v reflect.Value) error {
 
 func (s *Scrubber) scrubMap(v reflect.Value) error {
 	vt := v.Type().Elem()
-	//hasStringKeyType := v.Type().Key().Kind() == reflect.String
+
+	// TODO: hasInterfaceValueType := vt.Kind() == reflect.Interface
+	hasStringKeyType := v.Type().Key().Kind() == reflect.String
 	for iter := v.MapRange(); iter.Next(); {
+		scrubber := s
+
+		// Check if the map key is string matching the key regular expression.
+		// When it does, every string sub-value must be scrubbed.
 		key := iter.Key()
-		//if hasStringKeyType && s.keyRegexp.MatchString(key.String()) {
-		//	// TODO: scrub every string?
-		//	v.SetMapIndex(key, reflect.Value{})
-		//}
+		if hasStringKeyType && !s.scrubEveryString && s.keyRegexp.MatchString(key.String()) {
+			scrubber = new(Scrubber)
+			*scrubber = *s
+			scrubber.scrubEveryString = true
+
+			// TODO
+			//if hasInterfaceValueType {
+			//v.SetMapIndex(key, reflect.ValueOf(s.redactedValueMask))
+			//continue
+			//}
+		}
 
 		val := iter.Value()
 		if val.CanSet() {
-			return s.scrubValue(val)
+			return scrubber.scrubValue(val)
 		}
 
+		// Map entries are not addressable. Hence, we create a new value in order
+		// to scrub it and set the map index to the scrubbed value.
 		newVal := reflect.New(vt).Elem()
 		newVal.Set(val)
-		if err := s.scrubValue(newVal); err != nil {
+		if err := scrubber.scrubValue(newVal); err != nil {
 			return err
 		}
 		v.SetMapIndex(key, newVal)
@@ -132,16 +165,25 @@ func (s *Scrubber) scrubStruct(v reflect.Value) error {
 	vt := v.Type()
 	for i := 0; i < l; i++ {
 		ft := vt.Field(i)
-		if ft.PkgPath != "" {
+		if ft.PkgPath != "" { // TODO: isExportedField() + test go assumption
 			// Ignore unexported fields
 			continue
 		}
-		if ft.Type.Kind() == reflect.String && s.keyRegexp.MatchString(ft.Name) { // TODO: recursive key check
-			// TODO: scrub every string?
-			v.Field(i).Set(reflect.Zero(vt))
+
+		scrubber := s
+		if !s.scrubEveryString && s.keyRegexp.MatchString(ft.Name) {
+			scrubber = new(Scrubber)
+			*scrubber = *s
+			scrubber.scrubEveryString = true
 		}
-		// Scrub &v.Field
-		if err := s.scrubValue(v.Field(i).Addr().Elem()); err != nil {
+
+		f := v.Field(i)
+		if !f.CanSet() {
+			// Scrub &v.Field
+			f = f.Addr().Elem()
+		}
+
+		if err := scrubber.scrubValue(f); err != nil {
 			return err
 		}
 	}
