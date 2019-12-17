@@ -7,6 +7,7 @@ package sqsanitize_test
 import (
 	"fmt"
 	"net/url"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -20,13 +21,40 @@ func TestGoAssumptions(t *testing.T) {
 		re := regexp.MustCompile("")
 		require.True(t, re.MatchString("hello"))
 	})
+
+	t.Run("a map entry cannot be set", func(t *testing.T) {
+		v := map[string]*struct{}{
+			"k": {},
+		}
+		require.False(t, reflect.ValueOf(&v).Elem().MapIndex(reflect.ValueOf("k")).CanSet())
+	})
+
+	t.Run("a slice entry can be set", func(t *testing.T) {
+		v := []struct{}{{}}
+		require.True(t, reflect.ValueOf(v).Index(0).CanSet())
+	})
+
+	t.Run("an array entry can be set", func(t *testing.T) {
+		v := [1]*struct{}{{}}
+		require.True(t, reflect.ValueOf(&v).Elem().Index(0).CanSet())
+	})
+
+	t.Run("an unexported struct field cannot be set", func(t *testing.T) {
+		v := struct{ f *struct{} }{}
+		require.False(t, reflect.ValueOf(&v).Elem().Field(0).CanSet())
+	})
+
+	t.Run("an exported struct field can be set", func(t *testing.T) {
+		v := struct{ F *struct{} }{}
+		require.True(t, reflect.ValueOf(&v).Elem().Field(0).CanSet())
+	})
 }
 
 func TestScrubber(t *testing.T) {
 	expectedMask := `<Redacted by Sqreen>`
 
 	//randString := testlib.RandUTF8String(512, 1024)
-	randString := "toto"
+	randString := "foo"
 
 	t.Run("NewScrubber", func(t *testing.T) {
 		type args struct {
@@ -146,7 +174,7 @@ func TestScrubber(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
 				require.NoError(t, err)
-				err = s.Scrub(&tc.value)
+				s.Scrub(&tc.value)
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, tc.value)
 			})
@@ -185,19 +213,20 @@ func TestScrubber(t *testing.T) {
 		type embeddedStruct2 EmbeddedStruct
 
 		type myStruct struct {
-			PassWORD         string    // matching exported string field
-			Secret_          []string  // matching exported field with strings
-			password         string    // unexported matching string field
-			ApiKey           int       // non-string matching int field
-			a                string    // unexported string value
-			B                string    // exported string value
-			C                int       // exported non-string
-			D                string    // exported string value
-			E                *myStruct // recursive pointer
-			EmbeddedStruct             // exported embedded struct
-			*EmbeddedStruct2           // exported embedded struct pointer
-			embeddedStruct             // unexported embedded struct
-			*embeddedStruct2           // unexported embedded struct pointer
+			PassWORD         string      // matching exported string field
+			Secret_          []string    // matching exported field with strings
+			password         string      // unexported matching string field
+			ApiKey           int         // non-string matching int field
+			a                string      // unexported string value
+			B                string      // exported string value
+			C                int         // exported non-string
+			D                string      // exported string value
+			E                *myStruct   // recursive pointer
+			Face             interface{} // exported interface value
+			EmbeddedStruct               // exported embedded struct
+			*EmbeddedStruct2             // exported embedded struct pointer
+			embeddedStruct               // unexported embedded struct
+			*embeddedStruct2             // unexported embedded struct pointer
 		}
 
 		tests := []testCase{
@@ -383,36 +412,6 @@ func TestScrubber(t *testing.T) {
 					},
 				},
 			},
-			//{ TODO
-			//	name: "map of interface values",
-			//	value: func() interface{} {
-			//		// New local variable to avoid modifying &randString
-			//		// This test will modify &myRandString (a *string value)
-			//		//myRandString := randString
-			//		return map[string]interface{}{
-			//			//"passwd": &myRandString,
-			//			"apikey": randString,
-			//		}
-			//	},
-			//	expected: expectedValues{
-			//		withValueRE: map[string]interface{}{
-			//			//"passwd": &randString,
-			//			"apikey": randString,
-			//		},
-			//		withKeyRE: map[string]interface{}{
-			//			//"passwd": &expectedMask,
-			//			"apikey": expectedMask,
-			//		},
-			//		withBothRE: map[string]interface{}{
-			//			//"passwd": &expectedMask,
-			//			"apikey": expectedMask,
-			//		},
-			//		withBothDisabled: map[string]interface{}{
-			//			//"passwd": &randString,
-			//			"apikey": randString,
-			//		},
-			//	},
-			//},
 			{
 				name: "struct",
 				value: func() interface{} {
@@ -447,6 +446,52 @@ func TestScrubber(t *testing.T) {
 						password: randString,
 						Secret_:  []string{randString, "everything"},
 						ApiKey:   9838923,
+					},
+				},
+			},
+			{
+				name: "struct",
+				value: func() interface{} {
+					return &myStruct{
+						Face: myStruct{
+							PassWORD: randString,
+							password: randString,
+							Secret_:  []string{randString, "everything"},
+							ApiKey:   9838923,
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myStruct{
+						Face: myStruct{
+							PassWORD: randString,
+							password: randString,
+							Secret_:  []string{randString, expectedMask},
+							ApiKey:   9838923,
+						},
+					},
+					withKeyRE: &myStruct{
+						Face: myStruct{PassWORD: expectedMask,
+							password: randString,
+							Secret_:  []string{expectedMask, expectedMask},
+							ApiKey:   9838923,
+						},
+					},
+					withBothRE: &myStruct{
+						Face: myStruct{
+							PassWORD: expectedMask,
+							password: randString,
+							Secret_:  []string{expectedMask, expectedMask},
+							ApiKey:   9838923,
+						},
+					},
+					withBothDisabled: &myStruct{
+						Face: myStruct{
+							PassWORD: randString,
+							password: randString,
+							Secret_:  []string{randString, "everything"},
+							ApiKey:   9838923,
+						},
 					},
 				},
 			},
@@ -779,6 +824,132 @@ func TestScrubber(t *testing.T) {
 					},
 				},
 			},
+			{
+				name: "json map type",
+				value: func() interface{} {
+					// equivalent to { "apikey": "...", "a": "...", "b": {}, "c": { "Password": "...", "d": "everything" }, "e": 33, "passwd": ["everything", "..."] }
+					return map[string]interface{}{
+						"apikey": randString,
+						"a":      randString,
+						"b":      map[string]interface{}{},
+						"c": map[string]interface{}{
+							"Password": randString,
+							"d":        "everything",
+						},
+						"e":      33,
+						"passwd": []interface{}{"everything", randString},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: map[string]interface{}{
+						"apikey": randString,
+						"a":      randString,
+						"b":      map[string]interface{}{},
+						"c": map[string]interface{}{
+							"Password": randString,
+							"d":        expectedMask,
+						},
+						"e":      33,
+						"passwd": []interface{}{expectedMask, randString},
+					},
+					withKeyRE: map[string]interface{}{
+						"apikey": expectedMask,
+						"a":      randString,
+						"b":      map[string]interface{}{},
+						"c": map[string]interface{}{
+							"Password": expectedMask,
+							"d":        "everything",
+						},
+						"e":      33,
+						"passwd": []interface{}{expectedMask, expectedMask},
+					},
+					withBothRE: map[string]interface{}{
+						"apikey": expectedMask,
+						"a":      randString,
+						"b":      map[string]interface{}{},
+						"c": map[string]interface{}{
+							"Password": expectedMask,
+							"d":        expectedMask,
+						},
+						"e":      33,
+						"passwd": []interface{}{expectedMask, expectedMask},
+					},
+					withBothDisabled: map[string]interface{}{
+						"apikey": randString,
+						"a":      randString,
+						"b":      map[string]interface{}{},
+						"c": map[string]interface{}{
+							"Password": randString,
+							"d":        "everything",
+						},
+						"e":      33,
+						"passwd": []interface{}{"everything", randString},
+					},
+				},
+			},
+			{
+				name: "json array type",
+				value: func() interface{} {
+					// equivalent to [ "everything", 33, [], {}, { "a": [ "everything" ], "password": "1234" }, null ]
+					return []interface{}{
+						"everything",
+						33,
+						[]interface{}{},
+						map[string]interface{}{},
+						map[string]interface{}{
+							"a":        []interface{}{"everything"},
+							"password": "1234",
+						},
+						nil,
+					}
+				},
+				expected: expectedValues{
+					withValueRE: []interface{}{
+						expectedMask,
+						33,
+						[]interface{}{},
+						map[string]interface{}{},
+						map[string]interface{}{
+							"a":        []interface{}{expectedMask},
+							"password": "1234",
+						},
+						nil,
+					},
+					withKeyRE: []interface{}{
+						"everything",
+						33,
+						[]interface{}{},
+						map[string]interface{}{},
+						map[string]interface{}{
+							"a":        []interface{}{"everything"},
+							"password": expectedMask,
+						},
+						nil,
+					},
+					withBothRE: []interface{}{
+						expectedMask,
+						33,
+						[]interface{}{},
+						map[string]interface{}{},
+						map[string]interface{}{
+							"a":        []interface{}{expectedMask},
+							"password": expectedMask,
+						},
+						nil,
+					},
+					withBothDisabled: []interface{}{
+						"everything",
+						33,
+						[]interface{}{},
+						map[string]interface{}{},
+						map[string]interface{}{
+							"a":        []interface{}{"everything"},
+							"password": "1234",
+						},
+						nil,
+					},
+				},
+			},
 		}
 
 		for _, keyRE := range []string{ /* disabled */ "", keyRegexp} {
@@ -803,8 +974,6 @@ func TestScrubber(t *testing.T) {
 					}
 					name := fmt.Sprintf("with value regular expression %s", state)
 					t.Run(name, func(t *testing.T) {
-						t.Parallel()
-
 						s, err := sqsanitize.NewScrubber(keyRE, valueRE, expectedMask)
 						require.NoError(t, err)
 
@@ -812,8 +981,6 @@ func TestScrubber(t *testing.T) {
 							tc := tc
 							var value, expected interface{}
 							t.Run(tc.name, func(t *testing.T) {
-								t.Parallel()
-
 								switch v := tc.value.(type) {
 								case string:
 									// Need a string that can be set - hence using the address of the
@@ -857,8 +1024,7 @@ func TestScrubber(t *testing.T) {
 										expected = tc.expected.withBothDisabled
 									}
 								}
-								err := s.Scrub(value)
-								require.NoError(t, err)
+								s.Scrub(value)
 								require.Equal(t, expected, value)
 							})
 						}
@@ -880,8 +1046,7 @@ func TestScrubber(t *testing.T) {
 				"other": []string{"forbidden", "whatforbidden", randString, "key"},
 				"":      []string{"forbidden", "forbiddenwhat", randString, "key"},
 			}
-			err := s.Scrub(values)
-			require.NoError(t, err)
+			s.Scrub(values)
 			expected := url.Values{
 				"Password":   []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
 				"_paSSwoRD ": []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},

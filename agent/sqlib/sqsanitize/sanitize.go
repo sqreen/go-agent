@@ -55,11 +55,11 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 	}, nil
 }
 
-func (s *Scrubber) Scrub(v interface{}) error {
+func (s *Scrubber) Scrub(v interface{}) bool {
 	return s.scrubValue(reflect.ValueOf(v))
 }
 
-func (s *Scrubber) scrubValue(v reflect.Value) error {
+func (s *Scrubber) scrubValue(v reflect.Value) bool {
 walk:
 	switch v.Kind() {
 	case reflect.Ptr:
@@ -80,92 +80,101 @@ walk:
 	case reflect.String:
 		return s.scrubString(v)
 	}
-	return nil
+	return false
 }
 
-func (s *Scrubber) scrubString(v reflect.Value) error {
+func (s *Scrubber) scrubString(v reflect.Value) bool {
 	// No need to scrub empty strings
 	if v.Len() == 0 {
-		return nil
+		return false
 	}
 
 	// If scrubEveryString is true, scrub everything regardless of the value
 	// regexp
 	if s.scrubEveryString {
 		v.SetString(s.redactedValueMask)
-		return nil
+		return true
 	}
 
 	// Scrub the substrings matching the value regular expression
 	str := v.String()
 	redacted := s.valueRegexp.ReplaceAllString(str, s.redactedValueMask)
-	if str != redacted {
-		v.SetString(redacted)
+	if str == redacted {
+		return false
 	}
-	return nil
+	v.SetString(redacted)
+	return true
 }
 
-func (s *Scrubber) scrubSlice(v reflect.Value) error {
+func (s *Scrubber) scrubSlice(v reflect.Value) (scrubbed bool) {
 	l := v.Len()
+	hasInterfaceElementType := v.Type().Elem().Kind() == reflect.Interface
 	for i := 0; i < l; i++ {
-		e := v.Index(i)
-		if !e.CanSet() {
-			//Scrub &v[i]
-			e = e.Addr()
-		}
-		if err := s.scrubValue(e); err != nil {
-			return err
+		ix := v.Index(i)
+		if !hasInterfaceElementType {
+			// Not an interface value, scrub the current element.
+			if scrubbedElement := s.scrubValue(ix); scrubbedElement {
+				scrubbed = true
+			}
+		} else {
+			if newVal, scrubbedElement := s.scrubInterface(ix); scrubbedElement {
+				ix.Set(newVal)
+				scrubbed = true
+			}
 		}
 	}
-	return nil
+	return scrubbed
 }
 
-func (s *Scrubber) scrubMap(v reflect.Value) error {
+func (s *Scrubber) scrubMap(v reflect.Value) (scrubbed bool) {
 	vt := v.Type().Elem()
-
-	// TODO: hasInterfaceValueType := vt.Kind() == reflect.Interface
+	hasInterfaceValueType := vt.Kind() == reflect.Interface
 	hasStringKeyType := v.Type().Key().Kind() == reflect.String
 	for iter := v.MapRange(); iter.Next(); {
 		scrubber := s
 
-		// Check if the map key is string matching the key regular expression.
-		// When it does, every string sub-value must be scrubbed.
+		// Check if the map key is a string matching the key regular expression.
+		// When it does, every string sub-value must be scrubbed regardless of the
+		// value regular expression.
 		key := iter.Key()
 		if hasStringKeyType && !s.scrubEveryString && s.keyRegexp.MatchString(key.String()) {
 			scrubber = new(Scrubber)
 			*scrubber = *s
 			scrubber.scrubEveryString = true
-
-			// TODO
-			//if hasInterfaceValueType {
-			//v.SetMapIndex(key, reflect.ValueOf(s.redactedValueMask))
-			//continue
-			//}
 		}
 
+		// Map entries cannot be set. We therefore create a new value in order
+		// that can be set by the scrubber.
 		val := iter.Value()
-		if val.CanSet() {
-			return scrubber.scrubValue(val)
+		valT := vt
+
+		// When the current value is an interface value, we scrub its underlying
+		// value.
+		if hasInterfaceValueType {
+			val = val.Elem()
+			valT = val.Type()
 		}
 
-		// Map entries are not addressable. Hence, we create a new value in order
-		// to scrub it and set the map index to the scrubbed value.
-		newVal := reflect.New(vt).Elem()
+		// Create a new pointer value to the current map value that can be set by
+		// the scrubber.
+		newVal := reflect.New(valT).Elem()
 		newVal.Set(val)
-		if err := scrubber.scrubValue(newVal); err != nil {
-			return err
+		// Scrub it
+		if scrubbedElement := scrubber.scrubValue(newVal); scrubbedElement {
+			// Set it
+			v.SetMapIndex(key, newVal)
+			scrubbed = true
 		}
-		v.SetMapIndex(key, newVal)
 	}
-	return nil
+	return scrubbed
 }
 
-func (s *Scrubber) scrubStruct(v reflect.Value) error {
+func (s *Scrubber) scrubStruct(v reflect.Value) (scrubbed bool) {
 	l := v.NumField()
 	vt := v.Type()
 	for i := 0; i < l; i++ {
 		ft := vt.Field(i)
-		if ft.PkgPath != "" { // TODO: isExportedField() + test go assumption
+		if isUnexportedField(&ft) {
 			// Ignore unexported fields
 			continue
 		}
@@ -178,16 +187,35 @@ func (s *Scrubber) scrubStruct(v reflect.Value) error {
 		}
 
 		f := v.Field(i)
-		if !f.CanSet() {
-			// Scrub &v.Field
-			f = f.Addr().Elem()
-		}
-
-		if err := scrubber.scrubValue(f); err != nil {
-			return err
+		if f.Kind() == reflect.Interface {
+			newVal, scrubbed := s.scrubInterface(f)
+			if scrubbed {
+				f.Set(newVal)
+			}
+		} else {
+			if scrubbedElement := scrubber.scrubValue(f); scrubbedElement {
+				scrubbed = true
+			}
 		}
 	}
-	return nil
+	return scrubbed
+}
+
+func (s *Scrubber) scrubInterface(v reflect.Value) (reflect.Value, bool) {
+	// The current element is an interface value which cannot be set, we
+	// therefore need to create a new value that can be set by the scrubber.
+	if v.IsZero() {
+		return reflect.Value{}, false
+	}
+	val := v.Elem()
+	newVal := reflect.New(val.Type()).Elem()
+	newVal.Set(val)
+	scrubbed := s.scrubValue(newVal)
+	return newVal, scrubbed
+}
+
+func isUnexportedField(f *reflect.StructField) bool {
+	return f.PkgPath != ""
 }
 
 // regex is a helper structure wrapping a regexp and handling when the regexp is
