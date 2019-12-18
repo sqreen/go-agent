@@ -174,7 +174,7 @@ func TestScrubber(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
 				require.NoError(t, err)
-				err = s.Scrub(&tc.value)
+				_, err = s.Scrub(&tc.value)
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, tc.value)
 			})
@@ -1024,7 +1024,7 @@ func TestScrubber(t *testing.T) {
 										expected = tc.expected.withBothDisabled
 									}
 								}
-								err = s.Scrub(value)
+								_, err = s.Scrub(value)
 								require.NoError(t, err)
 								require.Equal(t, expected, value)
 							})
@@ -1047,7 +1047,7 @@ func TestScrubber(t *testing.T) {
 				"other": []string{"forbidden", "whatforbidden", randString, "key"},
 				"":      []string{"forbidden", "forbiddenwhat", randString, "key"},
 			}
-			err = s.Scrub(values)
+			_, err = s.Scrub(values)
 			require.NoError(t, err)
 			expected := url.Values{
 				"Password":   []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},

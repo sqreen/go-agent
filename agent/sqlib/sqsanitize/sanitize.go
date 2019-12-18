@@ -15,8 +15,8 @@ import (
 // Scrubber scrubs values according to the key and value regular expressions
 // given to `NewScrubber()`. Field names and map keys of type string will be
 // checked against the regular expression for keys, while string values will be
-// checked against the regular expression for values. A matching value is
-// replaced by the given redaction string, while
+// checked against the regular expression for values. Scrubbed values are
+// replaced by the given redaction string. Cf. `NewScrubber()` for details.
 type Scrubber struct {
 	// keyRegexp is the regular expression matching keys that need to be
 	// scrubbed. Their values are completely replaced by `redactedValueMask`.
@@ -32,11 +32,12 @@ type Scrubber struct {
 }
 
 // NewScrubber returns a new scrubber configured to redact values matching the
-// given regular expressions:
-//   - Values matching `valueRegexp` are replaced by `redactedValueMask` (only
-//     the matching part).
-//   - Map values with keys matching `keyRegexp` are replaced by
+// given regular expressions.
+//   - A string value matching the `valueRegexp` is replaced by
 //     `redactedValueMask`.
+//   - A map key of type string or struct field name matching `keyRegexp` is
+//     scrubbed regardless of `valueRegexp` - any string in the associated
+//     value is replaced by `redactedValue`.
 // An error can be returned if the regular expressions cannot be compiled.
 func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, error) {
 	keyRE, err := compile(keyRegexp)
@@ -56,14 +57,15 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 	}, nil
 }
 
-// Scrub a given value using Go reflect package, therefore ignoring unexported
-// struct fields. It cannot panic. An error is returned if the underlying
-// `reflect` package panics.
-func (s *Scrubber) Scrub(v interface{}) error {
-	return sqsafe.Call(func() error {
-		_ = s.scrubValue(reflect.ValueOf(v))
+// Scrub a given value. Since it is based on `reflect`, unexported struct
+// fields are ignored. This function cannot panic and an error is returned if
+// an unexpected panic occurs.
+func (s *Scrubber) Scrub(v interface{}) (scrubbed bool, err error) {
+	err = sqsafe.Call(func() error {
+		scrubbed = s.scrubValue(reflect.ValueOf(v))
 		return nil
 	})
+	return
 }
 
 func (s *Scrubber) scrubValue(v reflect.Value) bool {
@@ -124,6 +126,7 @@ func (s *Scrubber) scrubSlice(v reflect.Value) (scrubbed bool) {
 				scrubbed = true
 			}
 		} else {
+			// Interface value, scrub its element and set the current element to it.
 			if newVal, scrubbedElement := s.scrubInterface(ix); scrubbedElement {
 				ix.Set(newVal)
 				scrubbed = true
@@ -195,11 +198,13 @@ func (s *Scrubber) scrubStruct(v reflect.Value) (scrubbed bool) {
 
 		f := v.Field(i)
 		if f.Kind() == reflect.Interface {
+			// Interface value, scrub its element and set it.
 			newVal, scrubbed := s.scrubInterface(f)
 			if scrubbed {
 				f.Set(newVal)
 			}
 		} else {
+			// Not and interface value, scrub the field.
 			if scrubbedElement := scrubber.scrubValue(f); scrubbedElement {
 				scrubbed = true
 			}
@@ -208,6 +213,11 @@ func (s *Scrubber) scrubStruct(v reflect.Value) (scrubbed bool) {
 	return scrubbed
 }
 
+// scrubInterface has a different signature than other `scrubT()` functions
+// because interface values cannot be modified. Hence the creation of a new
+// value of the underlying interface type, that is set with the given value and
+// scrubbed. The scrubbed new value is returned and can be set to the original
+// value (map entry, array index, etc.).
 func (s *Scrubber) scrubInterface(v reflect.Value) (reflect.Value, bool) {
 	// The current element is an interface value which cannot be set, we
 	// therefore need to create a new value that can be set by the scrubber.
@@ -221,7 +231,9 @@ func (s *Scrubber) scrubInterface(v reflect.Value) (reflect.Value, bool) {
 	return newVal, scrubbed
 }
 
+// isUnexportedField returns true is a field is unexported.
 func isUnexportedField(f *reflect.StructField) bool {
+	// Based on `reflect` documentation, PkgPath is an empty string when exported.
 	return f.PkgPath != ""
 }
 
