@@ -58,17 +58,19 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 }
 
 // Scrub a given value. Since it is based on `reflect`, unexported struct
-// fields are ignored. This function cannot panic and an error is returned if
-// an unexpected panic occurs.
-func (s *Scrubber) Scrub(v interface{}) (scrubbed bool, err error) {
+// fields are ignored. When `scrubbedValues` is not nil, it is used to
+// store every scrubbed value and provide them to the caller.
+// This function cannot panic and an error is returned if an unexpected panic
+// occurs.
+func (s *Scrubber) Scrub(v interface{}, scrubbedValues *[]string) (scrubbed bool, err error) {
 	err = sqsafe.Call(func() error {
-		scrubbed = s.scrubValue(reflect.ValueOf(v))
+		scrubbed = s.scrubValue(reflect.ValueOf(v), scrubbedValues)
 		return nil
 	})
 	return
 }
 
-func (s *Scrubber) scrubValue(v reflect.Value) bool {
+func (s *Scrubber) scrubValue(v reflect.Value, scrubbedValues *[]string) bool {
 walk:
 	switch v.Kind() {
 	case reflect.Ptr:
@@ -78,23 +80,24 @@ walk:
 	case reflect.Array:
 		fallthrough
 	case reflect.Slice:
-		return s.scrubSlice(v)
+		return s.scrubSlice(v, scrubbedValues)
 
 	case reflect.Map:
-		return s.scrubMap(v)
+		return s.scrubMap(v, scrubbedValues)
 
 	case reflect.Struct:
-		return s.scrubStruct(v)
+		return s.scrubStruct(v, scrubbedValues)
 
 	case reflect.String:
-		return s.scrubString(v)
+		return s.scrubString(v, scrubbedValues)
 	}
 	return false
 }
 
-func (s *Scrubber) scrubString(v reflect.Value) bool {
+func (s *Scrubber) scrubString(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
 	// No need to scrub empty strings
-	if v.Len() == 0 {
+	str := v.String()
+	if len(str) == 0 {
 		return false
 	}
 
@@ -102,32 +105,39 @@ func (s *Scrubber) scrubString(v reflect.Value) bool {
 	// regexp
 	if s.scrubEveryString {
 		v.SetString(s.redactedValueMask)
-		return true
+		scrubbed = true
+	} else {
+		// Scrub the substrings matching the value regular expression
+		redacted := s.valueRegexp.ReplaceAllString(str, s.redactedValueMask)
+		if str == redacted {
+			return false
+		}
+		v.SetString(redacted)
+		scrubbed = true
 	}
 
-	// Scrub the substrings matching the value regular expression
-	str := v.String()
-	redacted := s.valueRegexp.ReplaceAllString(str, s.redactedValueMask)
-	if str == redacted {
-		return false
+	// Store the value that was scrubbed into the given scrubbedValues slice
+	// pointer if not nil.
+	if scrubbed && scrubbedValues != nil {
+		*scrubbedValues = append(*scrubbedValues, str)
 	}
-	v.SetString(redacted)
-	return true
+
+	return scrubbed
 }
 
-func (s *Scrubber) scrubSlice(v reflect.Value) (scrubbed bool) {
+func (s *Scrubber) scrubSlice(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
 	l := v.Len()
 	hasInterfaceElementType := v.Type().Elem().Kind() == reflect.Interface
 	for i := 0; i < l; i++ {
 		ix := v.Index(i)
 		if !hasInterfaceElementType {
 			// Not an interface value, scrub the current element.
-			if scrubbedElement := s.scrubValue(ix); scrubbedElement {
+			if scrubbedElement := s.scrubValue(ix, scrubbedValues); scrubbedElement {
 				scrubbed = true
 			}
 		} else {
 			// Interface value, scrub its element and set the current element to it.
-			if newVal, scrubbedElement := s.scrubInterface(ix); scrubbedElement {
+			if newVal, scrubbedElement := s.scrubInterface(ix, scrubbedValues); scrubbedElement {
 				ix.Set(newVal)
 				scrubbed = true
 			}
@@ -136,7 +146,7 @@ func (s *Scrubber) scrubSlice(v reflect.Value) (scrubbed bool) {
 	return scrubbed
 }
 
-func (s *Scrubber) scrubMap(v reflect.Value) (scrubbed bool) {
+func (s *Scrubber) scrubMap(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
 	vt := v.Type().Elem()
 	hasInterfaceValueType := vt.Kind() == reflect.Interface
 	hasStringKeyType := v.Type().Key().Kind() == reflect.String
@@ -170,7 +180,7 @@ func (s *Scrubber) scrubMap(v reflect.Value) (scrubbed bool) {
 		newVal := reflect.New(valT).Elem()
 		newVal.Set(val)
 		// Scrub it
-		if scrubbedElement := scrubber.scrubValue(newVal); scrubbedElement {
+		if scrubbedElement := scrubber.scrubValue(newVal, scrubbedValues); scrubbedElement {
 			// Set it
 			v.SetMapIndex(key, newVal)
 			scrubbed = true
@@ -179,7 +189,7 @@ func (s *Scrubber) scrubMap(v reflect.Value) (scrubbed bool) {
 	return scrubbed
 }
 
-func (s *Scrubber) scrubStruct(v reflect.Value) (scrubbed bool) {
+func (s *Scrubber) scrubStruct(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
 	l := v.NumField()
 	vt := v.Type()
 	for i := 0; i < l; i++ {
@@ -199,13 +209,14 @@ func (s *Scrubber) scrubStruct(v reflect.Value) (scrubbed bool) {
 		f := v.Field(i)
 		if f.Kind() == reflect.Interface {
 			// Interface value, scrub its element and set it.
-			newVal, scrubbed := s.scrubInterface(f)
-			if scrubbed {
+			newVal, scrubbedElement := s.scrubInterface(f, scrubbedValues)
+			if scrubbedElement {
 				f.Set(newVal)
+				scrubbed = true
 			}
 		} else {
 			// Not and interface value, scrub the field.
-			if scrubbedElement := scrubber.scrubValue(f); scrubbedElement {
+			if scrubbedElement := scrubber.scrubValue(f, scrubbedValues); scrubbedElement {
 				scrubbed = true
 			}
 		}
@@ -218,7 +229,7 @@ func (s *Scrubber) scrubStruct(v reflect.Value) (scrubbed bool) {
 // value of the underlying interface type, that is set with the given value and
 // scrubbed. The scrubbed new value is returned and can be set to the original
 // value (map entry, array index, etc.).
-func (s *Scrubber) scrubInterface(v reflect.Value) (reflect.Value, bool) {
+func (s *Scrubber) scrubInterface(v reflect.Value, scrubbedValues *[]string) (reflect.Value, bool) {
 	// The current element is an interface value which cannot be set, we
 	// therefore need to create a new value that can be set by the scrubber.
 	if v.IsZero() {
@@ -227,7 +238,7 @@ func (s *Scrubber) scrubInterface(v reflect.Value) (reflect.Value, bool) {
 	val := v.Elem()
 	newVal := reflect.New(val.Type()).Elem()
 	newVal.Set(val)
-	scrubbed := s.scrubValue(newVal)
+	scrubbed := s.scrubValue(newVal, scrubbedValues)
 	return newVal, scrubbed
 }
 

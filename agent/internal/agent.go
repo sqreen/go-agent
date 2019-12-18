@@ -498,7 +498,7 @@ func (m *eventManager) send(client *backend.Client, batch []Event) {
 		case *ExceptionEvent:
 			event = api.NewExceptionEventFromFace(actual)
 		}
-		if _, err := m.agent.piiScrubber.Scrub(event); err != nil {
+		if _, err := m.agent.piiScrubber.Scrub(event, nil); err != nil {
 			// Only log this unexpected error and keep the event that may have been
 			// partially scrubbed.
 			m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))

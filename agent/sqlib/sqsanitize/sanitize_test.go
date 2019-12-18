@@ -177,9 +177,11 @@ func TestScrubber(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
 				require.NoError(t, err)
-				_, err = s.Scrub(&tc.value)
+				var scrubbedValues []string
+				scrubbed, err := s.Scrub(&tc.value, &scrubbedValues)
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, tc.value)
+				require.True(t, (scrubbed && len(scrubbedValues) > 0) || (!scrubbed && len(scrubbedValues) == 0))
 			})
 
 		}
@@ -1027,9 +1029,11 @@ func TestScrubber(t *testing.T) {
 										expected = tc.expected.withBothDisabled
 									}
 								}
-								_, err = s.Scrub(value)
+								var scrubbedValues []string
+								scrubbed, err := s.Scrub(value, &scrubbedValues)
 								require.NoError(t, err)
 								require.Equal(t, expected, value)
+								require.True(t, (scrubbed && len(scrubbedValues) > 0) || (!scrubbed && len(scrubbedValues) == 0))
 							})
 						}
 					})
@@ -1046,12 +1050,15 @@ func TestScrubber(t *testing.T) {
 			values := url.Values{
 				"Password":   []string{"no", "pass", randString, "forbidden", randString},
 				"_paSSwoRD ": []string{"no", "pass", randString, "forbidden", randString},
-				fmt.Sprintf("%spassword%s", randString, randString): []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
+				fmt.Sprintf("%spassword%s", randString, randString): []string{"no", "pass", randString, "forbidden", randString},
 				"other": []string{"forbidden", "whatforbidden", randString, "key"},
 				"":      []string{"forbidden", "forbiddenwhat", randString, "key"},
 			}
-			_, err = s.Scrub(values)
+			var scrubbedValues []string
+			scrubbed, err := s.Scrub(values, &scrubbedValues)
 			require.NoError(t, err)
+			require.True(t, scrubbed)
+
 			expected := url.Values{
 				"Password":   []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
 				"_paSSwoRD ": []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
@@ -1060,6 +1067,13 @@ func TestScrubber(t *testing.T) {
 				"":      []string{expectedMask, expectedMask + "what", randString, "key"},
 			}
 			require.Equal(t, expected, values)
+
+			require.Contains(t, scrubbedValues, "no")
+			require.Contains(t, scrubbedValues, "pass")
+			require.Contains(t, scrubbedValues, randString)
+			require.Contains(t, scrubbedValues, "forbidden")
+			require.Contains(t, scrubbedValues, "whatforbidden")
+			require.Contains(t, scrubbedValues, "forbiddenwhat")
 		})
 
 		t.Run("HTTP Request", func(t *testing.T) {
@@ -1068,9 +1082,11 @@ func TestScrubber(t *testing.T) {
 
 			t.Run("zero value", func(t *testing.T) {
 				var req http.Request
-				scrubbed, err := s.Scrub(&req)
+				var scrubbedValues []string
+				scrubbed, err := s.Scrub(&req, &scrubbedValues)
 				require.NoError(t, err)
 				require.False(t, scrubbed)
+				require.Len(t, scrubbedValues, 0)
 			})
 
 			t.Run("random request", func(t *testing.T) {
@@ -1097,7 +1113,8 @@ func TestScrubber(t *testing.T) {
 				postForm.Add("password", "1234")
 				postForm.Add("password", "5678")
 				messageFormat := "here is my credit card number %s."
-				form.Add("message", fmt.Sprintf(messageFormat, "4533-3432-3234-3334"))
+				stringWithCreditCardNb := fmt.Sprintf(messageFormat, "4533-3432-3234-3334")
+				form.Add("message", stringWithCreditCardNb)
 
 				req := http.Request{
 					Method:        "GET",
@@ -1116,13 +1133,18 @@ func TestScrubber(t *testing.T) {
 					RequestURI:    url_.RequestURI(),
 				}
 
-				scrubbed, err := s.Scrub(&req)
+				var scrubbedValues []string
+				scrubbed, err := s.Scrub(&req, &scrubbedValues)
 				require.NoError(t, err)
 				require.True(t, scrubbed)
 
 				// Check values were scrubbed
 				require.Equal(t, []string{expectedMask, expectedMask}, req.PostForm["password"])
 				require.Equal(t, []string{fmt.Sprintf(messageFormat, expectedMask)}, req.Form["message"])
+
+				require.Contains(t, scrubbedValues, stringWithCreditCardNb)
+				require.Contains(t, scrubbedValues, "1234")
+				require.Contains(t, scrubbedValues, "5678")
 			})
 		})
 	})
