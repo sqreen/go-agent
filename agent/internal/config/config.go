@@ -93,15 +93,32 @@ var (
 	// BackendHTTPAPIDefaultHeartbeatDelay is the default heartbeat delay when not
 	// correctly provided by the backend.
 	BackendHTTPAPIDefaultHeartbeatDelay = time.Minute
-
-	// EventBatchMaxStaleness is the time when the data in the event manager's
-	// batch is considered too long, and is therefore immediatly sent to the
-	// backend, without waiting for the batch to become full.
-	EventBatchMaxStaleness = 20 * time.Second
 )
 
+// Event batch configuration.
 const (
-	MaxEventsPerHeatbeat = 1000
+	// EventBatchMaxStaleness is the time when the data in the event manager's
+	// batch is considered too long, and is therefore immediately sent to the
+	// backend, without waiting for the batch to become full.
+	EventBatchMaxStaleness = 20 * time.Second
+	// EventBatchMaxEventsPerHeartbeat is the maximum amount of events that can
+	// be sent per heartbeat. The bigger, the more memory it uses to batch the
+	// events.
+	EventBatchMaxEventsPerHeartbeat = 1000
+)
+
+// Data sanitization configuration.
+const (
+	// ScrubberKeyRegexp is the scrubber key regular expression (cf. scrubber doc
+	// for usage). It is a case-insensitive regexp matching passwd, password,
+	// passphrase, secret, authorization, api_key, apikey, accesstoken,
+	// access_token and token.
+	ScrubberKeyRegexp = `(?i)(passw(((or)?d))|(phrase))|(secret)|(authorization)|(api_?key)|((access_?)?token)`
+	// ScrubberValueRegexp is the scrubber value regular expression (cf. scrubber
+	// doc for usage). It matches credit card numbers with space, dash or no
+	// number separators.
+	ScrubberValueRegexp    = `(?:\d[ -]*?){13,16}`
+	ScrubberRedactedString = `<Redacted by Sqreen>`
 )
 
 var (
