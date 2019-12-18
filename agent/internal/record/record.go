@@ -51,6 +51,7 @@ type RequestRecordFace interface {
 	types.RequestRecord
 	ClientIP() net.IP
 	Request() *http.Request
+	SetRequest(*http.Request)
 	AddAttackEvent(attack *AttackEvent)
 }
 
@@ -77,6 +78,10 @@ type RequestRecord struct {
 	shouldSend                      bool
 	// clientIP value deduced from the request headers.
 	clientIP net.IP
+}
+
+func (rr *RequestRecord) SetRequest(r *http.Request) {
+	rr.request = r
 }
 
 func (rr *RequestRecord) AddAttackEvent(attack *AttackEvent) {
@@ -116,11 +121,10 @@ func NewRequestRecord(agent Agent, logger Logger, req *http.Request, cfg getClie
 		agent.AddWhitelistEvent(matched)
 		rr = WhitelistedHTTPRequestRecord{
 			clientIP: clientIP,
-			request:  req,
 		}
+
 	} else {
 		rr = &RequestRecord{
-			request:  req,
 			agent:    agent,
 			logger:   logger,
 			clientIP: clientIP,
@@ -132,6 +136,12 @@ func NewRequestRecord(agent Agent, logger Logger, req *http.Request, cfg getClie
 	// to access the internal request record from the SDK API.
 	ctx := req.Context()
 	req = req.WithContext(context.WithValue(ctx, RequestRecordContextKey{}, rr))
+
+	// Set the record request pointer the one that was just created by
+	// `req.WithContext()` which has copied the original request to modify its
+	// context.
+	rr.SetRequest(req)
+
 	return rr, req
 }
 
@@ -391,6 +401,7 @@ type WhitelistedHTTPRequestRecord struct {
 	request  *http.Request
 }
 
+func (rr WhitelistedHTTPRequestRecord) SetRequest(r *http.Request)              { rr.request = r }
 func (WhitelistedHTTPRequestRecord) NewUserSignup(map[string]string)            {}
 func (WhitelistedHTTPRequestRecord) NewUserAuth(map[string]string, bool)        {}
 func (WhitelistedHTTPRequestRecord) Identify(map[string]string)                 {}
