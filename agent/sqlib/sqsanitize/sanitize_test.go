@@ -6,11 +6,14 @@ package sqsanitize_test
 
 import (
 	"fmt"
+	"mime/multipart"
+	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
 	"testing"
 
+	fuzz "github.com/google/gofuzz"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
@@ -1057,6 +1060,70 @@ func TestScrubber(t *testing.T) {
 				"":      []string{expectedMask, expectedMask + "what", randString, "key"},
 			}
 			require.Equal(t, expected, values)
+		})
+
+		t.Run("HTTP Request", func(t *testing.T) {
+			s, err := sqsanitize.NewScrubber(`(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`, `(?:\d[ -]*?){13,16}`, expectedMask)
+			require.NoError(t, err)
+
+			t.Run("zero value", func(t *testing.T) {
+				var req http.Request
+				scrubbed, err := s.Scrub(&req)
+				require.NoError(t, err)
+				require.False(t, scrubbed)
+			})
+
+			t.Run("random request", func(t *testing.T) {
+				fuzzer := fuzz.New().NilChance(0).NumElements(10, 10)
+
+				var url_ url.URL
+				fuzzer.Fuzz(&url_)
+
+				var headers, trailers http.Header
+				fuzzer.Fuzz(&headers)
+				fuzzer.Fuzz(&trailers)
+
+				var host string
+				fuzzer.Fuzz(&host)
+
+				var form, postForm url.Values
+				fuzzer.Fuzz(&form)
+				fuzzer.Fuzz(&postForm)
+
+				var multipartForm multipart.Form
+				fuzzer.Fuzz(&multipartForm)
+
+				// Insert some values forbidden by the regular expression
+				postForm.Add("password", "1234")
+				postForm.Add("password", "5678")
+				messageFormat := "here is my credit card number %s."
+				form.Add("message", fmt.Sprintf(messageFormat, "4533-3432-3234-3334"))
+
+				req := http.Request{
+					Method:        "GET",
+					URL:           &url_,
+					Proto:         "HTTP/2",
+					ProtoMajor:    2,
+					ProtoMinor:    0,
+					Header:        headers,
+					ContentLength: 33,
+					Host:          host,
+					Form:          form,
+					PostForm:      postForm,
+					MultipartForm: &multipartForm,
+					Trailer:       trailers,
+					RemoteAddr:    "1.2.3.4",
+					RequestURI:    url_.RequestURI(),
+				}
+
+				scrubbed, err := s.Scrub(&req)
+				require.NoError(t, err)
+				require.True(t, scrubbed)
+
+				// Check values were scrubbed
+				require.Equal(t, []string{expectedMask, expectedMask}, req.PostForm["password"])
+				require.Equal(t, []string{fmt.Sprintf(messageFormat, expectedMask)}, req.Form["message"])
+			})
 		})
 	})
 }
