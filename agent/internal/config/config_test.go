@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )
@@ -205,4 +206,44 @@ func newCfgFile(t *testing.T, path string, content string) string {
 	_, err = cfg.WriteString(content)
 	require.NoError(t, err)
 	return cfg.Name()
+}
+
+func TestDefaultConfiguration(t *testing.T) {
+	t.Run("pii scrubbing default config", func(t *testing.T) {
+		scrubber, err := sqsanitize.NewScrubber(ScrubberKeyRegexp, ScrubberValueRegexp, ScrubberRedactedString)
+		require.NoError(t, err)
+
+		t.Run("the key regexp should match", func(t *testing.T) {
+			for _, key := range []string{
+				"passwd", "password", "passphrase", "secret", "authorization", "api_key",
+				"apikey", "accesstoken", "access_token", "token",
+			} {
+				key := key
+				t.Run(key, func(t *testing.T) {
+					v := map[string]string{
+						key: testlib.RandUTF8String(),
+					}
+					scrubbed, err := scrubber.Scrub(&v)
+					require.NoError(t, err)
+					require.True(t, scrubbed)
+					require.Equal(t, ScrubberRedactedString, v[key])
+				})
+			}
+		})
+
+		t.Run("the value regexp should match", func(t *testing.T) {
+			for _, value := range []string{
+				"0000-1111-2222-3333", "9999888877776666", "0000 1111 2222 3333",
+			} {
+				value := value
+				t.Run(value, func(t *testing.T) {
+					v := value
+					scrubbed, err := scrubber.Scrub(&v)
+					require.NoError(t, err)
+					require.True(t, scrubbed)
+					require.Equal(t, ScrubberRedactedString, v)
+				})
+			}
+		})
+	})
 }
