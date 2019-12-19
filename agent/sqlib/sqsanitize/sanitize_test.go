@@ -177,11 +177,11 @@ func TestScrubber(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
 				require.NoError(t, err)
-				var scrubbedValues []string
-				scrubbed, err := s.Scrub(&tc.value, &scrubbedValues)
+				info := sqsanitize.Info{}
+				scrubbed, err := s.Scrub(&tc.value, info)
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, tc.value)
-				require.True(t, (scrubbed && len(scrubbedValues) > 0) || (!scrubbed && len(scrubbedValues) == 0))
+				require.True(t, (scrubbed && len(info) > 0) || (!scrubbed && len(info) == 0))
 			})
 
 		}
@@ -1093,11 +1093,11 @@ func TestScrubber(t *testing.T) {
 										expected = tc.expected.withBothDisabled
 									}
 								}
-								var scrubbedValues []string
-								scrubbed, err := s.Scrub(value, &scrubbedValues)
+								info := sqsanitize.Info{}
+								scrubbed, err := s.Scrub(value, info)
 								require.NoError(t, err)
 								require.Equal(t, expected, value)
-								require.True(t, (scrubbed && len(scrubbedValues) > 0) || (!scrubbed && len(scrubbedValues) == 0))
+								require.True(t, (scrubbed && len(info) > 0) || (!scrubbed && len(info) == 0))
 							})
 						}
 					})
@@ -1118,8 +1118,8 @@ func TestScrubber(t *testing.T) {
 				"other": []string{"forbidden", "whatforbidden", randString, "key"},
 				"":      []string{"forbidden", "forbiddenwhat", randString, "key"},
 			}
-			var scrubbedValues []string
-			scrubbed, err := s.Scrub(values, &scrubbedValues)
+			info := sqsanitize.Info{}
+			scrubbed, err := s.Scrub(values, info)
 			require.NoError(t, err)
 			require.True(t, scrubbed)
 
@@ -1132,12 +1132,12 @@ func TestScrubber(t *testing.T) {
 			}
 			require.Equal(t, expected, values)
 
-			require.Contains(t, scrubbedValues, "no")
-			require.Contains(t, scrubbedValues, "pass")
-			require.Contains(t, scrubbedValues, randString)
-			require.Contains(t, scrubbedValues, "forbidden")
-			require.Contains(t, scrubbedValues, "whatforbidden")
-			require.Contains(t, scrubbedValues, "forbiddenwhat")
+			require.Contains(t, info, "no")
+			require.Contains(t, info, "pass")
+			require.Contains(t, info, randString)
+			require.Contains(t, info, "forbidden")
+			require.Contains(t, info, "whatforbidden")
+			require.Contains(t, info, "forbiddenwhat")
 		})
 
 		t.Run("HTTP Request", func(t *testing.T) {
@@ -1146,11 +1146,11 @@ func TestScrubber(t *testing.T) {
 
 			t.Run("zero value", func(t *testing.T) {
 				var req http.Request
-				var scrubbedValues []string
-				scrubbed, err := s.Scrub(&req, &scrubbedValues)
+				info := sqsanitize.Info{}
+				scrubbed, err := s.Scrub(&req, info)
 				require.NoError(t, err)
 				require.False(t, scrubbed)
-				require.Len(t, scrubbedValues, 0)
+				require.Len(t, info, 0)
 			})
 
 			t.Run("random request", func(t *testing.T) {
@@ -1197,8 +1197,8 @@ func TestScrubber(t *testing.T) {
 					RequestURI:    url_.RequestURI(),
 				}
 
-				var scrubbedValues []string
-				scrubbed, err := s.Scrub(&req, &scrubbedValues)
+				info := sqsanitize.Info{}
+				scrubbed, err := s.Scrub(&req, info)
 				require.NoError(t, err)
 				require.True(t, scrubbed)
 
@@ -1206,9 +1206,9 @@ func TestScrubber(t *testing.T) {
 				require.Equal(t, []string{expectedMask, expectedMask}, req.PostForm["password"])
 				require.Equal(t, []string{fmt.Sprintf(messageFormat, expectedMask)}, req.Form["message"])
 
-				require.Contains(t, scrubbedValues, stringWithCreditCardNb)
-				require.Contains(t, scrubbedValues, "1234")
-				require.Contains(t, scrubbedValues, "5678")
+				require.Contains(t, info, stringWithCreditCardNb)
+				require.Contains(t, info, "1234")
+				require.Contains(t, info, "5678")
 			})
 		})
 	})
@@ -1248,12 +1248,12 @@ type myCustomScrubbedStruct struct {
 	*myStruct
 }
 
-func (s *myCustomScrubbedStruct) Scrub(scrubber *sqsanitize.Scrubber, scrubbedValues *[]string) (scrubbed bool, err error) {
-	scrubbed, err = scrubber.Scrub(&s.unexported, scrubbedValues)
+func (s *myCustomScrubbedStruct) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
+	scrubbed, err = scrubber.Scrub(&s.unexported, info)
 	if err != nil {
 		return
 	}
 	var scrubbedMyStruct bool
-	scrubbedMyStruct, err = scrubber.Scrub(s.myStruct, scrubbedValues)
+	scrubbedMyStruct, err = scrubber.Scrub(s.myStruct, info)
 	return scrubbed || scrubbedMyStruct, err
 }

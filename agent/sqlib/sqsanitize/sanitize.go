@@ -34,8 +34,11 @@ type Scrubber struct {
 // CustomScrubber is the interface a type can implement in order to provide
 // a custom scrubbing method. For example, it could be used to scrub unexported
 // struct fields.
+// The method is given the pointer to the scrubber so that it can continue
+// scrubbing its underlying values when required. It is the method's
+// responsibility to update the scrubbing information.
 type CustomScrubber interface {
-	Scrub(*Scrubber, *[]string) (bool, error)
+	Scrub(*Scrubber, Info) (bool, error)
 }
 
 // NewScrubber returns a new scrubber configured to redact values matching the
@@ -65,23 +68,23 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 }
 
 // Scrub a given value. Since it is based on `reflect`, unexported struct
-// fields are ignored. When `scrubbedValues` is not nil, it is used to
-// store every scrubbed value and provide them to the caller.
+// fields are ignored. When `info` is not nil, it is used to store every
+// scrubbed value and provide them to the caller.
 // This function cannot panic and an error is returned if an unexpected panic
 // occurs.
-func (s *Scrubber) Scrub(v interface{}, scrubbedValues *[]string) (scrubbed bool, err error) {
+func (s *Scrubber) Scrub(v interface{}, info Info) (scrubbed bool, err error) {
 	if v == nil {
 		return false, nil
 	}
 	err = sqsafe.Call(func() error {
-		scrubbed = s.scrubValue(reflect.ValueOf(v), scrubbedValues)
+		scrubbed = s.scrubValue(reflect.ValueOf(v), info)
 		return nil
 	})
 	return
 }
 
-func (s *Scrubber) scrubValue(v reflect.Value, scrubbedValues *[]string) bool {
-	if ok, scrubbed, err := s.tryCustomScrubberInterface(v, scrubbedValues); ok {
+func (s *Scrubber) scrubValue(v reflect.Value, info Info) bool {
+	if ok, scrubbed, err := s.tryCustomScrubberInterface(v, info); ok {
 		if err != nil {
 			// TODO: change signature in order to bubble it up
 			panic(err)
@@ -92,7 +95,7 @@ func (s *Scrubber) scrubValue(v reflect.Value, scrubbedValues *[]string) bool {
 walk:
 	switch v.Kind() {
 	case reflect.Interface:
-		_, scrubbed := s.scrubInterface(v, scrubbedValues)
+		_, scrubbed := s.scrubInterface(v, info)
 		return scrubbed
 
 	case reflect.Ptr:
@@ -102,26 +105,26 @@ walk:
 	case reflect.Array:
 		fallthrough
 	case reflect.Slice:
-		return s.scrubSlice(v, scrubbedValues)
+		return s.scrubSlice(v, info)
 
 	case reflect.Map:
-		return s.scrubMap(v, scrubbedValues)
+		return s.scrubMap(v, info)
 
 	case reflect.Struct:
-		return s.scrubStruct(v, scrubbedValues)
+		return s.scrubStruct(v, info)
 
 	case reflect.String:
-		return s.scrubString(v, scrubbedValues)
+		return s.scrubString(v, info)
 	}
 	return false
 }
 
 // tryCustomScrubberInterface calls tryCustomScrubber on v or retries on its
 // address when possible.
-func (s *Scrubber) tryCustomScrubberInterface(v reflect.Value, scrubbedValues *[]string) (ok, scrubbed bool, err error) {
+func (s *Scrubber) tryCustomScrubberInterface(v reflect.Value, info Info) (ok, scrubbed bool, err error) {
 	// Try v
 	if v.CanInterface() {
-		ok, scrubbed, err = s.tryCustomScrubber(v, scrubbedValues)
+		ok, scrubbed, err = s.tryCustomScrubber(v, info)
 		if ok || err != nil {
 			return
 		}
@@ -130,24 +133,24 @@ func (s *Scrubber) tryCustomScrubberInterface(v reflect.Value, scrubbedValues *[
 	// CustomScrubber interface.
 	if v.CanAddr() {
 		if v := v.Addr(); v.CanInterface() {
-			ok, scrubbed, err = s.tryCustomScrubber(v, scrubbedValues)
+			ok, scrubbed, err = s.tryCustomScrubber(v, info)
 		}
 	}
 	return
 }
 
 // tryCustomScrubber call the CustomScrubber method when v implements it.
-func (s *Scrubber) tryCustomScrubber(v reflect.Value, scrubbedValues *[]string) (ok, scrubbed bool, err error) {
+func (s *Scrubber) tryCustomScrubber(v reflect.Value, info Info) (ok, scrubbed bool, err error) {
 	var custom CustomScrubber
 	custom, ok = v.Interface().(CustomScrubber)
 	if !ok {
 		return
 	}
-	scrubbed, err = custom.Scrub(s, scrubbedValues)
+	scrubbed, err = custom.Scrub(s, info)
 	return
 }
 
-func (s *Scrubber) scrubString(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
+func (s *Scrubber) scrubString(v reflect.Value, info Info) (scrubbed bool) {
 	// No need to scrub empty strings
 	str := v.String()
 	if len(str) == 0 {
@@ -169,28 +172,26 @@ func (s *Scrubber) scrubString(v reflect.Value, scrubbedValues *[]string) (scrub
 		scrubbed = true
 	}
 
-	// Store the value that was scrubbed into the given scrubbedValues slice
-	// pointer if not nil.
-	if scrubbed && scrubbedValues != nil {
-		*scrubbedValues = append(*scrubbedValues, str)
+	if scrubbed {
+		info.Add(str)
 	}
 
 	return scrubbed
 }
 
-func (s *Scrubber) scrubSlice(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
+func (s *Scrubber) scrubSlice(v reflect.Value, info Info) (scrubbed bool) {
 	l := v.Len()
 	hasInterfaceElementType := v.Type().Elem().Kind() == reflect.Interface
 	for i := 0; i < l; i++ {
 		ix := v.Index(i)
 		if !hasInterfaceElementType {
 			// Not an interface value, scrub the current element.
-			if scrubbedElement := s.scrubValue(ix, scrubbedValues); scrubbedElement {
+			if scrubbedElement := s.scrubValue(ix, info); scrubbedElement {
 				scrubbed = true
 			}
 		} else {
 			// Interface value, scrub its element and set the current element to it.
-			if newVal, scrubbedElement := s.scrubInterface(ix, scrubbedValues); scrubbedElement {
+			if newVal, scrubbedElement := s.scrubInterface(ix, info); scrubbedElement {
 				ix.Set(newVal)
 				scrubbed = true
 			}
@@ -199,7 +200,7 @@ func (s *Scrubber) scrubSlice(v reflect.Value, scrubbedValues *[]string) (scrubb
 	return scrubbed
 }
 
-func (s *Scrubber) scrubMap(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
+func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
 	vt := v.Type().Elem()
 	hasInterfaceValueType := vt.Kind() == reflect.Interface
 	hasStringKeyType := v.Type().Key().Kind() == reflect.String
@@ -233,7 +234,7 @@ func (s *Scrubber) scrubMap(v reflect.Value, scrubbedValues *[]string) (scrubbed
 		newVal := reflect.New(valT).Elem()
 		newVal.Set(val)
 		// Scrub it
-		if scrubbedElement := scrubber.scrubValue(newVal, scrubbedValues); scrubbedElement {
+		if scrubbedElement := scrubber.scrubValue(newVal, info); scrubbedElement {
 			// Set it
 			v.SetMapIndex(key, newVal)
 			scrubbed = true
@@ -242,7 +243,7 @@ func (s *Scrubber) scrubMap(v reflect.Value, scrubbedValues *[]string) (scrubbed
 	return scrubbed
 }
 
-func (s *Scrubber) scrubStruct(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
+func (s *Scrubber) scrubStruct(v reflect.Value, info Info) (scrubbed bool) {
 	l := v.NumField()
 	vt := v.Type()
 	for i := 0; i < l; i++ {
@@ -262,14 +263,14 @@ func (s *Scrubber) scrubStruct(v reflect.Value, scrubbedValues *[]string) (scrub
 		f := v.Field(i)
 		if f.Kind() == reflect.Interface {
 			// Interface value, scrub its element and set it.
-			newVal, scrubbedElement := s.scrubInterface(f, scrubbedValues)
+			newVal, scrubbedElement := s.scrubInterface(f, info)
 			if scrubbedElement {
 				f.Set(newVal)
 				scrubbed = true
 			}
 		} else {
 			// Not and interface value, scrub the field.
-			if scrubbedElement := scrubber.scrubValue(f, scrubbedValues); scrubbedElement {
+			if scrubbedElement := scrubber.scrubValue(f, info); scrubbedElement {
 				scrubbed = true
 			}
 		}
@@ -282,7 +283,7 @@ func (s *Scrubber) scrubStruct(v reflect.Value, scrubbedValues *[]string) (scrub
 // value of the underlying interface type, that is set with the given value and
 // scrubbed. The scrubbed new value is returned and can be set to the original
 // value (map entry, array index, etc.).
-func (s *Scrubber) scrubInterface(v reflect.Value, scrubbedValues *[]string) (reflect.Value, bool) {
+func (s *Scrubber) scrubInterface(v reflect.Value, info Info) (reflect.Value, bool) {
 	if v.IsZero() {
 		return reflect.Value{}, false
 	}
@@ -292,7 +293,7 @@ func (s *Scrubber) scrubInterface(v reflect.Value, scrubbedValues *[]string) (re
 	newVal := reflect.New(val.Type()).Elem()
 	newVal.Set(val)
 	// Scrub it.
-	scrubbed := s.scrubValue(newVal, scrubbedValues)
+	scrubbed := s.scrubValue(newVal, info)
 	return newVal, scrubbed
 }
 
@@ -332,4 +333,21 @@ func (r regex) ReplaceAllString(src, repl string) string {
 		return src
 	}
 	return r.re.ReplaceAllString(src, repl)
+}
+
+type Info map[string]struct{}
+
+func (i Info) Add(value string) {
+	if i == nil {
+		return
+	}
+	i[value] = struct{}{}
+}
+
+func (i Info) Contains(value string) bool {
+	if len(i) == 0 {
+		return false
+	}
+	_, exists := i[value]
+	return exists
 }
