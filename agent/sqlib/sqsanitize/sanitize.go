@@ -31,6 +31,13 @@ type Scrubber struct {
 	scrubEveryString bool
 }
 
+// CustomScrubber is the interface a type can implement in order to provide
+// a custom scrubbing method. For example, it could be used to scrub unexported
+// struct fields.
+type CustomScrubber interface {
+	Scrub(*Scrubber, *[]string) (bool, error)
+}
+
 // NewScrubber returns a new scrubber configured to redact values matching the
 // given regular expressions.
 //   - A string value matching the `valueRegexp` is replaced by
@@ -63,6 +70,9 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 // This function cannot panic and an error is returned if an unexpected panic
 // occurs.
 func (s *Scrubber) Scrub(v interface{}, scrubbedValues *[]string) (scrubbed bool, err error) {
+	if v == nil {
+		return false, nil
+	}
 	err = sqsafe.Call(func() error {
 		scrubbed = s.scrubValue(reflect.ValueOf(v), scrubbedValues)
 		return nil
@@ -71,8 +81,20 @@ func (s *Scrubber) Scrub(v interface{}, scrubbedValues *[]string) (scrubbed bool
 }
 
 func (s *Scrubber) scrubValue(v reflect.Value, scrubbedValues *[]string) bool {
+	if ok, scrubbed, err := s.tryCustomScrubberInterface(v, scrubbedValues); ok {
+		if err != nil {
+			// TODO: change signature in order to bubble it up
+			panic(err)
+		}
+		return scrubbed
+	}
+
 walk:
 	switch v.Kind() {
+	case reflect.Interface:
+		_, scrubbed := s.scrubInterface(v, scrubbedValues)
+		return scrubbed
+
 	case reflect.Ptr:
 		v = v.Elem()
 		goto walk
@@ -92,6 +114,37 @@ walk:
 		return s.scrubString(v, scrubbedValues)
 	}
 	return false
+}
+
+// tryCustomScrubberInterface calls tryCustomScrubber on v or retries on its
+// address when possible.
+func (s *Scrubber) tryCustomScrubberInterface(v reflect.Value, scrubbedValues *[]string) (ok, scrubbed bool, err error) {
+	// Try v
+	if v.CanInterface() {
+		ok, scrubbed, err = s.tryCustomScrubber(v, scrubbedValues)
+		if ok || err != nil {
+			return
+		}
+	}
+	// Retry on the address if v is addressable since it could also implement the
+	// CustomScrubber interface.
+	if v.CanAddr() {
+		if v := v.Addr(); v.CanInterface() {
+			ok, scrubbed, err = s.tryCustomScrubber(v, scrubbedValues)
+		}
+	}
+	return
+}
+
+// tryCustomScrubber call the CustomScrubber method when v implements it.
+func (s *Scrubber) tryCustomScrubber(v reflect.Value, scrubbedValues *[]string) (ok, scrubbed bool, err error) {
+	var custom CustomScrubber
+	custom, ok = v.Interface().(CustomScrubber)
+	if !ok {
+		return
+	}
+	scrubbed, err = custom.Scrub(s, scrubbedValues)
+	return
 }
 
 func (s *Scrubber) scrubString(v reflect.Value, scrubbedValues *[]string) (scrubbed bool) {
@@ -230,14 +283,15 @@ func (s *Scrubber) scrubStruct(v reflect.Value, scrubbedValues *[]string) (scrub
 // scrubbed. The scrubbed new value is returned and can be set to the original
 // value (map entry, array index, etc.).
 func (s *Scrubber) scrubInterface(v reflect.Value, scrubbedValues *[]string) (reflect.Value, bool) {
-	// The current element is an interface value which cannot be set, we
-	// therefore need to create a new value that can be set by the scrubber.
 	if v.IsZero() {
 		return reflect.Value{}, false
 	}
+	// The current element is an interface value which cannot be set, we
+	// therefore need to create a new value that can be set by the scrubber.
 	val := v.Elem()
 	newVal := reflect.New(val.Type()).Elem()
 	newVal.Set(val)
+	// Scrub it.
 	scrubbed := s.scrubValue(newVal, scrubbedValues)
 	return newVal, scrubbed
 }
