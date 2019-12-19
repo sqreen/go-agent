@@ -13,6 +13,7 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,6 +101,130 @@ func TestJSON(t *testing.T) {
 			require.Equal(t, msg, msg2)
 		})
 	}
+}
+
+func TestCustomScrubber(t *testing.T) {
+	expectedMask := "scrubbed"
+	scrubber, err := sqsanitize.NewScrubber("password", "forbidden", expectedMask)
+	require.NoError(t, err)
+
+	t.Run("without attack", func(t *testing.T) {
+		rr := &api.RequestRecord{
+			Request: api.RequestRecord_Request{
+				Parameters: api.RequestRecord_Request_Parameters{
+					Query: map[string][]string{"password": {"1234", "5678"}},
+				},
+			},
+		}
+		info := sqsanitize.Info{}
+		scrubbed, err := scrubber.Scrub(rr, info)
+		require.NoError(t, err)
+		require.True(t, scrubbed)
+		require.Contains(t, info, "1234")
+		require.Contains(t, info, "5678")
+		expected := &api.RequestRecord{
+			Request: api.RequestRecord_Request{
+				Parameters: api.RequestRecord_Request_Parameters{
+					Query: map[string][]string{"password": {expectedMask, expectedMask}},
+				},
+			},
+		}
+		require.Equal(t, expected, rr)
+	})
+
+	t.Run("with attack", func(t *testing.T) {
+		winfo := []api.WAFInfo{
+			{
+				RetCode: 1,
+				Flow:    "rs_f51d7dbbc16aa65813835ec069e61b9d",
+				Step:    "start",
+				Rule:    "rule_custom_7075a39ca6647562062d6d5d839465a2",
+				Filter: []api.WAFInfoFilter{
+					{
+						Operator:        "@rx",
+						OperatorValue:   "trigger",
+						BindingAccessor: "#.request_params_filtered | flat_values",
+						ResolvedValue:   "1234",
+						MatchStatus:     "1234",
+					},
+					{
+						Operator:        "@rx",
+						OperatorValue:   "trigger",
+						BindingAccessor: "#.request_params",
+						ResolvedValue:   "this value is forbidden by the holy waf law",
+						MatchStatus:     "forbidden",
+					},
+				},
+			},
+		}
+		buf, err := json.Marshal(&winfo)
+		require.NoError(t, err)
+		winfoJSONStr := string(buf)
+
+		rr := &api.RequestRecord{
+			Request: api.RequestRecord_Request{
+				Parameters: api.RequestRecord_Request_Parameters{
+					Query: map[string][]string{
+						"password": {"1234", "5678"},
+						"a":        {"this value is forbidden by the holy waf law"},
+					},
+				},
+			},
+			Observed: api.RequestRecord_Observed{
+				Attacks: []*api.RequestRecord_Observed_Attack{
+					{
+						Info: api.WAFAttackInfo{WAFData: winfoJSONStr},
+					},
+				},
+			},
+		}
+		info := sqsanitize.Info{}
+		scrubbed, err := scrubber.Scrub(rr, info)
+		require.NoError(t, err)
+		require.True(t, scrubbed)
+		require.Contains(t, info, "1234")
+		require.Contains(t, info, "5678")
+		require.Contains(t, info, "this value is forbidden by the holy waf law")
+
+		// Check the request part
+		expectedRequest := api.RequestRecord_Request{
+			Parameters: api.RequestRecord_Request_Parameters{
+				Query: map[string][]string{
+					"password": {expectedMask, expectedMask},
+					"a":        {"this value is " + expectedMask + " by the holy waf law"},
+				},},
+		}
+		require.Equal(t, expectedRequest, rr.Request)
+
+		// Check the waf info
+		err = json.Unmarshal([]byte(rr.Observed.Attacks[0].Info.(api.WAFAttackInfo).WAFData), &winfo)
+		require.NoError(t, err)
+		expectedWAFInfo := []api.WAFInfo{
+			{
+				RetCode: 1,
+				Flow:    "rs_f51d7dbbc16aa65813835ec069e61b9d",
+				Step:    "start",
+				Rule:    "rule_custom_7075a39ca6647562062d6d5d839465a2",
+				Filter: []api.WAFInfoFilter{
+					{
+						Operator:        "@rx",
+						OperatorValue:   "trigger",
+						BindingAccessor: "#.request_params_filtered | flat_values",
+						ResolvedValue:   expectedMask,
+						MatchStatus:     expectedMask,
+					},
+					{
+						Operator:        "@rx",
+						OperatorValue:   "trigger",
+						BindingAccessor: "#.request_params",
+						ResolvedValue:   expectedMask,
+						MatchStatus:     expectedMask,
+					},
+				},
+			},
+		}
+		require.Equal(t, expectedWAFInfo, winfo)
+	})
 }
 
 type ExceptionContext api.ExceptionContext

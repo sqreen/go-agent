@@ -7,6 +7,8 @@ package api
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
 )
 
 type AppLoginRequest struct {
@@ -83,13 +85,13 @@ type BatchRequest struct {
 	Batch []BatchRequest_Event `json:"batch"`
 }
 
-type RequestRecordEvent RequestRecord
+type RequestRecordEvent struct{ *RequestRecord }
 
-func (*RequestRecordEvent) GetEventType() string {
+func (RequestRecordEvent) GetEventType() string {
 	return "request_record"
 }
 
-func (e *RequestRecordEvent) GetEvent() Struct {
+func (e RequestRecordEvent) GetEvent() Struct {
 	return Struct{e}
 }
 
@@ -252,6 +254,29 @@ type RequestRecord struct {
 	Observed    RequestRecord_Observed `protobuf:"bytes,6,opt,name=observed,proto3" json:"observed"`
 }
 
+func (rr *RequestRecord) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
+	var (
+		scrubbedRequest, scrubbedObserved bool
+		requestScrubbingInfo              = sqsanitize.Info{}
+	)
+
+	// Temporary hack to scrub the WAF data that copied some request data.
+	// firstly, scrub the request and pass its scrubbing information to the
+	// scrubbing of the observations which may include the WAF information.
+	// The WAFAttackInfo type implements the CustomScrubber interface and expects
+	// this value.
+	scrubbedRequest, err = scrubber.Scrub(&rr.Request, requestScrubbingInfo)
+	if err != nil {
+		return
+	}
+	scrubbedObserved, err = scrubber.Scrub(&rr.Observed, requestScrubbingInfo)
+	if err != nil {
+		return
+	}
+	info.Append(requestScrubbingInfo)
+	return scrubbedRequest || scrubbedObserved, nil
+}
+
 type RequestRecord_Request struct {
 	Rid        string                           `json:"rid"`
 	Headers    []RequestRecord_Request_Header   `json:"headers"`
@@ -297,13 +322,70 @@ type RequestRecord_Observed struct {
 type RequestRecord_Observed_Attack struct {
 	RuleName string      `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
 	Test     bool        `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
-	Infos    interface{} `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
+	Info     interface{} `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
 	Time     time.Time   `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
 	Block    bool        `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
 }
 
-type WAFAttackInfos struct {
+type WAFAttackInfo struct {
 	WAFData string `json:"waf_data"`
+}
+
+type WAFInfoFilter struct {
+	Operator        string `json:"operator"`
+	OperatorValue   string `json:"operator_value"`
+	BindingAccessor string `json:"binding_accessor"`
+	ResolvedValue   string `json:"resolved_value"`
+	MatchStatus     string `json:"match_status,omitempty"`
+}
+type WAFInfo struct {
+	RetCode int             `json:"ret_code"`
+	Flow    string          `json:"flow"`
+	Step    string          `json:"step"`
+	Rule    string          `json:"rule"`
+	Filter  []WAFInfoFilter `json:"filter"`
+}
+
+// Scrub of WAF attack information by implementing spec 22. This is a temporary
+// solution until a better WAF API is provided that would avoid that.
+func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
+	if len(info) == 0 {
+		return false, nil
+	}
+
+	// Unmarshal the WAF attack information that was returned by the WAF.
+	var wafInfo []WAFInfo
+	if err := json.Unmarshal([]byte(i.WAFData), &wafInfo); err != nil {
+		return false, err
+	}
+
+	// Walk the WAF information and redact resolved binding accessor values that
+	// were scrubbed. The caller must have stored into info the values scrubbed
+	// from the request.
+	redactedString := scrubber.RedactedValueMask()
+	for e := range wafInfo {
+		for f := range wafInfo[e].Filter {
+			if info.Contains(wafInfo[e].Filter[f].ResolvedValue) {
+				wafInfo[e].Filter[f].ResolvedValue = redactedString
+				if wafInfo[e].Filter[f].MatchStatus != "" {
+					wafInfo[e].Filter[f].MatchStatus = redactedString
+				}
+				scrubbed = true
+			}
+		}
+	}
+
+	if !scrubbed {
+		return false, nil
+	}
+
+	// Marshal back to json the scrubbed WAF info
+	buf, err := json.Marshal(&wafInfo)
+	if err != nil {
+		return false, err
+	}
+	i.WAFData = string(buf)
+	return scrubbed, nil
 }
 
 type RequestRecord_Observed_SDKEvent struct {
@@ -685,7 +767,7 @@ func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_Attack
 	this.Test = that.GetTest()
 	this.Time = that.GetTime()
 	this.Block = that.GetBlock()
-	this.Infos = that.GetInfo()
+	this.Info = that.GetInfo()
 	return this
 }
 

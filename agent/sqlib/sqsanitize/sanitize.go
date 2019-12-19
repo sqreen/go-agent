@@ -67,6 +67,11 @@ func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, e
 	}, nil
 }
 
+// RedactedValueMask returns the configured redactedValueMask
+func (s *Scrubber) RedactedValueMask() string {
+	return s.redactedValueMask
+}
+
 // Scrub a given value. Since it is based on `reflect`, unexported struct
 // fields are ignored. When `info` is not nil, it is used to store every
 // scrubbed value and provide them to the caller.
@@ -350,4 +355,13 @@ func (i Info) Contains(value string) bool {
 	}
 	_, exists := i[value]
 	return exists
+}
+
+func (i Info) Append(info Info) {
+	if i == nil || len(info) == 0 {
+		return
+	}
+	for v := range info {
+		i.Add(v)
+	}
 }

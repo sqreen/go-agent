@@ -100,7 +100,7 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 			} else if err == waf_types.ErrTimeout {
 				// no-op: we don't log on the hot path unless an error occurred
 			} else {
-				info := api.WAFAttackInfos{WAFData: string(info)}
+				info := api.WAFAttackInfo{WAFData: string(info)}
 				if ctx.BlockingMode() && action == waf_types.BlockAction {
 					// Write the blocking response.
 					httphandler.WriteResponse(*w, *r, nil, http.StatusBadRequest, nil)

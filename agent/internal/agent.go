@@ -494,10 +494,12 @@ func (m *eventManager) send(client *backend.Client, batch []Event) {
 		var event api.BatchRequest_EventFace
 		switch actual := e.(type) {
 		case *HTTPRequestRecordEvent:
-			event = (*api.RequestRecordEvent)(api.NewRequestRecordFromFace(actual))
+			event = api.RequestRecordEvent{api.NewRequestRecordFromFace(actual)}
 		case *ExceptionEvent:
 			event = api.NewExceptionEventFromFace(actual)
 		}
+
+		// Scrub the value, along with the set of scrubbed string values.
 		if _, err := m.agent.piiScrubber.Scrub(event, nil); err != nil {
 			// Only log this unexpected error and keep the event that may have been
 			// partially scrubbed.
