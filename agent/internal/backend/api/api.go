@@ -7,6 +7,8 @@ package api
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
 )
 
 type AppLoginRequest struct {
@@ -83,13 +85,13 @@ type BatchRequest struct {
 	Batch []BatchRequest_Event `json:"batch"`
 }
 
-type RequestRecordEvent RequestRecord
+type RequestRecordEvent struct{ *RequestRecord }
 
-func (*RequestRecordEvent) GetEventType() string {
+func (RequestRecordEvent) GetEventType() string {
 	return "request_record"
 }
 
-func (e *RequestRecordEvent) GetEvent() Struct {
+func (e RequestRecordEvent) GetEvent() Struct {
 	return Struct{e}
 }
 
@@ -252,20 +254,43 @@ type RequestRecord struct {
 	Observed    RequestRecord_Observed `protobuf:"bytes,6,opt,name=observed,proto3" json:"observed"`
 }
 
+func (rr *RequestRecord) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
+	var (
+		scrubbedRequest, scrubbedObserved bool
+		requestScrubbingInfo              = sqsanitize.Info{}
+	)
+
+	// Temporary hack to scrub the WAF data that copied some request data.
+	// firstly, scrub the request and pass its scrubbing information to the
+	// scrubbing of the observations which may include the WAF information.
+	// The WAFAttackInfo type implements the CustomScrubber interface and expects
+	// this value.
+	scrubbedRequest, err = scrubber.Scrub(&rr.Request, requestScrubbingInfo)
+	if err != nil {
+		return
+	}
+	scrubbedObserved, err = scrubber.Scrub(&rr.Observed, requestScrubbingInfo)
+	if err != nil {
+		return
+	}
+	info.Append(requestScrubbingInfo)
+	return scrubbedRequest || scrubbedObserved, nil
+}
+
 type RequestRecord_Request struct {
-	Rid        string                         `protobuf:"bytes,1,opt,name=rid,proto3" json:"rid"`
-	Headers    []RequestRecord_Request_Header `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers"`
-	Verb       string                         `protobuf:"bytes,3,opt,name=verb,proto3" json:"verb"`
-	Path       string                         `protobuf:"bytes,4,opt,name=path,proto3" json:"path"`
-	RawPath    string                         `protobuf:"bytes,5,opt,name=raw_path,json=rawPath,proto3" json:"raw_path"`
-	Host       string                         `protobuf:"bytes,6,opt,name=host,proto3" json:"host"`
-	Port       string                         `protobuf:"bytes,7,opt,name=port,proto3" json:"port"`
-	RemoteIp   string                         `protobuf:"bytes,8,opt,name=remote_ip,json=remoteIp,proto3" json:"remote_ip"`
-	RemotePort string                         `protobuf:"bytes,9,opt,name=remote_port,json=remotePort,proto3" json:"remote_port"`
-	Scheme     string                         `protobuf:"bytes,10,opt,name=scheme,proto3" json:"scheme"`
-	UserAgent  string                         `protobuf:"bytes,11,opt,name=user_agent,json=userAgent,proto3" json:"user_agent"`
-	Referer    string                         `protobuf:"bytes,12,opt,name=referer,proto3" json:"referer"`
-	Params     RequestRecord_Request_Params   `protobuf:"bytes,13,opt,name=params,proto3" json:"params"`
+	Rid        string                           `json:"rid"`
+	Headers    []RequestRecord_Request_Header   `json:"headers"`
+	Verb       string                           `json:"verb"`
+	Path       string                           `json:"path"`
+	RawPath    string                           `json:"raw_path"`
+	Host       string                           `json:"host"`
+	Port       string                           `json:"port"`
+	RemoteIp   string                           `json:"remote_ip"`
+	RemotePort string                           `json:"remote_port"`
+	Scheme     string                           `json:"scheme"`
+	UserAgent  string                           `json:"user_agent"`
+	Referer    string                           `json:"referer"`
+	Parameters RequestRecord_Request_Parameters `json:"parameters"`
 }
 
 type RequestRecord_Request_Header struct {
@@ -273,7 +298,11 @@ type RequestRecord_Request_Header struct {
 	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value"`
 }
 
-type RequestRecord_Request_Params struct {
+type RequestRecord_Request_Parameters struct {
+	// Query parameters
+	Query map[string][]string `json:"query,omitempty"`
+	// application/x-www-form-urlencoded or multipart/form-data parameters
+	Form map[string][]string `json:"form,omitempty"`
 }
 
 type RequestRecord_Response struct {
@@ -293,13 +322,70 @@ type RequestRecord_Observed struct {
 type RequestRecord_Observed_Attack struct {
 	RuleName string      `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
 	Test     bool        `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
-	Infos    interface{} `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
+	Info     interface{} `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
 	Time     time.Time   `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
 	Block    bool        `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
 }
 
-type WAFAttackInfos struct {
+type WAFAttackInfo struct {
 	WAFData string `json:"waf_data"`
+}
+
+type WAFInfoFilter struct {
+	Operator        string `json:"operator"`
+	OperatorValue   string `json:"operator_value"`
+	BindingAccessor string `json:"binding_accessor"`
+	ResolvedValue   string `json:"resolved_value"`
+	MatchStatus     string `json:"match_status,omitempty"`
+}
+type WAFInfo struct {
+	RetCode int             `json:"ret_code"`
+	Flow    string          `json:"flow"`
+	Step    string          `json:"step"`
+	Rule    string          `json:"rule"`
+	Filter  []WAFInfoFilter `json:"filter"`
+}
+
+// Scrub of WAF attack information by implementing spec 22. This is a temporary
+// solution until a better WAF API is provided that would avoid that.
+func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
+	if len(info) == 0 {
+		return false, nil
+	}
+
+	// Unmarshal the WAF attack information that was returned by the WAF.
+	var wafInfo []WAFInfo
+	if err := json.Unmarshal([]byte(i.WAFData), &wafInfo); err != nil {
+		return false, err
+	}
+
+	// Walk the WAF information and redact resolved binding accessor values that
+	// were scrubbed. The caller must have stored into info the values scrubbed
+	// from the request.
+	redactedString := scrubber.RedactedValueMask()
+	for e := range wafInfo {
+		for f := range wafInfo[e].Filter {
+			if info.Contains(wafInfo[e].Filter[f].ResolvedValue) {
+				wafInfo[e].Filter[f].ResolvedValue = redactedString
+				if wafInfo[e].Filter[f].MatchStatus != "" {
+					wafInfo[e].Filter[f].MatchStatus = redactedString
+				}
+				scrubbed = true
+			}
+		}
+	}
+
+	if !scrubbed {
+		return false, nil
+	}
+
+	// Marshal back to json the scrubbed WAF info
+	buf, err := json.Marshal(&wafInfo)
+	if err != nil {
+		return false, err
+	}
+	i.WAFData = string(buf)
+	return scrubbed, nil
 }
 
 type RequestRecord_Observed_SDKEvent struct {
@@ -602,25 +688,25 @@ type RequestRecord_RequestFace interface {
 	GetScheme() string
 	GetUserAgent() string
 	GetReferer() string
-	GetParams() RequestRecord_Request_Params
+	GetParameters() RequestRecord_Request_Parameters
 }
 
 func NewRequestRecord_RequestFromFace(that RequestRecord_RequestFace) *RequestRecord_Request {
-	this := &RequestRecord_Request{}
-	this.Rid = that.GetRid()
-	this.Headers = that.GetHeaders()
-	this.Verb = that.GetVerb()
-	this.Path = that.GetPath()
-	this.RawPath = that.GetRawPath()
-	this.Host = that.GetHost()
-	this.Port = that.GetPort()
-	this.RemoteIp = that.GetRemoteIp()
-	this.RemotePort = that.GetRemotePort()
-	this.Scheme = that.GetScheme()
-	this.UserAgent = that.GetUserAgent()
-	this.Referer = that.GetReferer()
-	this.Params = that.GetParams()
-	return this
+	return &RequestRecord_Request{
+		Rid:        that.GetRid(),
+		Headers:    that.GetHeaders(),
+		Verb:       that.GetVerb(),
+		Path:       that.GetPath(),
+		RawPath:    that.GetRawPath(),
+		Host:       that.GetHost(),
+		Port:       that.GetPort(),
+		RemoteIp:   that.GetRemoteIp(),
+		RemotePort: that.GetRemotePort(),
+		Scheme:     that.GetScheme(),
+		UserAgent:  that.GetUserAgent(),
+		Referer:    that.GetReferer(),
+		Parameters: that.GetParameters(),
+	}
 }
 
 type RequestRecord_Request_HeaderFace interface {
@@ -681,7 +767,7 @@ func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_Attack
 	this.Test = that.GetTest()
 	this.Time = that.GetTime()
 	this.Block = that.GetBlock()
-	this.Infos = that.GetInfo()
+	this.Info = that.GetInfo()
 	return this
 }
 

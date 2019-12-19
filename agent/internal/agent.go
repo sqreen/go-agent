@@ -26,6 +26,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
+	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/agent/sqlib/sqtime"
 	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
@@ -139,6 +140,7 @@ type Agent struct {
 	client        *backend.Client
 	actors        *actor.Store
 	rules         *rule.Engine
+	piiScrubber   *sqsanitize.Scrubber
 }
 
 func (a *Agent) FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error) {
@@ -182,6 +184,12 @@ func New(cfg *config.Config) *Agent {
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
 	logger.Debugf("using sdk metrics store period of %s", sdkMetricsPeriod)
 
+	piiScrubber, err := sqsanitize.NewScrubber(config.ScrubberKeyRegexp, config.ScrubberValueRegexp, config.ScrubberRedactedString)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
+		return nil
+	}
+
 	// Agent graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Agent{
@@ -195,19 +203,19 @@ func New(cfg *config.Config) *Agent {
 			whitelistedIP:       metrics.NewStore("whitelisted", sdkMetricsPeriod),
 			errors:              metrics.NewStore("errors", config.ErrorMetricsPeriod),
 		},
-		ctx:     ctx,
-		cancel:  cancel,
-		config:  cfg,
-		appInfo: app.NewInfo(logger),
-		client:  backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
-		actors:  actor.NewStore(logger),
-		rules:   rulesEngine,
+		ctx:         ctx,
+		cancel:      cancel,
+		config:      cfg,
+		appInfo:     app.NewInfo(logger),
+		client:      backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
+		actors:      actor.NewStore(logger),
+		rules:       rulesEngine,
+		piiScrubber: piiScrubber,
 	}
 }
 
 func (a *Agent) NewRequestRecord(req *http.Request) (types.RequestRecord, *http.Request) {
-	rr, req := record.NewRequestRecord(a, a.logger, req, a.config)
-	return rr, req
+	return record.NewRequestRecord(a, a.logger, req, a.config)
 }
 
 func (a *Agent) Serve() error {
@@ -248,7 +256,7 @@ func (a *Agent) Serve() error {
 
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
-		batchSize = config.MaxEventsPerHeatbeat
+		batchSize = config.EventBatchMaxEventsPerHeartbeat
 	}
 	maxStaleness := time.Duration(appLoginRes.Features.MaxStaleness) * time.Second
 	if maxStaleness == 0 {
@@ -486,9 +494,16 @@ func (m *eventManager) send(client *backend.Client, batch []Event) {
 		var event api.BatchRequest_EventFace
 		switch actual := e.(type) {
 		case *HTTPRequestRecordEvent:
-			event = (*api.RequestRecordEvent)(api.NewRequestRecordFromFace(actual))
+			event = api.RequestRecordEvent{api.NewRequestRecordFromFace(actual)}
 		case *ExceptionEvent:
 			event = api.NewExceptionEventFromFace(actual)
+		}
+
+		// Scrub the value, along with the set of scrubbed string values.
+		if _, err := m.agent.piiScrubber.Scrub(event, nil); err != nil {
+			// Only log this unexpected error and keep the event that may have been
+			// partially scrubbed.
+			m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
 		}
 		req.Batch = append(req.Batch, *api.NewBatchRequest_EventFromFace(event))
 	}

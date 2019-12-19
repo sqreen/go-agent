@@ -20,6 +20,10 @@ func (rr *RequestRecordMockup) Request() *http.Request {
 	return rr.Called().Get(0).(*http.Request)
 }
 
+func (rr *RequestRecordMockup) SetRequest(r *http.Request) {
+	rr.Called(r)
+}
+
 func (rr *RequestRecordMockup) NewCustomEvent(event string) types.CustomEvent {
 	rr.Called(event)
 	return rr

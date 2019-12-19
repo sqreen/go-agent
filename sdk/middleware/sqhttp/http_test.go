@@ -20,7 +20,7 @@ func TestMiddleware(t *testing.T) {
 		sdk.SetAgent(nil)
 
 		req, _ := http.NewRequest("GET", "/hello", nil)
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		// Create a router
 		router := http.NewServeMux()
 		// Add an endpoint accessing the SDK handle
@@ -45,7 +45,7 @@ func TestMiddleware(t *testing.T) {
 		sdk.SetAgent(agent)
 
 		req, _ := http.NewRequest("GET", "/hello", nil)
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		// Create a router
 		router := http.NewServeMux()
 		// Add an endpoint accessing the SDK handle
@@ -71,7 +71,7 @@ func TestMiddleware(t *testing.T) {
 		defer record.AssertExpectations(t)
 
 		req, _ := http.NewRequest("GET", "/hello", nil)
-		body := testlib.RandString(1, 100)
+		body := testlib.RandUTF8String(4096)
 		// Create a router
 		router := http.NewServeMux()
 		// Add an endpoint accessing the SDK handle

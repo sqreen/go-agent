@@ -12,6 +12,7 @@
 package bindingaccessor
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -24,8 +25,8 @@ import (
 type Context interface{}
 
 // BindingAccessorFunc is a compiled binding accessor expression function.
-// If the binding accessor execution panics, it is recovered and returned
-// through the error return value.
+// Errors or panics during the binding accessor execution are returned as an
+// error.
 type BindingAccessorFunc func(ctx Context) (value interface{}, err error)
 
 // A valueFunc value is a compiled binding accessor expression. Executing it
@@ -33,10 +34,20 @@ type BindingAccessorFunc func(ctx Context) (value interface{}, err error)
 // be combined together in order to represent a whole binding accessor
 // expression through different function closures (field access, array access,
 // map access, etc.).
-type valueFunc func(ctx Context) (value interface{})
+type valueFunc func(ctx Context, maxDepth int) (value interface{}, err error)
 
-// A transformationFunc value transforms an input value to another output value
-type transformationFunc func(valueIn interface{}) (valueOut interface{})
+// A transformationFunc value transforms an input value to another output value.
+// The traversal of the input value cannot be deeper than maxDepth, and the
+// output value cannot exceed maxElements.
+type transformationFunc func(ctx Context, valueIn interface{}, maxDepth, maxElements int) (valueOut interface{})
+
+// Maximum binding accessor execution depth. The binding accessor execution
+// traverses Go values. It cannot go deeper than this value.
+const maxExecutionDepth = 10
+
+// ErrMaxExecutionDepth is returned by the BindingAccessorFunc when the
+// binding accessor execution reached the maximum depth `maxExecutionDepth`.
+var ErrMaxExecutionDepth = errors.New("maximum binding accessor execution depth reached")
 
 // Compile returns the compiled binding accessor expression function.
 func Compile(expr string) (program BindingAccessorFunc, err error) {
@@ -53,9 +64,12 @@ func Compile(expr string) (program BindingAccessorFunc, err error) {
 
 	// Wrap into a safe function that cannot panic
 	return func(ctx Context) (value interface{}, err error) {
+		// Panics are how `reflect` returns forbidden and unexpected accesses.
+		// We need to catch any panic and return it as an error.
 		err = sqsafe.Call(func() error {
-			value = exprFn(ctx)
-			return nil
+			var err error
+			value, err = exprFn(ctx, maxExecutionDepth)
+			return err
 		})
 		if err != nil {
 			return nil, sqerrors.Wrap(err, "binding accessor execution error")
@@ -64,7 +78,7 @@ func Compile(expr string) (program BindingAccessorFunc, err error) {
 	}, nil
 }
 
-func compileExpr(expr string) (func(ctx Context) (value interface{}), error) {
+func compileExpr(expr string) (valueFunc, error) {
 	buf := strings.TrimSpace(expr)
 	// Get the first operand
 	valueFn, buf, err := compileOperand(buf)
@@ -93,6 +107,11 @@ func compileExpr(expr string) (func(ctx Context) (value interface{}), error) {
 	return valueFn, nil
 }
 
+const (
+	newValueMaxDepth    = 10
+	newValueMaxElements = 150
+)
+
 func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 	pipeline := strings.Split(buf, "|")
 	for _, tr := range pipeline {
@@ -101,8 +120,12 @@ func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 			return nil, err
 		}
 		lastValueFn := valueFn
-		valueFn = func(ctx Context) interface{} {
-			return trFn(lastValueFn(ctx))
+		valueFn = func(ctx Context, depth int) (value interface{}, err error) {
+			v, err := lastValueFn(ctx, depth)
+			if err != nil {
+				return nil, err
+			}
+			return trFn(ctx, v, newValueMaxDepth, newValueMaxElements), nil
 		}
 	}
 	return valueFn, nil
@@ -115,8 +138,15 @@ func compileField(valueFn valueFunc, buf string) (valueFunc, string, error) {
 		return nil, buf, sqerrors.New("unexpected empty field name")
 	}
 
-	return func(ctx Context) interface{} {
-		return execFieldAccess(valueFn(ctx), field)
+	return func(ctx Context, depth int) (value interface{}, err error) {
+		if depth == 0 {
+			return nil, ErrMaxExecutionDepth
+		}
+		v, err := valueFn(ctx, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		return execFieldAccess(v, field)
 	}, buf, nil
 }
 
@@ -156,8 +186,8 @@ func compileIdentifier(buf string) (valueFunc, string, error) {
 
 	var valueFn valueFunc
 	if identifier == "#" {
-		valueFn = func(ctx Context) interface{} {
-			return ctx
+		valueFn = func(ctx Context, depth int) (interface{}, error) {
+			return ctx, nil
 		}
 	} else {
 		return nil, buf, sqerrors.Errorf("unknown identifier `%s`", identifier)
@@ -184,8 +214,15 @@ func compileIndex(valueFn valueFunc, buf string) (valueFunc, string, error) {
 		buf = buf[1:]
 	}
 
-	return func(ctx Context) interface{} {
-		return execIndexAccess(valueFn(ctx), index)
+	return func(ctx Context, depth int) (interface{}, error) {
+		if depth == 0 {
+			return nil, ErrMaxExecutionDepth
+		}
+		v, err := valueFn(ctx, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		return execIndexAccess(v, index)
 	}, buf, nil
 }
 

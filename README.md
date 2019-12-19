@@ -33,39 +33,41 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
 
 # Installation
 
-1. Download the Go agent and the SDK using `go get`:
+Installing the agent is just installing a regular Go package. Simply import it
+and let the toolchain do the job.
 
-    ```sh
-    $ go get -v github.com/sqreen/go-agent@v0.1.0-beta.8
-    ```
 
-1. Import the package `agent` in your `main` package of your app:
+1. Import the agent package into the `main` package of your app:
 
     ```go
     import _ "github.com/sqreen/go-agent/agent"
     ```
 
-1. [Signup to Sqreen](https://my.sqreen.io/signup) to get a token for your app,
-   and store it in the agent's configuration file `sqreen.yaml`:
-
-    ```sh
-    token: your token
-    app_name: Your App Name
-    ```
-
-   This file can be stored in your current working directory when starting the
-   executable, the same directory as your app's executable file, or in any other
-   path by defining the configuration file location into the environment
-   variable `SQREEN_CONFIG_FILE`.
-
-1. Set up Sqreen's middleware functions according to the web framework you use:
+1. Use the middleware function for the Go web framework you use:
    - [sqhttp](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp) for the standard `net/http` package.
    - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin) for `github.com/gin-gonic/gin`.
    - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho) for `github.com/labstack/echo`.
    
    If your framework is not in the list, it is usually possible to use the
-   standard `net/http` middleware. If not, please open an issue in this
-   repository to start a discussion about it.
+   standard `net/http` middleware. If not, please, [create an issue](http://github.com/sqreen/go-agent/issues/new)
+   to let us know.
+
+1. [Signup to Sqreen](https://my.sqreen.io/signup) to get a token for your app,
+   and store it in the agent's configuration file `sqreen.yaml`:
+   
+    ```sh
+    token: your token
+    app_name: Your App Name
+    ```
+   
+   This file can be stored in your current working directory when starting the
+   executable, the same directory as your app's executable file, or in any other
+   path by defining the configuration file location into the environment
+   variable `SQREEN_CONFIG_FILE`.
+
+1. You are done!  
+   Just recompile your Go program and the go toolchain will download the latests
+   agent version.
 
 1. Optionally, use the [SDK](https://godoc.org/github.com/sqreen/go-agent/sdk)
    to send security [events related to
@@ -73,6 +75,8 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
    (eg. signing-in) or completely [custom security-related
    events](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.TrackEvent)
    you would like to track (eg. password changes).
+
+Find out more about the agent installation at https://docs.sqreen.com/go/installation/
 
 # Licensing
 
