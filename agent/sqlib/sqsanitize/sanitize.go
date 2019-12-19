@@ -289,7 +289,7 @@ func (s *Scrubber) scrubStruct(v reflect.Value, info Info) (scrubbed bool) {
 // scrubbed. The scrubbed new value is returned and can be set to the original
 // value (map entry, array index, etc.).
 func (s *Scrubber) scrubInterface(v reflect.Value, info Info) (reflect.Value, bool) {
-	if v.IsZero() {
+	if v.IsNil() {
 		return reflect.Value{}, false
 	}
 	// The current element is an interface value which cannot be set, we
