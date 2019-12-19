@@ -223,7 +223,7 @@ func TestDefaultConfiguration(t *testing.T) {
 					v := map[string]string{
 						key: testlib.RandUTF8String(),
 					}
-					scrubbed, err := scrubber.Scrub(&v)
+					scrubbed, err := scrubber.Scrub(&v, nil)
 					require.NoError(t, err)
 					require.True(t, scrubbed)
 					require.Equal(t, ScrubberRedactedString, v[key])
@@ -238,7 +238,7 @@ func TestDefaultConfiguration(t *testing.T) {
 				value := value
 				t.Run(value, func(t *testing.T) {
 					v := value
-					scrubbed, err := scrubber.Scrub(&v)
+					scrubbed, err := scrubber.Scrub(&v, nil)
 					require.NoError(t, err)
 					require.True(t, scrubbed)
 					require.Equal(t, ScrubberRedactedString, v)

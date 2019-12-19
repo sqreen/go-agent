@@ -56,8 +56,8 @@ func TestGoAssumptions(t *testing.T) {
 func TestScrubber(t *testing.T) {
 	expectedMask := `<Redacted by Sqreen>`
 
-	//randString := testlib.RandUTF8String(512, 1024)
-	randString := "foo"
+	randString := testlib.RandUTF8String(512, 1024)
+	//randString := "foo"
 
 	t.Run("NewScrubber", func(t *testing.T) {
 		type args struct {
@@ -177,9 +177,11 @@ func TestScrubber(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
 				require.NoError(t, err)
-				_, err = s.Scrub(&tc.value)
+				info := sqsanitize.Info{}
+				scrubbed, err := s.Scrub(&tc.value, info)
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, tc.value)
+				require.True(t, (scrubbed && len(info) > 0) || (!scrubbed && len(info) == 0))
 			})
 
 		}
@@ -203,34 +205,6 @@ func TestScrubber(t *testing.T) {
 		// Given the following regular expressions
 		keyRegexp := `(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`
 		valueRegexp := `^everything$`
-
-		type EmbeddedStruct struct {
-			Authorization []string // exported matching field
-			authorization []string // unexported matching field
-			F             string   // exported field
-			f             string   // unexported field
-		}
-		// alternative names to avoid name collisions in the type definition
-		type EmbeddedStruct2 EmbeddedStruct
-		type embeddedStruct EmbeddedStruct
-		type embeddedStruct2 EmbeddedStruct
-
-		type myStruct struct {
-			PassWORD         string      // matching exported string field
-			Secret_          []string    // matching exported field with strings
-			password         string      // unexported matching string field
-			ApiKey           int         // non-string matching int field
-			a                string      // unexported string value
-			B                string      // exported string value
-			C                int         // exported non-string
-			D                string      // exported string value
-			E                *myStruct   // recursive pointer
-			Face             interface{} // exported interface value
-			EmbeddedStruct               // exported embedded struct
-			*EmbeddedStruct2             // exported embedded struct pointer
-			embeddedStruct               // unexported embedded struct
-			*embeddedStruct2             // unexported embedded struct pointer
-		}
 
 		tests := []testCase{
 			{
@@ -828,6 +802,98 @@ func TestScrubber(t *testing.T) {
 				},
 			},
 			{
+				name:  "custom scrub method",
+				value: func() interface{} { return &myCustomScrubbedStruct{} },
+				expected: expectedValues{
+					withValueRE:      &myCustomScrubbedStruct{},
+					withKeyRE:        &myCustomScrubbedStruct{},
+					withBothRE:       &myCustomScrubbedStruct{},
+					withBothDisabled: &myCustomScrubbedStruct{},
+				},
+			},
+			{
+				name:  "custom scrub method",
+				value: func() interface{} { return &myCustomScrubbedStruct{unexported: "everything"} },
+				expected: expectedValues{
+					withValueRE:      &myCustomScrubbedStruct{unexported: expectedMask},
+					withKeyRE:        &myCustomScrubbedStruct{unexported: "everything"},
+					withBothRE:       &myCustomScrubbedStruct{unexported: expectedMask},
+					withBothDisabled: &myCustomScrubbedStruct{unexported: "everything"},
+				},
+			},
+			{
+				name:  "custom scrub method",
+				value: func() interface{} { return map[string]myCustomScrubbedStruct{"key": {unexported: "everything"}} },
+				expected: expectedValues{
+					withValueRE:      map[string]myCustomScrubbedStruct{"key": {unexported: expectedMask}},
+					withKeyRE:        map[string]myCustomScrubbedStruct{"key": {unexported: "everything"}},
+					withBothRE:       map[string]myCustomScrubbedStruct{"key": {unexported: expectedMask}},
+					withBothDisabled: map[string]myCustomScrubbedStruct{"key": {unexported: "everything"}},
+				},
+			},
+			{
+				name:  "custom scrub method",
+				value: func() interface{} { return []myCustomScrubbedStruct{{unexported: "everything"}, {unexported: "everything"}} },
+				expected: expectedValues{
+					withValueRE:      []myCustomScrubbedStruct{{unexported: expectedMask}, {unexported: expectedMask}},
+					withKeyRE:        []myCustomScrubbedStruct{{unexported: "everything"}, {unexported: "everything"}},
+					withBothRE:       []myCustomScrubbedStruct{{unexported: expectedMask}, {unexported: expectedMask}},
+					withBothDisabled: []myCustomScrubbedStruct{{unexported: "everything"}, {unexported: "everything"}},
+				},
+			},
+			{
+				name: "custom scrub method",
+				value: func() interface{} {
+					return &myCustomScrubbedStruct{
+						unexported: "everything",
+						myStruct: &myStruct{
+							PassWORD: randString,
+							password: randString,
+							Secret_:  []string{randString, "everything"},
+							ApiKey:   9838923,
+						},
+					}
+				},
+				expected: expectedValues{
+					withValueRE: &myCustomScrubbedStruct{
+						unexported: expectedMask,
+						myStruct: &myStruct{
+							PassWORD: randString,
+							password: randString,
+							Secret_:  []string{randString, expectedMask},
+							ApiKey:   9838923,
+						},
+					},
+					withKeyRE: &myCustomScrubbedStruct{
+						unexported: "everything",
+						myStruct: &myStruct{
+							PassWORD: expectedMask,
+							password: randString,
+							Secret_:  []string{expectedMask, expectedMask},
+							ApiKey:   9838923,
+						},
+					},
+					withBothRE: &myCustomScrubbedStruct{
+						unexported: expectedMask,
+						myStruct: &myStruct{
+							PassWORD: expectedMask,
+							password: randString,
+							Secret_:  []string{expectedMask, expectedMask},
+							ApiKey:   9838923,
+						},
+					},
+					withBothDisabled: &myCustomScrubbedStruct{
+						unexported: "everything",
+						myStruct: &myStruct{
+							PassWORD: randString,
+							password: randString,
+							Secret_:  []string{randString, "everything"},
+							ApiKey:   9838923,
+						},
+					},
+				},
+			},
+			{
 				name: "json map type",
 				value: func() interface{} {
 					// equivalent to { "apikey": "...", "a": "...", "b": {}, "c": { "Password": "...", "d": "everything" }, "e": 33, "passwd": ["everything", "..."] }
@@ -1027,9 +1093,11 @@ func TestScrubber(t *testing.T) {
 										expected = tc.expected.withBothDisabled
 									}
 								}
-								_, err = s.Scrub(value)
+								info := sqsanitize.Info{}
+								scrubbed, err := s.Scrub(value, info)
 								require.NoError(t, err)
 								require.Equal(t, expected, value)
+								require.True(t, (scrubbed && len(info) > 0) || (!scrubbed && len(info) == 0))
 							})
 						}
 					})
@@ -1046,12 +1114,15 @@ func TestScrubber(t *testing.T) {
 			values := url.Values{
 				"Password":   []string{"no", "pass", randString, "forbidden", randString},
 				"_paSSwoRD ": []string{"no", "pass", randString, "forbidden", randString},
-				fmt.Sprintf("%spassword%s", randString, randString): []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
+				fmt.Sprintf("%spassword%s", randString, randString): []string{"no", "pass", randString, "forbidden", randString},
 				"other": []string{"forbidden", "whatforbidden", randString, "key"},
 				"":      []string{"forbidden", "forbiddenwhat", randString, "key"},
 			}
-			_, err = s.Scrub(values)
+			info := sqsanitize.Info{}
+			scrubbed, err := s.Scrub(values, info)
 			require.NoError(t, err)
+			require.True(t, scrubbed)
+
 			expected := url.Values{
 				"Password":   []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
 				"_paSSwoRD ": []string{expectedMask, expectedMask, expectedMask, expectedMask, expectedMask},
@@ -1060,6 +1131,13 @@ func TestScrubber(t *testing.T) {
 				"":      []string{expectedMask, expectedMask + "what", randString, "key"},
 			}
 			require.Equal(t, expected, values)
+
+			require.Contains(t, info, "no")
+			require.Contains(t, info, "pass")
+			require.Contains(t, info, randString)
+			require.Contains(t, info, "forbidden")
+			require.Contains(t, info, "whatforbidden")
+			require.Contains(t, info, "forbiddenwhat")
 		})
 
 		t.Run("HTTP Request", func(t *testing.T) {
@@ -1068,9 +1146,11 @@ func TestScrubber(t *testing.T) {
 
 			t.Run("zero value", func(t *testing.T) {
 				var req http.Request
-				scrubbed, err := s.Scrub(&req)
+				info := sqsanitize.Info{}
+				scrubbed, err := s.Scrub(&req, info)
 				require.NoError(t, err)
 				require.False(t, scrubbed)
+				require.Len(t, info, 0)
 			})
 
 			t.Run("random request", func(t *testing.T) {
@@ -1097,7 +1177,8 @@ func TestScrubber(t *testing.T) {
 				postForm.Add("password", "1234")
 				postForm.Add("password", "5678")
 				messageFormat := "here is my credit card number %s."
-				form.Add("message", fmt.Sprintf(messageFormat, "4533-3432-3234-3334"))
+				stringWithCreditCardNb := fmt.Sprintf(messageFormat, "4533-3432-3234-3334")
+				form.Add("message", stringWithCreditCardNb)
 
 				req := http.Request{
 					Method:        "GET",
@@ -1116,14 +1197,63 @@ func TestScrubber(t *testing.T) {
 					RequestURI:    url_.RequestURI(),
 				}
 
-				scrubbed, err := s.Scrub(&req)
+				info := sqsanitize.Info{}
+				scrubbed, err := s.Scrub(&req, info)
 				require.NoError(t, err)
 				require.True(t, scrubbed)
 
 				// Check values were scrubbed
 				require.Equal(t, []string{expectedMask, expectedMask}, req.PostForm["password"])
 				require.Equal(t, []string{fmt.Sprintf(messageFormat, expectedMask)}, req.Form["message"])
+
+				require.Contains(t, info, stringWithCreditCardNb)
+				require.Contains(t, info, "1234")
+				require.Contains(t, info, "5678")
 			})
 		})
 	})
+}
+
+type EmbeddedStruct struct {
+	Authorization []string // exported matching field
+	authorization []string // unexported matching field
+	F             string   // exported field
+	f             string   // unexported field
+}
+
+// alternative names to avoid name collisions in the type definition
+type EmbeddedStruct2 EmbeddedStruct
+type embeddedStruct EmbeddedStruct
+type embeddedStruct2 EmbeddedStruct
+
+type myStruct struct {
+	PassWORD         string      // matching exported string field
+	Secret_          []string    // matching exported field with strings
+	password         string      // unexported matching string field
+	ApiKey           int         // non-string matching int field
+	a                string      // unexported string value
+	B                string      // exported string value
+	C                int         // exported non-string
+	D                string      // exported string value
+	E                *myStruct   // recursive pointer
+	Face             interface{} // exported interface value
+	EmbeddedStruct               // exported embedded struct
+	*EmbeddedStruct2             // exported embedded struct pointer
+	embeddedStruct               // unexported embedded struct
+	*embeddedStruct2             // unexported embedded struct pointer
+}
+
+type myCustomScrubbedStruct struct {
+	unexported string // unexported field that will get scrubbed by the Scrub() method
+	*myStruct
+}
+
+func (s *myCustomScrubbedStruct) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
+	scrubbed, err = scrubber.Scrub(&s.unexported, info)
+	if err != nil {
+		return
+	}
+	var scrubbedMyStruct bool
+	scrubbedMyStruct, err = scrubber.Scrub(s.myStruct, info)
+	return scrubbed || scrubbedMyStruct, err
 }
