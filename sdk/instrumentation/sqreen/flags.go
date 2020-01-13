@@ -12,7 +12,8 @@ import (
 const structTagKey = "sqflag"
 
 // parseFlags walks through the given arguments and sets the flagSet values
-// present in the argument list. The argument list is not modified.
+// present in the argument list. Unknown options, not present in the flagSet
+// are accepted and skipped. The argument list is not modified.
 func parseFlags(flagSet interface{}, args []string) {
 	flagSetValueMap := makeFlagSetValueMap(flagSet)
 

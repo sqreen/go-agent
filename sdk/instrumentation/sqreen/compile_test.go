@@ -15,6 +15,7 @@ import (
 func TestParseFlags(t *testing.T) {
 	randomPackageStr := testlib.RandUTF8String()
 	randomOutputStr := testlib.RandUTF8String()
+	randomStr := testlib.RandUTF8String()
 
 	tests := []struct {
 		name                    string
@@ -93,6 +94,14 @@ func TestParseFlags(t *testing.T) {
 			},
 		},
 		{
+			name: "output and package options and others",
+			args: []string{fmt.Sprintf("-o=%s", randomOutputStr), "-p", randomPackageStr, "-a", "-b", fmt.Sprintf("-c=%s", randomStr), "-d", randomStr, "a.go", "b.go", "c.go"},
+			expectedFlags: compileFlagSet{
+				Package: randomPackageStr,
+				Output:  randomOutputStr,
+			},
+		},
+		{
 			name: "empty output option value",
 			args: []string{"-p", randomPackageStr, "-o", ""},
 			expectedFlags: compileFlagSet{
@@ -148,11 +157,11 @@ func TestParseFlags(t *testing.T) {
 			parseFlags(&flags, tt.args)
 			require.Equal(t, tt.expectedFlags, flags)
 
-			validationErr := flags.Validate()
+			isValid := flags.IsValid()
 			if tt.expectedValidationError {
-				require.Error(t, validationErr)
+				require.False(t, isValid)
 			} else {
-				require.NoError(t, validationErr)
+				require.True(t, isValid)
 			}
 		})
 	}
