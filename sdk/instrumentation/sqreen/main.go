@@ -27,9 +27,14 @@ func main() {
 
 	if cmd != nil {
 		// The command is implemented
-		if err := cmd(); err != nil {
+		newArgs, err := cmd()
+		if err != nil {
 			log.Println(err)
 			os.Exit(1)
+		}
+		if newArgs != nil {
+			// Args are replaced
+			args = newArgs
 		}
 	}
 
@@ -39,11 +44,14 @@ func main() {
 // forwardCommand runs the given command's argument list and exits the process
 // with the exit code that was returned.
 func forwardCommand(args []string) {
-	cmd := exec.Command(args[0], args[1:]...)
+	path := args[0]
+	args = args[1:]
+	cmd := exec.Command(path, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	log.Println("forwarding command", cmd)
+	quotedArgs := fmt.Sprintf("%+q", args)
+	log.Printf("forwarding command `%s %s`", path, quotedArgs[1:len(quotedArgs)-1])
 	err := cmd.Run()
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -59,7 +67,7 @@ func printUsage() {
 }
 
 type parseCommandFunc func([]string) (commandExecutionFunc, error)
-type commandExecutionFunc func() error
+type commandExecutionFunc func() (newArgs []string, err error)
 
 var commandParserMap = map[string]parseCommandFunc{
 	//"instrument": parseInstrumentCmd,
