@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -49,7 +50,7 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 			return nil, nil
 		}
 
-		// Check if the instrumentation should be skipped for this package name
+		// Check if the instrumentation should be skipped for this package name.
 		pkgPath := flags.Package
 		if isPackageNameIgnored(pkgPath) {
 			log.Printf("skipping instrumentation of package `%s`\n", pkgPath)
@@ -57,7 +58,6 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 		}
 
 		packageBuildDir := filepath.Dir(flags.Output)
-		//buildDir := path.Join(packageBuildDir, "..")
 
 		log.Println("instrumenting package:", pkgPath)
 		log.Println("package build directory:", packageBuildDir)
@@ -76,7 +76,7 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 				return nil, err
 			}
 			// Save the position of the source file in the argument list
-			// to later change it if it gets instrumented
+			// to later change it if it gets instrumented.
 			argEntries[src] = i
 		}
 
@@ -84,30 +84,51 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 		if err != nil {
 			return nil, err
 		}
+		if !instrumented {
+			return args, nil
+		}
 
-		for src, node := range instrumented {
-			basename := filepath.Base(src)
-			dest := filepath.Join(packageBuildDir, basename)
-			output, err := os.Create(dest)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer output.Close()
-			if err := writeFile(node, output); err != nil {
-				return nil, err
-			}
+		written, err := pkgInstrumentation.writeInstrumentedFiles(packageBuildDir)
+		if err != nil {
+			return nil, err
+		}
+
+		// Update the argument list by replacing source files that were
+		// instrumented.
+		for src, dest := range written {
 			argIndex := argEntries[src]
 			args[argIndex] = dest
 		}
 
+		// Add the hook IDs to the hook list file.
+		projectBuildDir := path.Join(packageBuildDir, "..")
+		hookListFile, err := openHookListFile(projectBuildDir)
+		if err != nil {
+			return nil, err
+		}
+		defer hookListFile.Close()
+
+		count, err := pkgInstrumentation.writeHookList(hookListFile)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("added %d hooks to the hook list\n", count)
+
 		return args, nil
 	}
+}
+
+func openHookListFile(dir string) (*os.File, error) {
+	filename := filepath.Join(dir, "sqreen-hooks.txt")
+	// Create the file or append to it if it exists.
+	return os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 }
 
 type packageInstrumentationHelper struct {
 	parsedFiles       map[string]*dst.File
 	parsedFileSources map[*dst.File]string
 	fset              *token.FileSet
+	instrumentedFiles map[*dst.File][]*hookpoint
 }
 
 // addFile parses the given Go source file `src` and adds it to the set of
@@ -143,103 +164,49 @@ func (h *packageInstrumentationHelper) addFile(src string) error {
 	return nil
 }
 
-func (h *packageInstrumentationHelper) instrument(pkgPath string) (map[string]*dst.File, error) {
+func (h *packageInstrumentationHelper) instrument(pkgPath string) (instrumented bool, err error) {
 	if len(h.parsedFiles) == 0 {
 		log.Println("nothing to instrument")
-		return nil, nil
+		return false, nil
 	}
 
 	root, err := dst.NewPackage(h.fset, h.parsedFiles, nil, nil)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-
-	//pkgName := root.Name
-	//log.Println("creating instrumentation metadata file")
-	//metadataFile, err := createMetadataFile(pkgName, buildDir)
-	//if err != nil {
-	//	log.Println("could not create the package instrumentation metadata file")
-	//	return err
-	//}
-	//defer metadataFile.Close()
 
 	v := newInstrumentationVisitor(pkgPath)
-	instrumentedFiles := v.instrument(root)
+	h.instrumentedFiles = v.instrument(root)
+	return len(h.instrumentedFiles) > 0, nil
+}
 
-	// Return the map of source filepaths and instrumented ASTs
-	instrumented := make(map[string]*dst.File, len(instrumentedFiles))
-	for _, file := range instrumentedFiles {
-		src := h.parsedFileSources[file]
-		instrumented[src] = file
+func (h *packageInstrumentationHelper) writeInstrumentedFiles(buildDirPath string) (srcdst map[string]string, err error) {
+	srcdst = make(map[string]string, len(h.instrumentedFiles))
+	for node := range h.instrumentedFiles {
+		src := h.parsedFileSources[node]
+		filename := filepath.Base(src)
+		dest := filepath.Join(buildDirPath, filename)
+		output, err := os.Create(dest)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer output.Close()
+		if err := writeFile(node, output); err != nil {
+			return nil, err
+		}
+		srcdst[src] = dest
 	}
-	return instrumented, nil
+	return srcdst, nil
 }
 
-func shouldIgnoreFuncDecl(funcDecl *dst.FuncDecl) bool {
-	fname := funcDecl.Name.Name
-	// don't instrument:
-	// - `_`: explicitly ignored function names.
-	// - `init`: package init functions.
-	// - `.*noescape.*`: any function name containing `noescape` since we would
-	//    likely break it.
-	// - functions having //go:nosplit directives because they are usually low-level
-	//   functions.
-	// - functions having //sqreen:ignore directives.
-	return funcDecl.Body == nil ||
-		fname == "_" ||
-		fname == "init" ||
-		strings.Contains(fname, "noescape") ||
-		hasSqreenIgnoreDirective(funcDecl) ||
-		hasGoNoSplitDirective(funcDecl)
-	//functionScopeHidesSignatureTypes(funcDecl, dst.NewIdent("error"))
+func (h *packageInstrumentationHelper) writeHookList(hookList *os.File) (count int, err error) {
+	for _, hooks := range h.instrumentedFiles {
+		for _, hook := range hooks {
+			if _, err = hookList.WriteString(fmt.Sprintf("%s\n", hook.id)); err != nil {
+				return count, err
+			}
+			count += 1
+		}
+	}
+	return count, nil
 }
-
-//func functionScopeHidesSignatureTypes(fdecl *dst.FuncDecl, extraType ...dst.Expr) (collision bool) {
-//	ftype := fdecl.Type
-//	idents := []string{fdecl.Name.Name}
-//	ftypes := extraType
-//	if recv := fdecl.Recv; recv != nil {
-//		for _, p := range recv.List {
-//			for _, n := range p.Names {
-//				idents = append(idents, n.Name)
-//			}
-//			ftypes = append(ftypes, p.Type)
-//		}
-//	}
-//	if ftype.Params != nil {
-//		for _, p := range ftype.Params.List {
-//			for _, n := range p.Names {
-//				idents = append(idents, n.Name)
-//			}
-//			ftypes = append(ftypes, p.Type)
-//		}
-//	}
-//	if ftype.Results != nil {
-//		for _, p := range ftype.Results.List {
-//			for _, n := range p.Names {
-//				idents = append(idents, n.Name)
-//			}
-//			ftypes = append(ftypes, p.Type)
-//		}
-//	}
-//
-//	checkScope := func(node dst.Node) bool {
-//		if ident, ok := node.(*dst.Ident); ok {
-//			for _, scopeIdent := range idents {
-//				if scopeIdent == ident.Name || scopeIdent == ident.Path {
-//					collision = true
-//					return false
-//				}
-//			}
-//		}
-//		return true
-//	}
-//
-//	for i := range ftypes {
-//		dst.Inspect(ftypes[i], checkScope)
-//		if collision {
-//			break
-//		}
-//	}
-//	return
-//}

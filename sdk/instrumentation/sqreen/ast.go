@@ -390,3 +390,72 @@ func isPackageNameIgnored(pkg string) bool {
 
 	return false
 }
+
+func shouldIgnoreFuncDecl(funcDecl *dst.FuncDecl) bool {
+	fname := funcDecl.Name.Name
+	// don't instrument:
+	// - `_`: explicitly ignored function names.
+	// - `init`: package init functions.
+	// - `.*noescape.*`: any function name containing `noescape` since we would
+	//    likely break it.
+	// - functions having //go:nosplit directives because they are usually low-level
+	//   functions.
+	// - functions having //sqreen:ignore directives.
+	return funcDecl.Body == nil ||
+		fname == "_" ||
+		fname == "init" ||
+		strings.Contains(fname, "noescape") ||
+		hasSqreenIgnoreDirective(funcDecl) ||
+		hasGoNoSplitDirective(funcDecl)
+	//functionScopeHidesSignatureTypes(funcDecl, dst.NewIdent("error"))
+}
+
+//func functionScopeHidesSignatureTypes(fdecl *dst.FuncDecl, extraType ...dst.Expr) (collision bool) {
+//	ftype := fdecl.Type
+//	idents := []string{fdecl.Name.Name}
+//	ftypes := extraType
+//	if recv := fdecl.Recv; recv != nil {
+//		for _, p := range recv.List {
+//			for _, n := range p.Names {
+//				idents = append(idents, n.Name)
+//			}
+//			ftypes = append(ftypes, p.Type)
+//		}
+//	}
+//	if ftype.Params != nil {
+//		for _, p := range ftype.Params.List {
+//			for _, n := range p.Names {
+//				idents = append(idents, n.Name)
+//			}
+//			ftypes = append(ftypes, p.Type)
+//		}
+//	}
+//	if ftype.Results != nil {
+//		for _, p := range ftype.Results.List {
+//			for _, n := range p.Names {
+//				idents = append(idents, n.Name)
+//			}
+//			ftypes = append(ftypes, p.Type)
+//		}
+//	}
+//
+//	checkScope := func(node dst.Node) bool {
+//		if ident, ok := node.(*dst.Ident); ok {
+//			for _, scopeIdent := range idents {
+//				if scopeIdent == ident.Name || scopeIdent == ident.Path {
+//					collision = true
+//					return false
+//				}
+//			}
+//		}
+//		return true
+//	}
+//
+//	for i := range ftypes {
+//		dst.Inspect(ftypes[i], checkScope)
+//		if collision {
+//			break
+//		}
+//	}
+//	return
+//}

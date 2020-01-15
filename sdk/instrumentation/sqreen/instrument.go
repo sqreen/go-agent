@@ -19,8 +19,8 @@ type instrumentationVisitor struct {
 	atomicLoadDeclAdded bool
 	// List of hookpoints in the current file being instrumented.
 	instrumented []*hookpoint
-	// List of files that were instrumented.
-	instrumentedFiles []*dst.File
+	// Map of instrumented files along with there hookpoints
+	instrumentedFiles map[*dst.File][]*hookpoint
 }
 
 type instrumentationStats struct {
@@ -38,7 +38,8 @@ func (s *instrumentationStats) addInstrumented(funcDecl *dst.FuncDecl) {
 
 func newInstrumentationVisitor(pkgPath string) *instrumentationVisitor {
 	return &instrumentationVisitor{
-		pkgPath: pkgPath,
+		pkgPath:           pkgPath,
+		instrumentedFiles: make(map[*dst.File][]*hookpoint),
 	}
 }
 
@@ -54,7 +55,7 @@ func (v *instrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
 	funcDecl.Body.List = append([]dst.Stmt{hook.instrumentationStmt}, funcDecl.Body.List...)
 }
 
-func (v *instrumentationVisitor) instrument(root *dst.Package) []*dst.File {
+func (v *instrumentationVisitor) instrument(root *dst.Package) (instrumented map[*dst.File][]*hookpoint) {
 	dstutil.Apply(root, v.instrumentPre, v.instrumentPost)
 	return v.instrumentedFiles
 }
@@ -76,7 +77,6 @@ func (v *instrumentationVisitor) instrumentPost(cursor *dstutil.Cursor) bool {
 	switch node := cursor.Node().(type) {
 	case *dst.File:
 		v.instrumentFilePost(node)
-		v.instrumented = nil
 	}
 	return true
 }
@@ -86,16 +86,19 @@ func (v *instrumentationVisitor) instrumentFilePost(file *dst.File) {
 		// Nothing got instrumented
 		return
 	}
-	v.instrumentedFiles = append(v.instrumentedFiles, file)
-	v.addFileMetadata(file)
+	// Add file-level instrumentation metadata
+	v.addFileMetadata(file, v.instrumented)
+	// Save the list of hooks
+	v.instrumentedFiles[file] = v.instrumented
+	v.instrumented = nil
 }
 
-func (v *instrumentationVisitor) addFileMetadata(file *dst.File) {
+func (v *instrumentationVisitor) addFileMetadata(file *dst.File, instrumented []*hookpoint) {
 	addSqreenUnsafePackageImport(file)
 	if !v.atomicLoadDeclAdded {
 		v.addAtomicLoadFuncDecl(file)
 	}
-	for _, h := range v.instrumented {
+	for _, h := range instrumented {
 		v.addHookMetadata(file, h)
 	}
 }
