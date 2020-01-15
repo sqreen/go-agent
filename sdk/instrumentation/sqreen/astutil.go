@@ -6,10 +6,13 @@ package main
 
 import (
 	"fmt"
+	"go/printer"
 	"go/token"
+	"io"
 	"strconv"
 
 	"github.com/dave/dst"
+	"github.com/dave/dst/decorator"
 )
 
 const (
@@ -117,4 +120,22 @@ func hasSqreenIgnoreDirective(node dst.Node) bool {
 
 func addSqreenUnsafePackageImport(file *dst.File) {
 	addNamedImport(file, sqreenUnsafePackageName, "unsafe")
+}
+
+func writeFile(file *dst.File, w io.Writer) error {
+	fset, af, err := decorator.RestoreFile(file)
+	if err != nil {
+		return err
+	}
+	return printer.Fprint(w, fset, af)
+}
+
+func hasGoNoSplitDirective(funcDecl *dst.FuncDecl) bool {
+	const pragma = `//go:nosplit`
+	for _, c := range funcDecl.Decs.Start.All() {
+		if c == pragma {
+			return true
+		}
+	}
+	return false
 }

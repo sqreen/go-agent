@@ -19,6 +19,8 @@ type instrumentationVisitor struct {
 	atomicLoadDeclAdded bool
 	// List of hookpoints in the current file being instrumented.
 	instrumented []*hookpoint
+	// List of files that were instrumented.
+	instrumentedFiles []*dst.File
 }
 
 type instrumentationStats struct {
@@ -41,7 +43,7 @@ func newInstrumentationVisitor(pkgPath string) *instrumentationVisitor {
 }
 
 func (v *instrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
-	if ignoreFuncDecl(funcDecl) {
+	if shouldIgnoreFuncDecl(funcDecl) {
 		v.stats.addIgnored(funcDecl)
 		return
 	}
@@ -52,9 +54,9 @@ func (v *instrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
 	funcDecl.Body.List = append([]dst.Stmt{hook.instrumentationStmt}, funcDecl.Body.List...)
 }
 
-func (v *instrumentationVisitor) instrument(root *dst.Package) bool {
+func (v *instrumentationVisitor) instrument(root *dst.Package) []*dst.File {
 	dstutil.Apply(root, v.instrumentPre, v.instrumentPost)
-	return len(v.instrumented) > 0
+	return v.instrumentedFiles
 }
 
 func (v *instrumentationVisitor) instrumentPre(cursor *dstutil.Cursor) bool {
@@ -79,12 +81,13 @@ func (v *instrumentationVisitor) instrumentPost(cursor *dstutil.Cursor) bool {
 	return true
 }
 
-func (v *instrumentationVisitor) instrumentFilePost(node *dst.File) {
+func (v *instrumentationVisitor) instrumentFilePost(file *dst.File) {
 	if len(v.instrumented) == 0 {
+		// Nothing got instrumented
 		return
 	}
-	//node.Decs.Start.Prepend(fmt.Sprintf("//line %s:1", v.filePaths[node]))
-	v.addFileMetadata(node)
+	v.instrumentedFiles = append(v.instrumentedFiles, file)
+	v.addFileMetadata(file)
 }
 
 func (v *instrumentationVisitor) addFileMetadata(file *dst.File) {

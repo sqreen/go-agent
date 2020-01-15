@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"go/token"
 	"log"
+	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/dave/dst"
 )
 
 const sqreenAtomicLoadPointerFuncIdent = `_sqreen_atomic_load_pointer`
 
+// The hookpoint structure holds every AST node required during the
+// instrumentation of a file.
 type hookpoint struct {
 	id                  string
 	descriptorFuncDecl  *dst.FuncDecl
@@ -351,4 +355,38 @@ func newLinkTimeSqreenAtomicLoadPointerFuncDecl() *dst.FuncDecl {
 		},
 	}
 	return newLinkTimeForwardFuncDecl(sqreenAtomicLoadPointerFuncIdent, ftype)
+}
+
+func isFileNameIgnored(file string) bool {
+	filename := filepath.Base(file)
+	// Don't instrument cgo files
+	if strings.Contains(filename, "cgo") {
+		return true
+	}
+	// Don't instrument the go module table file.
+	if filename == "_gomod_.go" {
+		return true
+	}
+	return false
+}
+
+func isPackageNameIgnored(pkg string) bool {
+	var ignoredPkgPrefixes = []string{
+		"runtime",
+		"sync",
+		"reflect",
+		"internal",
+		"unsafe",
+		"syscall",
+		"time",
+		"math",
+	}
+
+	for _, prefix := range ignoredPkgPrefixes {
+		if strings.HasPrefix(pkg, prefix) {
+			return true
+		}
+	}
+
+	return false
 }
