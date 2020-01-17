@@ -91,22 +91,33 @@ func newSelectorExpr(expr dst.Expr, sel string) *dst.SelectorExpr {
 	}
 }
 
-// Return method address expression `(<receiver type>).<method name>` for
+// Return method value expression `(<receiver type>).<method name>` for
 // the given function declaration.
-func newMethodAddressExpr(fn *dst.FuncDecl) dst.Expr {
+func newMethodValueExpr(fn *dst.FuncDecl) dst.Expr {
 	t := fn.Recv.List[0].Type
 	return newSelectorExpr(&dst.ParenExpr{X: t}, fn.Name.Name)
 }
 
-// Return the address expression for the given function declaration.
-// It can be either a method address or a function address.
-func newFunctionAddressExpr(fn *dst.FuncDecl) (addr dst.Expr) {
+// Return the value expression for the given function declaration.
+// It can be either a method or a function value.
+func newFunctionValueExpr(fn *dst.FuncDecl) (v dst.Expr) {
 	if fn.Recv == nil {
-		addr = fn.Name
+		v = fn.Name
 	} else {
-		addr = newMethodAddressExpr(fn)
+		v = newMethodValueExpr(fn)
 	}
-	return dst.Clone(addr).(dst.Expr)
+	return dst.Clone(v).(dst.Expr)
+}
+
+// Return the expression to cast the given value to the given typ
+// `(<typ>)(<val>)`.
+func newCastValueExpr(typ dst.Expr, val dst.Expr) dst.Expr {
+	return &dst.CallExpr{Fun: typ, Args: []dst.Expr{val}}
+}
+
+// Return the type expression for `*<typ>`.
+func newPointerTypeOf(typ dst.Expr) dst.Expr {
+	return &dst.StarExpr{X: typ}
 }
 
 func hasSqreenIgnoreDirective(node dst.Node) bool {

@@ -5,6 +5,11 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"sort"
+
 	"github.com/dave/dst"
 	"github.com/dave/dst/dstutil"
 )
@@ -15,12 +20,22 @@ type instrumentationVisitor struct {
 	// Package path being instrumented. Used to generate unique hook names
 	// prefixed by the package path.
 	pkgPath string
-	// The atomic load function must be added once
-	atomicLoadDeclAdded bool
+	// False when the first file is being instrumented in order to add
+	// metadata that must appear once.
+	fileMetadataOnce bool
 	// List of hookpoints in the current file being instrumented.
 	instrumented []*hookpoint
 	// Map of instrumented files along with there hookpoints
 	instrumentedFiles map[*dst.File][]*hookpoint
+	// Hook descriptor type declaration node. It will be added to the file
+	// metadata.
+	hookDescriptorTypeIdent string
+	// The hook descriptor value initializer used by the hook descriptor function
+	// in order to create a new descriptor value.
+	newHookDescriptorValueInitializer hookDescriptorValueInitializer
+	// The hook descriptor type declaration added once per instrumented package
+	// and used by hook descriptor functions to return a value of that type.
+	hookDescriptorTypeDecl *dst.GenDecl
 }
 
 type instrumentationStats struct {
@@ -37,9 +52,14 @@ func (s *instrumentationStats) addInstrumented(funcDecl *dst.FuncDecl) {
 }
 
 func newInstrumentationVisitor(pkgPath string) *instrumentationVisitor {
+	hookDescriptorTypeDecl, hookDescriptorTypeSpec, newDescriptorValueInitializer := newHookDescriptorType()
+	hookDescriptorTypeIdent := hookDescriptorTypeSpec.Name.Name
 	return &instrumentationVisitor{
-		pkgPath:           pkgPath,
-		instrumentedFiles: make(map[*dst.File][]*hookpoint),
+		pkgPath:                           pkgPath,
+		instrumentedFiles:                 make(map[*dst.File][]*hookpoint),
+		hookDescriptorTypeIdent:           hookDescriptorTypeIdent,
+		hookDescriptorTypeDecl:            hookDescriptorTypeDecl,
+		newHookDescriptorValueInitializer: newDescriptorValueInitializer,
 	}
 }
 
@@ -49,7 +69,7 @@ func (v *instrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
 		return
 	}
 
-	hook := newHookpoint(v.pkgPath, funcDecl)
+	hook := newHookpoint(v.pkgPath, funcDecl, v.hookDescriptorTypeIdent, v.newHookDescriptorValueInitializer)
 	v.instrumented = append(v.instrumented, hook)
 
 	funcDecl.Body.List = append([]dst.Stmt{hook.instrumentationStmt}, funcDecl.Body.List...)
@@ -95,8 +115,10 @@ func (v *instrumentationVisitor) instrumentFilePost(file *dst.File) {
 
 func (v *instrumentationVisitor) addFileMetadata(file *dst.File, instrumented []*hookpoint) {
 	addSqreenUnsafePackageImport(file)
-	if !v.atomicLoadDeclAdded {
+	if !v.fileMetadataOnce {
+		v.fileMetadataOnce = true
 		v.addAtomicLoadFuncDecl(file)
+		v.addHookDescriptorType(file)
 	}
 	for _, h := range instrumented {
 		v.addHookMetadata(file, h)
@@ -122,6 +144,64 @@ func (v *instrumentationVisitor) addHookPrologVarDecl(file *dst.File, h *hookpoi
 }
 
 func (v *instrumentationVisitor) addAtomicLoadFuncDecl(file *dst.File) {
-	v.atomicLoadDeclAdded = true
 	file.Decls = append(file.Decls, newLinkTimeSqreenAtomicLoadPointerFuncDecl())
+}
+
+func (v *instrumentationVisitor) addHookDescriptorType(file *dst.File) {
+	file.Decls = append(file.Decls, v.hookDescriptorTypeDecl)
+}
+
+// Write into `w` the Go sources of the hook table for the list of hook
+// descriptor function `hooks`.
+func writeHookTable(w io.Writer, hooks []string) error {
+	sort.Strings(hooks)
+
+	const (
+		tableFormat = `var _sqreen_hook_table_array = [...]func(*_sqreen_hook_descriptor_type){%s
+}
+//go:linkname _sqreen_hook_table _sqreen_hook_table
+var _sqreen_hook_table = _sqreen_hook_table_array[:]
+`
+		tableInitListEntryFormat = "\n\t%s,"
+
+		hookDescriptorForwardFuncDeclFormat = `//go:linkname %[1]s %[1]s
+func %[1]s(*_sqreen_hook_descriptor_type)
+
+`
+		fileFormat = `package main
+
+import _ "unsafe"
+
+%s
+
+%s
+`
+	)
+
+	var tableInitList, hookDescriptorForwardFuncDecls bytes.Buffer
+
+	for _, hookDescriptorFuncName := range hooks {
+		// Create the hook table initializer entry line
+		tableInitListEntry := fmt.Sprintf(tableInitListEntryFormat, hookDescriptorFuncName)
+		if _, err := io.WriteString(&tableInitList, tableInitListEntry); err != nil {
+			return err
+		}
+
+		// We are writing a file for the main package so we don't need to forward
+		// declare the hook descriptor functions that are defined in the main
+		// package.
+		if isHookDescriptorFuncInMainPackage(hookDescriptorFuncName) {
+			continue
+		}
+
+		// Create forward declaration of the hook descriptor function
+		hookDescriptorForwardFuncDecl := fmt.Sprintf(hookDescriptorForwardFuncDeclFormat, hookDescriptorFuncName)
+		if _, err := io.WriteString(&hookDescriptorForwardFuncDecls, hookDescriptorForwardFuncDecl); err != nil {
+			return err
+		}
+	}
+
+	hookTableVar := fmt.Sprintf(tableFormat, &tableInitList)
+	_, err := io.WriteString(w, fmt.Sprintf(fileFormat, &hookDescriptorForwardFuncDecls, hookTableVar))
+	return err
 }

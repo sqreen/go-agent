@@ -15,7 +15,19 @@ import (
 	"github.com/dave/dst"
 )
 
-const sqreenAtomicLoadPointerFuncIdent = `_sqreen_atomic_load_pointer`
+const (
+	sqreenAtomicLoadPointerFuncIdent = `_sqreen_atomic_load_pointer`
+
+	sqreenHookDescriptorIdentPrefix                  = `_sqreen_hook_descriptor_`
+	sqreenHookDescriptorTypeIdent                    = sqreenHookDescriptorIdentPrefix + `type`
+	sqreenHookDescriptorFuncIdentFormat              = sqreenHookDescriptorIdentPrefix + `%s`
+	sqreenHookDescriptorFuncIdentPrefixOfMainPackage = sqreenHookDescriptorIdentPrefix + `main_`
+
+	sqreenPrologVarIdentPrefix = `_sqreen_hook_prolog_var_`
+	sqreenPrologVarIdentFormat = sqreenPrologVarIdentPrefix + `%s`
+
+	sqreenPrologLoadFuncIdentFormat = `_sqreen_hook_prolog_load_%s`
+)
 
 // The hookpoint structure holds every AST node required during the
 // instrumentation of a file.
@@ -27,20 +39,20 @@ type hookpoint struct {
 	instrumentationStmt dst.Stmt
 }
 
-func newHookpoint(pkgPath string, funcDecl *dst.FuncDecl) *hookpoint {
+func newHookpoint(pkgPath string, funcDecl *dst.FuncDecl, descriptorTypeIdent string, descriptorValueInitializer hookDescriptorValueInitializer) *hookpoint {
 	id := normalizedHookpointID(pkgPath, funcDecl)
 
 	epilogFuncType, epilogCallArgs := newSqreenEpilogFuncType(funcDecl.Type)
 	prologFuncType, prologCallArgs := newSqreenPrologFuncType(funcDecl, epilogFuncType)
 
-	prologVarIdent := fmt.Sprintf("_sqreen_hook_prolog_var_%s", id)
+	prologVarIdent := fmt.Sprintf(sqreenPrologVarIdentFormat, id)
 	prologVarDecl, prologValueSpec := newPrologVarDecl(prologVarIdent, prologFuncType)
 
-	prologLoadFuncIdent := fmt.Sprintf("_sqreen_hook_prolog_load_%s", id)
+	prologLoadFuncIdent := fmt.Sprintf(sqreenPrologLoadFuncIdentFormat, id)
 	prologLoadFuncDecl := newPrologLoadFuncDecl(prologLoadFuncIdent, prologValueSpec)
 
-	descriptorFuncIdent := fmt.Sprintf("_sqreen_hook_descriptor_%s", id)
-	descriptorFuncDecl := newHookDescriptorFuncDecl(descriptorFuncIdent, funcDecl)
+	descriptorFuncIdent := fmt.Sprintf(sqreenHookDescriptorFuncIdentFormat, id)
+	descriptorFuncDecl := newHookDescriptorFuncDecl(descriptorFuncIdent, funcDecl, prologVarIdent, descriptorValueInitializer)
 
 	instrumentationStmt := newInstrumentationStmt(prologLoadFuncIdent, prologCallArgs, epilogCallArgs)
 
@@ -117,15 +129,9 @@ func newPrologLoadFuncDecl(ident string, prologVarSpec *dst.ValueSpec) *dst.Func
 								&dst.CallExpr{
 									Fun: dst.NewIdent(sqreenAtomicLoadPointerFuncIdent),
 									Args: []dst.Expr{
-										&dst.CallExpr{
-											Fun: newSqreenUnsafePointerType(),
-											Args: []dst.Expr{
-												&dst.UnaryExpr{
-													Op: token.AND,
-													X:  dst.NewIdent(prologVarName),
-												},
-											},
-										},
+										newCastValueExpr(
+											newPointerTypeOf(newSqreenUnsafePointerType()),
+											newCastValueExpr(newSqreenUnsafePointerType(), newIdentAddressExpr(dst.NewIdent(prologVarName)))),
 									},
 								},
 							},
@@ -311,33 +317,40 @@ func newSqreenParamIdent(prefix string, p int) *dst.Ident {
 
 // Return the hook descriptor function declaration which returns the hook
 // descriptor structure.
-func newHookDescriptorFuncDecl(ident string, funcDecl *dst.FuncDecl) *dst.FuncDecl {
+func newHookDescriptorFuncDecl(ident string, funcDecl *dst.FuncDecl, prologVarIdent string, newDescriptorValueInitializer hookDescriptorValueInitializer) *dst.FuncDecl {
+	const descriptorParamName = `_sqreen_hd`
 	return &dst.FuncDecl{
-		Name: dst.NewIdent(ident),
-		Type: &dst.FuncType{
-			Params: &dst.FieldList{},
-			Results: &dst.FieldList{
-				List: []*dst.Field{
-					{
-						Type: &dst.InterfaceType{Methods: &dst.FieldList{Opening: true, Closing: true}},
-					},
-				},
-			},
-		},
-		Body: &dst.BlockStmt{
-			List: []dst.Stmt{
-				&dst.ReturnStmt{
-					Results: []dst.Expr{
-						newFunctionAddressExpr(funcDecl),
-					},
-				},
-			},
-		},
 		Decs: dst.FuncDeclDecorations{
 			NodeDecs: dst.NodeDecs{
 				Before: dst.NewLine,
 				Start: dst.Decorations{
+					"//go:nosplit", // save some instructions
 					fmt.Sprintf("//go:linkname %[1]s %[1]s\n", ident),
+				},
+			},
+		},
+		Name: dst.NewIdent(ident),
+		Type: &dst.FuncType{
+			Params: &dst.FieldList{
+				List: []*dst.Field{
+					{
+						Names: []*dst.Ident{dst.NewIdent(descriptorParamName)},
+						Type:  &dst.StarExpr{X: dst.NewIdent(sqreenHookDescriptorTypeIdent)},
+					},
+				},
+			},
+			Results: &dst.FieldList{},
+		},
+		Body: &dst.BlockStmt{
+			List: []dst.Stmt{
+				&dst.AssignStmt{
+					Lhs: []dst.Expr{
+						&dst.StarExpr{X: dst.NewIdent(descriptorParamName)},
+					},
+					Tok: token.ASSIGN,
+					Rhs: []dst.Expr{
+						newDescriptorValueInitializer(newFunctionValueExpr(funcDecl), newIdentAddressExpr(dst.NewIdent(prologVarIdent))),
+					},
 				},
 			},
 		},
@@ -348,13 +361,66 @@ func newHookDescriptorFuncDecl(ident string, funcDecl *dst.FuncDecl) *dst.FuncDe
 func newLinkTimeSqreenAtomicLoadPointerFuncDecl() *dst.FuncDecl {
 	ftype := &dst.FuncType{
 		Params: &dst.FieldList{
-			List: []*dst.Field{{Type: newSqreenUnsafePointerType()}},
+			List: []*dst.Field{{Type: &dst.StarExpr{X: newSqreenUnsafePointerType()}}},
 		},
 		Results: &dst.FieldList{
 			List: []*dst.Field{{Type: newSqreenUnsafePointerType()}},
 		},
 	}
 	return newLinkTimeForwardFuncDecl(sqreenAtomicLoadPointerFuncIdent, ftype)
+}
+
+type hookDescriptorValueInitializer func(Func, Prolog dst.Expr) dst.Expr
+
+// Return the type declaration for
+// ```
+// type _sqreen_hook_descriptor_type = struct {
+//   Func, Prolog interface{}
+// }
+// ```
+func newHookDescriptorType() (*dst.GenDecl, *dst.TypeSpec, hookDescriptorValueInitializer) {
+	spec := &dst.TypeSpec{
+		Name:   dst.NewIdent(sqreenHookDescriptorTypeIdent),
+		Assign: true,
+		Type: &dst.StructType{
+			Fields: &dst.FieldList{
+				List: []*dst.Field{
+					{
+						Names: []*dst.Ident{
+							dst.NewIdent("Func"),
+							dst.NewIdent("Prolog"),
+						},
+						Type: newEmptyInterfaceType(),
+					},
+				},
+			},
+		},
+	}
+
+	typ := &dst.GenDecl{
+		Tok: token.TYPE,
+		Specs: []dst.Spec{
+			spec,
+		},
+	}
+
+	valInitializer := func(Func, Prolog dst.Expr) dst.Expr {
+		return &dst.CompositeLit{
+			Type: dst.NewIdent(sqreenHookDescriptorTypeIdent),
+			Elts: []dst.Expr{
+				&dst.KeyValueExpr{
+					Key:   dst.NewIdent("Func"),
+					Value: Func,
+				},
+				&dst.KeyValueExpr{
+					Key:   dst.NewIdent("Prolog"),
+					Value: Prolog,
+				},
+			},
+		}
+	}
+
+	return typ, spec, valInitializer
 }
 
 func isFileNameIgnored(file string) bool {
@@ -407,55 +473,8 @@ func shouldIgnoreFuncDecl(funcDecl *dst.FuncDecl) bool {
 		strings.Contains(fname, "noescape") ||
 		hasSqreenIgnoreDirective(funcDecl) ||
 		hasGoNoSplitDirective(funcDecl)
-	//functionScopeHidesSignatureTypes(funcDecl, dst.NewIdent("error"))
 }
 
-//func functionScopeHidesSignatureTypes(fdecl *dst.FuncDecl, extraType ...dst.Expr) (collision bool) {
-//	ftype := fdecl.Type
-//	idents := []string{fdecl.Name.Name}
-//	ftypes := extraType
-//	if recv := fdecl.Recv; recv != nil {
-//		for _, p := range recv.List {
-//			for _, n := range p.Names {
-//				idents = append(idents, n.Name)
-//			}
-//			ftypes = append(ftypes, p.Type)
-//		}
-//	}
-//	if ftype.Params != nil {
-//		for _, p := range ftype.Params.List {
-//			for _, n := range p.Names {
-//				idents = append(idents, n.Name)
-//			}
-//			ftypes = append(ftypes, p.Type)
-//		}
-//	}
-//	if ftype.Results != nil {
-//		for _, p := range ftype.Results.List {
-//			for _, n := range p.Names {
-//				idents = append(idents, n.Name)
-//			}
-//			ftypes = append(ftypes, p.Type)
-//		}
-//	}
-//
-//	checkScope := func(node dst.Node) bool {
-//		if ident, ok := node.(*dst.Ident); ok {
-//			for _, scopeIdent := range idents {
-//				if scopeIdent == ident.Name || scopeIdent == ident.Path {
-//					collision = true
-//					return false
-//				}
-//			}
-//		}
-//		return true
-//	}
-//
-//	for i := range ftypes {
-//		dst.Inspect(ftypes[i], checkScope)
-//		if collision {
-//			break
-//		}
-//	}
-//	return
-//}
+func isHookDescriptorFuncInMainPackage(ident string) bool {
+	return strings.HasPrefix(ident, sqreenHookDescriptorFuncIdentPrefixOfMainPackage)
+}

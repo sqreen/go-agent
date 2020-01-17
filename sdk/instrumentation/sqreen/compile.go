@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"go/parser"
@@ -107,21 +108,67 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 			return nil, err
 		}
 		defer hookListFile.Close()
-
 		count, err := pkgInstrumentation.writeHookList(hookListFile)
 		if err != nil {
 			return nil, err
 		}
 		log.Printf("added %d hooks to the hook list\n", count)
 
+		// If the main package is being compiled, also create the hook table and
+		// compile it.
+		if pkgPath == "main" {
+			// Get the full list of hooks
+			hooks, err := readHookListFile(hookListFile)
+			if err != nil {
+				return nil, err
+			}
+
+			// Create the hook table file into the package build directory
+			hookTableFile, err := createHookTableFile(packageBuildDir)
+			if err != nil {
+				return nil, err
+			}
+			defer hookTableFile.Close()
+			log.Printf("creating the hook table for %d hooks into `%s`", len(hooks), hookTableFile.Name())
+			if err := writeHookTable(hookTableFile, hooks); err != nil {
+				return nil, err
+			}
+
+			// Add it into the argument list to compile it
+			args = append(args, hookTableFile.Name())
+		}
+
 		return args, nil
 	}
 }
 
+func createHookTableFile(dir string) (*os.File, error) {
+	filename := filepath.Join(dir, "sqreen-hooktable.go")
+	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+}
+
+// Create or append the hook list file in write-only.
 func openHookListFile(dir string) (*os.File, error) {
 	filename := filepath.Join(dir, "sqreen-hooks.txt")
 	// Create the file or append to it if it exists.
-	return os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	return os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+}
+
+// Read the given hook list file by reopening it and reading its full content,
+// returned as a slice of hook IDs.
+func readHookListFile(hookListFile *os.File) (hooks []string, err error) {
+	f, err := os.OpenFile(hookListFile.Name(), os.O_RDONLY, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	// Read each hook id line by line
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		id := scanner.Text()
+		hooks = append(hooks, id)
+	}
+	return
 }
 
 type packageInstrumentationHelper struct {
@@ -202,7 +249,7 @@ func (h *packageInstrumentationHelper) writeInstrumentedFiles(buildDirPath strin
 func (h *packageInstrumentationHelper) writeHookList(hookList *os.File) (count int, err error) {
 	for _, hooks := range h.instrumentedFiles {
 		for _, hook := range hooks {
-			if _, err = hookList.WriteString(fmt.Sprintf("%s\n", hook.id)); err != nil {
+			if _, err = hookList.WriteString(fmt.Sprintf("%s\n", hook.descriptorFuncDecl.Name.Name)); err != nil {
 				return count, err
 			}
 			count += 1
