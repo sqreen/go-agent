@@ -172,12 +172,14 @@ func New(cfg *config.Config) *Agent {
 
 	metrics := metrics.NewEngine(logger, cfg.MaxMetricsStoreLength())
 
+	errorMetrics := metrics.GetStore("errors", config.ErrorMetricsPeriod)
+
 	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
 		return nil
 	}
-	rulesEngine := rule.NewEngine(logger, metrics, publicKey)
+	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
 	// TODO: remove this SDK metrics period config when the corresponding js rule
 	//  is supported
@@ -197,11 +199,11 @@ func New(cfg *config.Config) *Agent {
 		isDone:  make(chan struct{}),
 		metrics: metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess: metrics.NewStore("sdk-login-success", sdkMetricsPeriod),
-			sdkUserLoginFailure: metrics.NewStore("sdk-login-fail", sdkMetricsPeriod),
-			sdkUserSignup:       metrics.NewStore("sdk-signup", sdkMetricsPeriod),
-			whitelistedIP:       metrics.NewStore("whitelisted", sdkMetricsPeriod),
-			errors:              metrics.NewStore("errors", config.ErrorMetricsPeriod),
+			sdkUserLoginSuccess: metrics.GetStore("sdk-login-success", sdkMetricsPeriod),
+			sdkUserLoginFailure: metrics.GetStore("sdk-login-fail", sdkMetricsPeriod),
+			sdkUserSignup:       metrics.GetStore("sdk-signup", sdkMetricsPeriod),
+			whitelistedIP:       metrics.GetStore("whitelisted", sdkMetricsPeriod),
+			errors:              errorMetrics,
 		},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -398,7 +400,7 @@ func (a *Agent) RulesReload() (string, error) {
 		}
 	}
 
-	a.rules.SetRules(rulespack.PackID, rulespack.Rules, a.staticMetrics.errors)
+	a.rules.SetRules(rulespack.PackID, rulespack.Rules)
 	return rulespack.PackID, nil
 }
 

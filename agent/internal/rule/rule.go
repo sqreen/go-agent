@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 // Package rule implements the engine to manage rules.
 //
 // Main requirements:
@@ -33,13 +35,15 @@ type Engine struct {
 	logger Logger
 	// Map rules to their corresponding symbol in order to be able to modify them
 	// at run time by atomically replacing a running rule.
-	hooks         hookDescriptors
-	packID        string
-	cfg           *config.Config
-	enabled       bool
-	metricsEngine *metrics.Engine
-	publicKey     *ecdsa.PublicKey
-	vendorPrefix  string
+	hooks                 hookDescriptors
+	packID                string
+	cfg                   *config.Config
+	enabled               bool
+	metricsEngine         *metrics.Engine
+	publicKey             *ecdsa.PublicKey
+	vendorPrefix          string
+	instrumentationEngine InstrumentationFace
+	errorMetricsStore     *metrics.Store
 }
 
 // Logger interface required by this package.
@@ -49,12 +53,17 @@ type Logger interface {
 }
 
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey) *Engine {
+func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store, publicKey *ecdsa.PublicKey) *Engine {
+	if instrumentationEngine == nil {
+		instrumentationEngine = defaultInstrumentationEngine
+	}
 	return &Engine{
-		logger:        logger,
-		metricsEngine: metricsEngine,
-		publicKey:     publicKey,
-		vendorPrefix:  app.VendorPrefix(),
+		logger:                logger,
+		metricsEngine:         metricsEngine,
+		publicKey:             publicKey,
+		vendorPrefix:          app.VendorPrefix(),
+		instrumentationEngine: instrumentationEngine,
+		errorMetricsStore:     errorMetricsStore,
 	}
 }
 
@@ -65,9 +74,9 @@ func (e *Engine) PackID() string {
 
 // SetRules set the currents rules. If rules were already set, it will replace
 // them by atomically modifying the hooks, and removing what is left.
-func (e *Engine) SetRules(packID string, rules []api.Rule, errorMetricsStore *metrics.Store) {
-	// Create the net rule descriptors and replace the existing ones
-	ruleDescriptors := newHookDescriptors(e.logger, rules, e.publicKey, e.metricsEngine, errorMetricsStore, e.vendorPrefix)
+func (e *Engine) SetRules(packID string, rules []api.Rule) {
+	// Create the new rule descriptors and replace the existing ones
+	ruleDescriptors := newHookDescriptors(e, rules)
 	e.setRules(packID, ruleDescriptors)
 }
 
@@ -79,16 +88,17 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 	for hook, descr := range descriptors {
 		if e.enabled {
 			// Attach the callback to the hook, possibly overwriting the previous one.
+			e.logger.Debugf("rule: attaching callback to `%s`", hook)
 			err := hook.Attach(descr.Prolog())
 			if err != nil {
-				e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
+				e.logger.Error(sqerrors.Wrapf(err, "rule: could not attach the prolog callback to `%s`", hook))
 				continue
 			}
 		}
 
 		// Now close the previously attached callback and then remove it from the
-		// set of previous descriptors as it should now only contain disabled hook
-		// points from previous rules that are no longer present.
+		// set of previous descriptors as it should only contain disabled hooks
+		// from previous rules that are no longer present.
 		if prevDescr, exists := disabledDescriptors[hook]; exists {
 			delete(disabledDescriptors, hook)
 			if err := prevDescr.Close(); err != nil {
@@ -99,6 +109,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 
 	// Close the previous descriptors that are now disabled.
 	for hook, descr := range disabledDescriptors {
+		e.logger.Debugf("rule: disabling hook `%s`", hook)
 		err := hook.Attach(nil)
 		if err != nil {
 			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
@@ -117,25 +128,35 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.PublicKey, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store, vendorPrefix string) hookDescriptors {
+func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
+	logger := e.logger
+
 	// Create and configure the list of callbacks according to the given rules
 	var hookDescriptors = make(hookDescriptors)
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
 		// Verify the signature
-		if err := VerifyRuleSignature(&r, publicKey); err != nil {
-			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: signature verification", r.Name)))
+		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
+			logger.Error(sqerrors.Wrapf(err, "rule `%s`: signature verification", r.Name))
 			continue
 		}
 		// Find the symbol
 		hookpoint := r.Hookpoint
 		symbol := fmt.Sprintf("%s.%s", hookpoint.Class, hookpoint.Method)
-		hook := sqhook.Find(symbol)
-		if hook == nil && vendorPrefix != "" {
-			hook = sqhook.Find(vendorPrefix + symbol)
+		hook, err := e.instrumentationEngine.Find(symbol)
+		if err != nil {
+			logger.Error(sqerrors.Wrapf(err, "rule `%s`: expected error while looking for the hook of `%s`", r.Name, symbol))
+			continue
+		}
+		if hook == nil && e.vendorPrefix != "" {
+			hook, err = e.instrumentationEngine.Find(e.vendorPrefix + symbol)
+			if err != nil {
+				logger.Error(sqerrors.Wrapf(err, "rule `%s`: expected error while looking for the hook of `%s`", r.Name, symbol))
+				continue
+			}
 		}
 		if hook == nil {
-			logger.Debugf("rule `%s` ignored: symbol `%s` could not be found", r.Name, symbol)
+			logger.Debugf("rule `%s`: could not find the hook of function", r.Name, symbol)
 			continue
 		} else {
 			logger.Debugf("rule `%s`: successfully found hook `%s`", r.Name, hook)
@@ -147,7 +168,7 @@ func newHookDescriptors(logger Logger, rules []api.Rule, publicKey *ecdsa.Public
 		if descr != nil {
 			nextProlog = descr.Prolog()
 		}
-		ruleDescriptor := NewCallbackContext(&r, logger, metricsEngine, errorMetricsStore)
+		ruleDescriptor := NewCallbackContext(&r, logger, e.metricsEngine, e.errorMetricsStore)
 		prolog, err := NewCallback(hookpoint.Callback, ruleDescriptor, nextProlog)
 		if err != nil {
 			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not instantiate the callbacks", r.Name)))
@@ -186,7 +207,7 @@ func (e *Engine) Disable() {
 	e.enabled = false
 }
 
-type hookDescriptors map[*sqhook.Hook]CallbackObject
+type hookDescriptors map[HookFace]CallbackObject
 
 type noopCloserCallbackObject struct {
 	prolog sqhook.PrologCallback
@@ -226,17 +247,17 @@ func (c *chainedCallbackObject) Close() error {
 	return err2
 }
 
-func (m hookDescriptors) Set(hook *sqhook.Hook, cb interface{}) {
+func (m hookDescriptors) Set(hook HookFace, prolog interface{}) {
 	var callback CallbackObject
-	if cbo, ok := cb.(CallbackObject); ok {
+	if cbo, ok := prolog.(CallbackObject); ok {
 		callback = cbo
 	} else {
-		callback = noopCloserCallbackObject{cb}
+		callback = noopCloserCallbackObject{prolog}
 	}
 	current := m[hook]
 	m[hook] = &chainedCallbackObject{current: callback, next: current}
 }
 
-func (m hookDescriptors) Get(hook *sqhook.Hook) CallbackObject {
+func (m hookDescriptors) Get(hook HookFace) CallbackObject {
 	return m[hook]
 }
