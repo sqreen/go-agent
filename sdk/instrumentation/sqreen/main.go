@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"golang.org/x/xerrors"
 )
 
 func main() {
@@ -54,7 +56,7 @@ func forwardCommand(args []string) {
 	log.Printf("forwarding command `%s %s`", path, quotedArgs[1:len(quotedArgs)-1])
 	err := cmd.Run()
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if xerrors.As(err, &exitErr) {
 		os.Exit(exitErr.ExitCode())
 	}
 	os.Exit(0)
