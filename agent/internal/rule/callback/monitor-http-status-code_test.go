@@ -28,7 +28,7 @@ func TestNewMonitorHTTPStatusCodeCallbacks(t *testing.T) {
 					require.True(t, ok)
 					code := rand.Int()
 					rule.On("PushMetricsValue", code, uint64(1)).Return().Once()
-					epilog, err := actualProlog(sqhook.MethodReceiver{}, &code)
+					epilog, err := actualProlog(nil, &code)
 					// Check it behaves as expected
 					require.NoError(t, err)
 
