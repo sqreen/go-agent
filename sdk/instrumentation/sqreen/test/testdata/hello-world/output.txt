@@ -1,0 +1,3 @@
+IN: main.main
+Hello, Go!
+OUT: main.main
