@@ -5,6 +5,7 @@
 package sqreen_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -46,14 +47,16 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 func testInstrumentation(t *testing.T, toolPath string, testApp string) {
 	cmd := exec.Command(godriver, "run", "-a", "-toolexec", toolPath, testApp)
 	cmd.Stderr = os.Stderr
-	output, err := cmd.Output()
+	outputBuf, err := cmd.Output()
 	require.NoError(t, err)
 
-	// Check that we got the expected execution output in stdout.
+	// Check that we got the expected execution outputBuf in stdout.
 	expectedOutputBuf, err := ioutil.ReadFile(filepath.Join(testApp, "output.txt"))
 	expectedOutput := strings.ReplaceAll(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
+	output := string(outputBuf)
+	fmt.Print(output)
 	require.NoError(t, err)
-	require.Equal(t, expectedOutput, string(output))
+	require.Equal(t, expectedOutput, output)
 }
 
 var (
