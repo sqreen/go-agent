@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/xerrors"
 )
@@ -79,22 +80,33 @@ var commandParserMap = map[string]parseCommandFunc{
 // getCommand returns the command and arguments. The command is expectedFlags to be
 // the first argument.
 func parseCommand(args []string) (commandExecutionFunc, error) {
-	// At least one arg is expectedFlags
+	// At least one arg is expected
 	if len(args) < 1 {
 		return nil, errors.New("unexpected number of arguments")
 	}
-	cmdId := args[0]
 
-	// It mustn't be empty
-	if cmdId == "" {
-		return nil, errors.New("unexpected empty command name")
+	cmdId, err := parseCommandID(args[0])
+	if err != nil {
+		return nil, err
 	}
-
-	// It may be the absolute path of a go tool: take its base name.
-	cmdId = filepath.Base(cmdId)
 	if commandParser, exists := commandParserMap[cmdId]; exists {
 		return commandParser(args)
 	} else {
 		return nil, nil
 	}
+}
+
+func parseCommandID(cmd string) (string, error) {
+	// It mustn't be empty
+	if cmd == "" {
+		return "", errors.New("unexpected empty command name")
+	}
+
+	// Take the base of the absolute path of the go tool
+	cmd = filepath.Base(cmd)
+	// Remove the file extension if any
+	if ext := filepath.Ext(cmd); ext != "" {
+		cmd = strings.TrimSuffix(cmd, ext)
+	}
+	return cmd, nil
 }
