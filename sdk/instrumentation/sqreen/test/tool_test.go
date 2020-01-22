@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,20 +17,14 @@ import (
 func TestInstrumentation(t *testing.T) {
 	toolPath := buildInstrumentationTool(t)
 	defer os.Remove(toolPath)
-	//packagestest.TestAll(t, testInstrumentation(toolPath))
 	myTest(t, toolPath)
 }
 
 func buildInstrumentationTool(t *testing.T) (path string) {
-	toolFile, err := ioutil.TempFile("", "sqreen-instrumentation")
+	toolDir, err := ioutil.TempDir("", "test-sqreen-instrumentation")
 	require.NoError(t, err)
-	toolFile.Close()
-	toolPath := toolFile.Name()
-	goroot := os.Getenv("GOROOT")
-	if goroot != "" {
-		goroot += "/bin/"
-	}
-	cmd := exec.Command(goroot+"go", "build", "-o", toolPath, "github.com/sqreen/go-agent/sdk/instrumentation/sqreen")
+	toolPath := filepath.Join(toolDir, "sqreen")
+	cmd := exec.Command(godriver, "build", "-o", toolPath, "github.com/sqreen/go-agent/sdk/instrumentation/sqreen")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -38,16 +33,28 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 }
 
 func myTest(t *testing.T, toolPath string) {
-	goroot := os.Getenv("GOROOT")
-	if goroot != "" {
-		goroot += "/bin/"
-	}
-	cmd := exec.Command(goroot+"go", "run", "-a", "-toolexec", toolPath, "./testdata/hello-world")
+	cmd := exec.Command(godriver, "run", "-a", "-toolexec", toolPath, "./testdata/hello-world")
 	cmd.Stderr = os.Stderr
 	output, err := cmd.Output()
 	require.NoError(t, err)
 
+	// Check that we got the expected execution output in stdout.
 	expectedOutput, err := ioutil.ReadFile("./testdata/hello-world/output.txt")
 	require.NoError(t, err)
 	require.Equal(t, expectedOutput, output)
+}
+
+var (
+	goroot   string
+	godriver string
+)
+
+func init() {
+	// Since we are run through `go test`, use its GOROOT
+	goroot = os.Getenv("GOROOT")
+	godriver = gobinpath("go")
+}
+
+func gobinpath(tool string) string {
+	return filepath.Join(goroot, "bin", tool)
 }
