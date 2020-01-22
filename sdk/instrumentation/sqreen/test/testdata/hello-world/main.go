@@ -4,8 +4,13 @@
 
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/sqreen/go-agent/sdk/instrumentation/sqreen/test/testdata/helpers"
+)
 
 func main() {
+	defer helpers.TraceCall()()
 	fmt.Println("Hello, Go!")
 }
