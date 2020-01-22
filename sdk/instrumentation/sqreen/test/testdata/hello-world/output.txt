@@ -1,5 +1,5 @@
-PROLOG: main.main
+PROLOG: main.main []
 IN: main.main
 Hello, Go!
 OUT: main.main
-EPILOG: main.main
+EPILOG: main.main []
