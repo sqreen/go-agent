@@ -45,7 +45,7 @@ func myTest(t *testing.T, toolPath string) {
 
 	// Check that we got the expected execution output in stdout.
 	expectedOutputBuf, err := ioutil.ReadFile("./testdata/hello-world/output.txt")
-	expectedOutput := strings.Replace(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
+	expectedOutput := strings.ReplaceAll(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
 	require.NoError(t, err)
 	require.Equal(t, expectedOutput, string(output))
 }
