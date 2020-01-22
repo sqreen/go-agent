@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,9 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 	toolDir, err := ioutil.TempDir("", "test-sqreen-instrumentation")
 	require.NoError(t, err)
 	toolPath := filepath.Join(toolDir, "sqreen")
+	if runtime.GOOS == "windows" {
+		toolPath += ".exe"
+	}
 	cmd := exec.Command(godriver, "build", "-o", toolPath, "github.com/sqreen/go-agent/sdk/instrumentation/sqreen")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
