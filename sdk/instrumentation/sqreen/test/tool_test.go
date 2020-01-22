@@ -50,11 +50,14 @@ var (
 )
 
 func init() {
-	// Since we are run through `go test`, use its GOROOT
+	// Use same GOROOT as `go test` if any.
 	goroot = os.Getenv("GOROOT")
 	godriver = gobinpath("go")
 }
 
 func gobinpath(tool string) string {
+	if goroot == "" {
+		return tool
+	}
 	return filepath.Join(goroot, "bin", tool)
 }
