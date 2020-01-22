@@ -19,7 +19,13 @@ import (
 func TestInstrumentation(t *testing.T) {
 	toolPath := buildInstrumentationTool(t)
 	defer os.Remove(toolPath)
-	myTest(t, toolPath)
+	t.Run("hello-world", func(t *testing.T) {
+		testInstrumentation(t, toolPath, "./testdata/hello-world")
+	})
+
+	t.Run("hello-example", func(t *testing.T) {
+		testInstrumentation(t, toolPath, "./testdata/hello-example")
+	})
 }
 
 func buildInstrumentationTool(t *testing.T) (path string) {
@@ -37,14 +43,14 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 	return toolPath
 }
 
-func myTest(t *testing.T, toolPath string) {
-	cmd := exec.Command(godriver, "run", "-a", "-toolexec", toolPath, "./testdata/hello-world")
+func testInstrumentation(t *testing.T, toolPath string, testApp string) {
+	cmd := exec.Command(godriver, "run", "-a", "-toolexec", toolPath, testApp)
 	cmd.Stderr = os.Stderr
 	output, err := cmd.Output()
 	require.NoError(t, err)
 
 	// Check that we got the expected execution output in stdout.
-	expectedOutputBuf, err := ioutil.ReadFile("./testdata/hello-world/output.txt")
+	expectedOutputBuf, err := ioutil.ReadFile(filepath.Join(testApp, "output.txt"))
 	expectedOutput := strings.ReplaceAll(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
 	require.NoError(t, err)
 	require.Equal(t, expectedOutput, string(output))
