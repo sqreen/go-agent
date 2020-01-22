@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,9 +44,10 @@ func myTest(t *testing.T, toolPath string) {
 	require.NoError(t, err)
 
 	// Check that we got the expected execution output in stdout.
-	expectedOutput, err := ioutil.ReadFile("./testdata/hello-world/output.txt")
+	expectedOutputBuf, err := ioutil.ReadFile("./testdata/hello-world/output.txt")
+	expectedOutput := strings.Replace(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
 	require.NoError(t, err)
-	require.Equal(t, expectedOutput, output)
+	require.Equal(t, expectedOutput, string(output))
 }
 
 var (
