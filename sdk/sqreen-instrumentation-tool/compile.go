@@ -44,21 +44,27 @@ func parseCompileCommand(args []string) (commandExecutionFunc, error) {
 
 func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) commandExecutionFunc {
 	return func() ([]string, error) {
-		log.Println("compile")
 		if !flags.IsValid() {
 			// Skip when the required set of flags is not valid.
 			log.Printf("nothing to do (%s)\n", flags)
 			return nil, nil
 		}
 
-		// Check if the instrumentation should be skipped for this package name.
 		pkgPath := flags.Package
-		if isPackageNameIgnored(pkgPath) {
-			log.Printf("skipping instrumentation of package `%s`\n", pkgPath)
-			return nil, nil
-		}
-
 		packageBuildDir := filepath.Dir(flags.Output)
+		projectBuildDir := path.Join(packageBuildDir, "..")
+		hookListFilepath := getHookListFilepath(projectBuildDir)
+
+		// Check if the instrumentation should be skipped for this package name.
+		if isPackageNameIgnored(pkgPath, globalFlags.Full) {
+			log.Printf("skipping instrumentation of package `%s`\n", pkgPath)
+			if pkgPath == "main" {
+				// Still add the hook table if any
+				return addHookTable(args, packageBuildDir, hookListFilepath)
+			} else {
+				return nil, nil
+			}
+		}
 
 		log.Println("instrumenting package:", pkgPath)
 		log.Println("package build directory:", packageBuildDir)
@@ -102,8 +108,7 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 		}
 
 		// Add the hook IDs to the hook list file.
-		projectBuildDir := path.Join(packageBuildDir, "..")
-		hookListFile, err := openHookListFile(projectBuildDir)
+		hookListFile, err := openHookListFile(hookListFilepath)
 		if err != nil {
 			return nil, err
 		}
@@ -114,32 +119,41 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 		}
 		log.Printf("added %d hooks to the hook list\n", count)
 
-		// If the main package is being compiled, also create the hook table and
-		// compile it.
 		if pkgPath == "main" {
-			// Get the full list of hooks
-			hooks, err := readHookListFile(hookListFile)
-			if err != nil {
-				return nil, err
-			}
-
-			// Create the hook table file into the package build directory
-			hookTableFile, err := createHookTableFile(packageBuildDir)
-			if err != nil {
-				return nil, err
-			}
-			defer hookTableFile.Close()
-			log.Printf("creating the hook table for %d hooks into `%s`", len(hooks), hookTableFile.Name())
-			if err := writeHookTable(hookTableFile, hooks); err != nil {
-				return nil, err
-			}
-
-			// Add it into the argument list to compile it
-			args = append(args, hookTableFile.Name())
+			return addHookTable(args, packageBuildDir, hookListFilepath)
 		}
 
 		return args, nil
 	}
+}
+
+func addHookTable(args []string, packageBuildDir, hookListFilepath string) ([]string, error) {
+	// Create the hook table and compile it.
+	// Get the full list of hooks
+	hooks, err := readHookListFile(hookListFilepath)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(hooks) == 0 {
+		log.Printf("skipping hook table generation: the list of hooks is empty")
+		return args, nil
+	}
+
+	// Create the hook table file into the package build directory
+	hookTableFile, err := createHookTableFile(packageBuildDir)
+	if err != nil {
+		return nil, err
+	}
+	defer hookTableFile.Close()
+	log.Printf("creating the hook table for %d hooks into `%s`", len(hooks), hookTableFile.Name())
+	if err := writeHookTable(hookTableFile, hooks); err != nil {
+		return nil, err
+	}
+
+	// Add it into the argument list to compile it
+	args = append(args, hookTableFile.Name())
+	return args, nil
 }
 
 func createHookTableFile(dir string) (*os.File, error) {
@@ -148,16 +162,21 @@ func createHookTableFile(dir string) (*os.File, error) {
 }
 
 // Create or append the hook list file in write-only.
-func openHookListFile(dir string) (*os.File, error) {
-	filename := filepath.Join(dir, "sqreen-hooks.txt")
-	// Create the file or append to it if it exists.
-	return os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+func openHookListFile(hookListFilepath string) (*os.File, error) {
+	return os.OpenFile(hookListFilepath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+}
+
+func getHookListFilepath(dir string) string {
+	return filepath.Join(dir, "sqreen-hooks.txt")
 }
 
 // Read the given hook list file by reopening it and reading its full content,
 // returned as a slice of hook IDs.
-func readHookListFile(hookListFile *os.File) (hooks []string, err error) {
-	f, err := os.OpenFile(hookListFile.Name(), os.O_RDONLY, 0666)
+func readHookListFile(hookListFilepath string) (hooks []string, err error) {
+	f, err := os.OpenFile(hookListFilepath, os.O_RDONLY, 0666)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +254,7 @@ func (h *packageInstrumentationHelper) writeInstrumentedFiles(buildDirPath strin
 		dest := filepath.Join(buildDirPath, filename)
 		output, err := os.Create(dest)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		defer output.Close()
 		if err := writeFile(node, output); err != nil {

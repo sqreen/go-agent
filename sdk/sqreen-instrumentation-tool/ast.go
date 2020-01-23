@@ -436,25 +436,41 @@ func isFileNameIgnored(file string) bool {
 	return false
 }
 
-func isPackageNameIgnored(pkg string) bool {
-	var ignoredPkgPrefixes = []string{
-		"runtime",
-		"sync",
-		"reflect",
-		"internal",
-		"unsafe",
-		"syscall",
-		"time",
-		"math",
-	}
+var ignoredPkgPrefixes = []string{
+	"runtime",
+	"sync",
+	"reflect",
+	"internal",
+	"unsafe",
+	"syscall",
+	"time",
+	"math",
+}
 
+var limitedInstrumentationPkgPrefixes = []string{
+	"github.com/sqreen/go-agent",
+	"database/sql",
+}
+
+func isPackageNameIgnored(pkg string, fullInstrumentation bool) bool {
 	for _, prefix := range ignoredPkgPrefixes {
 		if strings.HasPrefix(pkg, prefix) {
 			return true
 		}
 	}
 
-	return false
+	if fullInstrumentation {
+		return false
+	}
+
+	// Non-full instrumentation mode, limited to a set of given package
+	for _, prefix := range limitedInstrumentationPkgPrefixes {
+		if strings.HasPrefix(pkg, prefix) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func shouldIgnoreFuncDecl(funcDecl *dst.FuncDecl) bool {

@@ -45,7 +45,8 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 }
 
 func testInstrumentation(t *testing.T, toolPath string, testApp string) {
-	cmd := exec.Command(godriver, "run", "-a", "-toolexec", toolPath, testApp)
+	// Run it with full instrumentation and verbose mode
+	cmd := exec.Command(godriver, "run", "-a", "-toolexec", fmt.Sprintf("%s -v -full", toolPath), testApp)
 	cmd.Stderr = os.Stderr
 	outputBuf, err := cmd.Output()
 	require.NoError(t, err)

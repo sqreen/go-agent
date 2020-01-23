@@ -134,8 +134,8 @@ func TestParseFlags(t *testing.T) {
 			expectedValidationError: true,
 		},
 		{
-			name: "missing package option value",
-			args: []string{"-p", "-o", randomOutputStr},
+			name: "empty package option value",
+			args: []string{"-p", "", "-o", randomOutputStr},
 			expectedFlags: compileFlagSet{
 				Output: randomOutputStr,
 			},

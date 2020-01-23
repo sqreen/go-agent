@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+type instrumentationToolFlagSet struct {
+	Verbose bool `sqflag:"-v"`
+	Full    bool `sqflag:"-full"`
+}
+
 const structTagKey = "sqflag"
 
 // parseFlags walks through the given arguments and sets the flagSet values
@@ -19,18 +24,12 @@ func parseFlags(flagSet interface{}, args []string) {
 
 	i := 0
 	for i < len(args)-1 {
-		opt, val, shift := parseOption(args[i], args[i+1])
+		_, shift := parseOption(flagSetValueMap, args[i], args[i+1])
 		i += shift
-		if f, exists := flagSetValueMap[opt]; exists {
-			f.SetString(val)
-		}
 	}
 
 	if i < len(args) {
-		opt, val, _ := parseOption(args[i], "")
-		if f, exists := flagSetValueMap[opt]; exists {
-			f.SetString(val)
-		}
+		_, _ = parseOption(flagSetValueMap, args[i], "")
 	}
 }
 
@@ -49,29 +48,74 @@ func makeFlagSetValueMap(flagSet interface{}) map[string]reflect.Value {
 
 // parseOption parses the given current argument and following one according to
 // the go flags syntax.
-func parseOption(arg, nextArg string) (option, value string, shift int) {
+func parseOption(flagSetValueMap map[string]reflect.Value, arg, nextArg string) (nonOpt bool, shift int) {
 	if arg[0] != '-' {
-		// Not an option, return empty values and shift by one.
-		shift = 1
-		return
+		// Not an option, return the value and shift by one.
+		return true, 1
 	}
 
 	// Split the argument by its first `=` character if any, and check the
 	// syntax being used.
 	kv := strings.SplitN(arg, "=", 2)
-	option = kv[0]
+	option := kv[0]
+
+	flag, exists := flagSetValueMap[option]
+
 	if len(kv) == 2 {
 		// `-opt=val` syntax
-		value = kv[1]
+		value := kv[1]
 		shift = 1
+		if exists {
+			flag.SetString(value)
+		}
 	} else if nextArg == "" || len(nextArg) > 1 && nextArg[0] != '-' {
 		// `-opt val` syntax
-		value = nextArg
+		value := nextArg
 		shift = 2
+		if exists {
+			switch flag.Kind() {
+			case reflect.String:
+				flag.SetString(value)
+			case reflect.Bool:
+				flag.SetBool(true)
+				shift = 1
+			}
+		}
 	} else {
 		// `-opt` syntax (no value)
 		shift = 1
+		if exists && flag.Kind() == reflect.Bool {
+			flag.SetBool(true)
+		}
 	}
 
 	return
+}
+
+func parseFlagsUntilFirstNonOptionArg(flagSet interface{}, args []string) int {
+	if len(args) == 0 {
+		return -1
+	}
+
+	flagSetValueMap := makeFlagSetValueMap(flagSet)
+
+	i := 0
+	for i < len(args)-1 {
+		nonOpt, shift := parseOption(flagSetValueMap, args[i], args[i+1])
+		if nonOpt {
+			// First non-option
+			return i
+		}
+		i += shift
+	}
+
+	if i < len(args) {
+		nonOpt, _ := parseOption(flagSetValueMap, args[i], "")
+		if nonOpt {
+			// First non-option
+			return i
+		}
+	}
+
+	return -1
 }

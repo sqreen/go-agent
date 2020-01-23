@@ -156,8 +156,10 @@ func (v *instrumentationVisitor) addHookDescriptorType(file *dst.File) {
 func writeHookTable(w io.Writer, hooks []string) error {
 	sort.Strings(hooks)
 
+	// In case the hook descriptor type hasn't been created, we recreate the
+	// type alias again in the hook table file and with a distinct name.
 	const (
-		tableFormat = `var _sqreen_hook_table_array = [...]func(*_sqreen_hook_descriptor_type){%s
+		tableFormat = `var _sqreen_hook_table_array = [...]func(*_sqreen_hook_table_hook_descriptor_type){%s
 }
 //go:linkname _sqreen_hook_table _sqreen_hook_table
 var _sqreen_hook_table = _sqreen_hook_table_array[:]
@@ -165,12 +167,14 @@ var _sqreen_hook_table = _sqreen_hook_table_array[:]
 		tableInitListEntryFormat = "\n\t%s,"
 
 		hookDescriptorForwardFuncDeclFormat = `//go:linkname %[1]s %[1]s
-func %[1]s(*_sqreen_hook_descriptor_type)
+func %[1]s(*_sqreen_hook_table_hook_descriptor_type)
 
 `
 		fileFormat = `package main
 
 import _ "unsafe"
+
+type _sqreen_hook_table_hook_descriptor_type = struct {	Func, Prolog interface{} }
 
 %s
 
