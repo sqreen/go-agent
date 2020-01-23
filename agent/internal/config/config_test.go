@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/sqreen/go-agent/agent/internal/plog"
-	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )

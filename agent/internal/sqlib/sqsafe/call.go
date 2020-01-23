@@ -10,7 +10,7 @@ import (
 	"runtime"
 
 	"github.com/pkg/errors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 // PanicError is an error type wrapping a recovered panic value that happened

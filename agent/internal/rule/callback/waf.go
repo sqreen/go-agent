@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package callback
 
 import (
@@ -15,8 +17,8 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/binding-accessor"
 	"github.com/sqreen/go-agent/agent/internal/httphandler"
 	"github.com/sqreen/go-agent/agent/internal/record"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 	"github.com/sqreen/go-libsqreen/waf"
 	waf_types "github.com/sqreen/go-libsqreen/waf/types"
 )

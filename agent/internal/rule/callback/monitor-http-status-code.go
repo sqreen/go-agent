@@ -2,11 +2,13 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package callback
 
 import (
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 )
 
 func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {

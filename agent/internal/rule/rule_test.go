@@ -11,8 +11,8 @@ import (
 	"crypto/sha512"
 	"encoding/asn1"
 	"encoding/base64"
+	"fmt"
 	"math/big"
-	"net/http"
 	"os"
 	"reflect"
 	"testing"
@@ -21,14 +21,41 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/rule"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func func1(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byte) {}
-func func2(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byte) {}
+type instrumentationMockup struct{ mock.Mock }
+type hookMockup struct{ mock.Mock }
+
+func (i *instrumentationMockup) Find(symbol string) (rule.HookFace, error) {
+	res := i.Called(symbol)
+	err := res.Error(1)
+	if h := res.Get(0); h != nil {
+		return h.(rule.HookFace), err
+	}
+	return nil, err
+}
+
+func (i *instrumentationMockup) ExpectFind(symbol string) *mock.Call {
+	return i.On("Find", symbol)
+}
+
+func (h *hookMockup) Attach(prolog sqhook.PrologCallback) error {
+	return h.Called(prolog).Error(0)
+}
+
+func (h *hookMockup) ExpectAttach(prolog interface{}) *mock.Call {
+	return h.On("Attach", prolog)
+}
+
+//func func1(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byte) {}
+//func func2(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byte) {}
 
 type empty struct{}
+
+var thisPkgPath = reflect.TypeOf(empty{}).PkgPath()
 
 func TestEngineUsage(t *testing.T) {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -36,31 +63,30 @@ func TestEngineUsage(t *testing.T) {
 	publicKey := &privateKey.PublicKey
 
 	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
-	engine := rule.NewEngine(logger, metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0), 100000000), publicKey)
-	hookFunc1 := sqhook.New(func1)
-	require.NotNil(t, hookFunc1)
-	hookFunc2 := sqhook.New(func2)
-	require.NotNil(t, hookFunc2)
+	metrics := metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0), 100000000)
 
 	t.Run("empty state", func(t *testing.T) {
+		instrumentation := &instrumentationMockup{}
+		defer instrumentation.AssertExpectations(t)
+		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+
+		// No problem using the engine without rules
 		require.Empty(t, engine.PackID())
-		engine.SetRules("my pack id", nil, nil)
+		engine.SetRules("my pack id", nil)
 		require.Equal(t, engine.PackID(), "my pack id")
-		// No problem enabling/disabling the engine
 		engine.Enable()
 		engine.Disable()
 		engine.Enable()
-		engine.SetRules("my other pack id", []api.Rule{}, nil)
+		engine.SetRules("my other pack id", []api.Rule{})
 		require.Equal(t, engine.PackID(), "my other pack id")
 	})
 
-	t.Run("multiple rules", func(t *testing.T) {
-		engine.Disable()
-		engine.SetRules("yet another pack id", []api.Rule{
+	t.Run("setting multiple rules", func(t *testing.T) {
+		rules := []api.Rule{
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Class:    thisPkgPath,
 					Method:   "func1",
 					Callback: "WriteCustomErrorPage",
 				},
@@ -85,50 +111,149 @@ func TestEngineUsage(t *testing.T) {
 				},
 				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
 			},
-		}, nil)
+			{
+				Name: "valid rule but no hookpoint",
+				Hookpoint: api.Hookpoint{
+					Class:    "main",
+					Method:   "main",
+					Callback: "WriteCustomErrorPage",
+				},
+				Signature: MakeSignature(privateKey, `{"name":"my rule"}`),
+			},
+			{
+				Name: "valid rule but unknown callback",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func2",
+					Callback: "don't exist",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
+			},
+		}
 
-		t.Run("callbacks are not attached when disabled", func(t *testing.T) {
-			// Check the callbacks were not attached because rules are disabled
-			prologFunc1 := hookFunc1.Prolog()
-			require.Nil(t, prologFunc1)
-			prologFunc2 := hookFunc2.Prolog()
-			require.Nil(t, prologFunc2)
+		t.Run("when disabled", func(t *testing.T) {
+			instrumentation := &instrumentationMockup{}
+			defer instrumentation.AssertExpectations(t)
+
+			hook1 := &hookMockup{}
+			defer hook1.AssertExpectations(t)
+
+			hook2 := &hookMockup{}
+			defer hook2.AssertExpectations(t)
+
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
+
+			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			engine.Disable()
+			engine.SetRules("yet another pack id", rules)
 		})
 
 		t.Run("enabling the rules attaches the callbacks", func(t *testing.T) {
-			// Enable the rules
+			hook1 := &hookMockup{}
+			defer hook1.AssertExpectations(t)
+			hook1.ExpectAttach(mock.Anything).Return(nil).Once()
+
+			hook2 := &hookMockup{}
+			defer hook2.AssertExpectations(t)
+			hook2.ExpectAttach(mock.Anything).Return(nil).Once()
+
+			instrumentation := &instrumentationMockup{}
+			defer instrumentation.AssertExpectations(t)
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
+
+			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			engine.SetRules("my pack id", rules)
+			// Enable the rules: callbacks should be attached
 			engine.Enable()
-			// Check the callbacks were now attached
-			prologFunc1 := hookFunc1.Prolog()
-			require.NotNil(t, prologFunc1)
-			prologFunc2 := hookFunc2.Prolog()
-			require.NotNil(t, prologFunc2)
 		})
 
 		t.Run("disabling the rules removes the callbacks", func(t *testing.T) {
-			// Disable the rules
+			instrumentation := &instrumentationMockup{}
+			hook1 := &hookMockup{}
+			hook2 := &hookMockup{}
+
+			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
+			engine.SetRules("my pack id", rules)
+			instrumentation.AssertExpectations(t)
+
+			// Enable the rules: callbacks should be attached
+			hook1.ExpectAttach(mock.Anything).Return(nil).Once()
+			hook2.ExpectAttach(mock.Anything).Return(nil).Once()
+			engine.Enable()
+			hook1.AssertExpectations(t)
+			hook2.AssertExpectations(t)
+
+			// Disable the rules: callbacks should be removed
+			hook2.ExpectAttach(nil).Return(nil).Once()
+			hook1.ExpectAttach(nil).Return(nil).Once()
 			engine.Disable()
-			// Check the callbacks were all removed for func1 and not func2
-			prologFunc1 := hookFunc1.Prolog()
-			require.Nil(t, prologFunc1)
-			prologFunc2 := hookFunc2.Prolog()
-			require.Nil(t, prologFunc2)
+			hook1.AssertExpectations(t)
+			hook2.AssertExpectations(t)
 		})
 
 		t.Run("enabling the rules again sets back the callbacks", func(t *testing.T) {
-			// Enable again the rules
+			instrumentation := &instrumentationMockup{}
+			hook1 := &hookMockup{}
+			hook2 := &hookMockup{}
+
+			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
+			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
+			engine.SetRules("my pack id", rules)
+			instrumentation.AssertExpectations(t)
+
+			// Enable the rules: callbacks should be attached
+			hook1.ExpectAttach(mock.Anything).Return(nil).Once()
+			hook2.ExpectAttach(mock.Anything).Return(nil).Once()
 			engine.Enable()
-			// Check the callbacks are attached again
-			prologFunc1 := hookFunc1.Prolog()
-			require.NotNil(t, prologFunc1)
-			prologFunc2 := hookFunc2.Prolog()
-			require.NotNil(t, prologFunc2)
+			hook1.AssertExpectations(t)
+			hook2.AssertExpectations(t)
+
+			// Disable the rules: callbacks should be removed
+			hook1.ExpectAttach(nil).Return(nil).Once()
+			hook2.ExpectAttach(nil).Return(nil).Once()
+			engine.Disable()
+			hook1.AssertExpectations(t)
+			hook2.AssertExpectations(t)
+
+			// Re-enable the rules: callbacks should be re-attached
+			hook1.ExpectAttach(mock.Anything).Return(nil).Once()
+			hook2.ExpectAttach(mock.Anything).Return(nil).Once()
+			engine.Enable()
+			hook1.AssertExpectations(t)
+			hook2.AssertExpectations(t)
 		})
 	})
 
 	t.Run("modify enabled rules", func(t *testing.T) {
-		// Modify the rules while enabled
-		engine.SetRules("a pack id", []api.Rule{
+		rules1 := []api.Rule{
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    thisPkgPath,
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"a valid rule"}`),
+			},
 			{
 				Name: "another valid rule",
 				Hookpoint: api.Hookpoint{
@@ -143,28 +268,166 @@ func TestEngineUsage(t *testing.T) {
 				},
 				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
 			},
-		}, nil)
-		// Check the callbacks were removed for func1 and not func2
-		prologFunc1 := hookFunc1.Prolog()
-		require.Nil(t, prologFunc1)
-		prologFunc2 := hookFunc2.Prolog()
-		require.NotNil(t, prologFunc2)
+			{
+				Name: "valid rule but no hookpoint",
+				Hookpoint: api.Hookpoint{
+					Class:    "main",
+					Method:   "main",
+					Callback: "WriteCustomErrorPage",
+				},
+				Signature: MakeSignature(privateKey, `{"name":"my rule"}`),
+			},
+			{
+				Name: "valid rule but unknown callback",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func2",
+					Callback: "don't exist",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
+			},
+		}
+		rules2 := []api.Rule{
+			{
+				Name: "another valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func3",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
+			},
+		}
+
+		instrumentation := &instrumentationMockup{}
+		hook1 := &hookMockup{}
+		hook2 := &hookMockup{}
+		hook3 := &hookMockup{}
+
+		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine.Enable()
+
+		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
+		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+		instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
+		hook1.ExpectAttach(mock.Anything).Return(nil).Once()
+		hook2.ExpectAttach(mock.Anything).Return(nil).Once()
+		engine.SetRules("a pack id", rules1)
+		instrumentation.AssertExpectations(t)
+		hook1.AssertExpectations(t)
+		hook2.AssertExpectations(t)
+
+		// Modify the rules while enabled: hooks no longer used should be disabled
+		hook1.ExpectAttach(nil).Return(nil).Once()           // disabled
+		hook2.ExpectAttach(nil).Return(nil).Once()           // disabled
+		hook3.ExpectAttach(mock.Anything).Return(nil).Once() // enabled
+		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func3")).Return(hook3, nil).Twice()
+		engine.SetRules("another pack id", rules2)
+		hook1.AssertExpectations(t)
+		hook2.AssertExpectations(t)
+		hook3.AssertExpectations(t)
 	})
 
 	t.Run("replace the enabled rules with an empty array of rules", func(t *testing.T) {
-		// Set the rules with an empty array while enabled
-		engine.SetRules("yet another pack id", []api.Rule{}, nil)
-		// Check the callbacks were all removed for func1 and not func2
-		prologFunc1 := hookFunc1.Prolog()
-		require.Nil(t, prologFunc1)
-		prologFunc2 := hookFunc2.Prolog()
-		require.Nil(t, prologFunc2)
+		rules := []api.Rule{
+			{
+				Name: "a valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    thisPkgPath,
+					Method:   "func1",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"a valid rule"}`),
+			},
+			{
+				Name: "another valid rule",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func2",
+					Callback: "WriteCustomErrorPage",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
+			},
+			{
+				Name: "valid rule but no hookpoint",
+				Hookpoint: api.Hookpoint{
+					Class:    "main",
+					Method:   "main",
+					Callback: "WriteCustomErrorPage",
+				},
+				Signature: MakeSignature(privateKey, `{"name":"my rule"}`),
+			},
+			{
+				Name: "valid rule but unknown callback",
+				Hookpoint: api.Hookpoint{
+					Class:    reflect.TypeOf(empty{}).PkgPath(),
+					Method:   "func2",
+					Callback: "don't exist",
+				},
+				Data: api.RuleData{
+					Values: []api.RuleDataEntry{
+						{&api.CustomErrorPageRuleDataEntry{}},
+					},
+				},
+				Signature: MakeSignature(privateKey, `{"name":"another valid rule"}`),
+			},
+		}
+
+		instrumentation := &instrumentationMockup{}
+		hook1 := &hookMockup{}
+		hook2 := &hookMockup{}
+
+		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine.Enable()
+
+		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
+		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+		instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
+		hook1.ExpectAttach(mock.Anything).Return(nil).Once()
+		hook2.ExpectAttach(mock.Anything).Return(nil).Once()
+		engine.SetRules("a pack id", rules)
+		instrumentation.AssertExpectations(t)
+		hook1.AssertExpectations(t)
+		hook2.AssertExpectations(t)
+
+		// Set the rules with an empty array while enabled: hooks should be disabled
+		hook1.ExpectAttach(nil).Return(nil).Once()
+		hook2.ExpectAttach(nil).Return(nil).Once()
+		engine.SetRules("yet another pack id", []api.Rule{})
+		hook1.AssertExpectations(t)
+		hook2.AssertExpectations(t)
 	})
 
-	t.Run("add rules with signature issues", func(t *testing.T) {
+	t.Run("add rules having signature issues", func(t *testing.T) {
 		validSignature := MakeSignature(privateKey, `{"name":"a valid rule"}`).ECDSASignature
 
-		// Modify the rules while enabled
+		instrumentation := &instrumentationMockup{}
+		hook1 := &hookMockup{}
+
+		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine.Enable()
+
+		// Set rules having signature errors
 		engine.SetRules("a pack id", []api.Rule{
 			{
 				Name: "a valid rule",
@@ -237,29 +500,9 @@ func TestEngineUsage(t *testing.T) {
 					},
 				},
 			},
-			{
-				Name: "a valid rule",
-				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func1",
-					Callback: "WriteCustomErrorPage",
-				},
-				Data: api.RuleData{
-					Values: []api.RuleDataEntry{
-						{&api.CustomErrorPageRuleDataEntry{}},
-					},
-				},
-				Signature: api.RuleSignature{
-					ECDSASignature: api.ECDSASignature{
-						Value:   `wrong value`,
-						Message: validSignature.Message,
-					},
-				},
-			},
-		}, nil)
-		// Check the callbacks were removed for func1 and not func2
-		prologFunc1 := hookFunc1.Prolog()
-		require.Nil(t, prologFunc1)
+		})
+		instrumentation.AssertExpectations(t)
+		hook1.AssertExpectations(t)
 	})
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/record"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 type Event interface{}

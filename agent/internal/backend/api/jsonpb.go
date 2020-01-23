@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 var RequestRecordVersion = "20171208"

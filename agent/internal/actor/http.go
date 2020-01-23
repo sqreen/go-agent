@@ -11,7 +11,7 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
 	"github.com/sqreen/go-agent/agent/internal/httphandler"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/agent/types"
 	"github.com/sqreen/go-agent/sdk"
 )

@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package rule
 
 import (
@@ -15,8 +17,8 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 )
 
 // CallbackConstructorFunc is a function returning a callback function or a
@@ -75,7 +77,7 @@ func NewCallbackContext(r *api.Rule, logger Logger, metricsEngine *metrics.Engin
 	if len(r.Metrics) > 0 {
 		metricsStores = make(map[string]*metrics.Store)
 		for _, m := range r.Metrics {
-			metricsStores[m.Name] = metricsEngine.NewStore(m.Name, time.Second*time.Duration(m.Period))
+			metricsStores[m.Name] = metricsEngine.GetStore(m.Name, time.Second*time.Duration(m.Period))
 		}
 		defaultMetricsStore = metricsStores[r.Metrics[0].Name]
 	}

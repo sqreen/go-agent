@@ -14,7 +14,7 @@ import (
 	"math/big"
 
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 // NewECDSAPublicKey creates a ECDSA public key from a PEM public key.

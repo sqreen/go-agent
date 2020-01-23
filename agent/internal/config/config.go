@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/sqreen/go-agent/agent/internal/plog"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 
 	"github.com/spf13/viper"
 )
