@@ -60,8 +60,12 @@ func main() {
 
 	err = forwardCommand(args)
 	var exitErr *exec.ExitError
-	if xerrors.As(err, &exitErr) {
-		os.Exit(exitErr.ExitCode())
+	if err != nil {
+		if xerrors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		} else {
+			log.Fatalln(err)
+		}
 	}
 	os.Exit(0)
 }
