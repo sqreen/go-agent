@@ -36,7 +36,7 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 	if runtime.GOOS == "windows" {
 		toolPath += ".exe"
 	}
-	cmd := exec.Command(godriver, "build", "-o", toolPath, "github.com/sqreen/go-agent/sdk/instrumentation/sqreen")
+	cmd := exec.Command(godriver, "build", "-o", toolPath, "github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
