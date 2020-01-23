@@ -50,7 +50,6 @@ type ProcessInfo struct {
 	name                            string
 	time                            time.Time
 	pid, ppid, euid, egid, uid, gid uint32
-	libSqreenVersion                *string
 }
 
 func (i *Info) GetProcessInfo() *ProcessInfo {
