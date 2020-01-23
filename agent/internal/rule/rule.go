@@ -27,8 +27,8 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/config"
 	"github.com/sqreen/go-agent/agent/internal/metrics"
 	"github.com/sqreen/go-agent/agent/internal/plog"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 )
 
 type Engine struct {

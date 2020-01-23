@@ -7,7 +7,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook/test/testdata/helpers"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook/test/testdata/helpers"
 )
 
 func main() {

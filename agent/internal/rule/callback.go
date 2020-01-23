@@ -17,8 +17,8 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/plog"
 	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 )
 
 // CallbackConstructorFunc is a function returning a callback function or a

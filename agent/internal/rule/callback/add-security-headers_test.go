@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 	"github.com/stretchr/testify/require"
 )
 

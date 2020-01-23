@@ -9,8 +9,8 @@ package callback
 import (
 	"net/http"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 )
 
 // NewAddSecurityHeadersCallbacks returns the native prolog and epilog callbacks

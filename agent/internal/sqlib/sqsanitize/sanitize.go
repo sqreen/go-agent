@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"regexp"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqsafe"
 )
 
 // Scrubber scrubs values according to the key and value regular expressions

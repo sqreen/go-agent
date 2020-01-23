@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook/internal"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook/internal"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 )

@@ -13,10 +13,10 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook/internal"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook/internal"
 )
 
 // Mock the instrumentation tool

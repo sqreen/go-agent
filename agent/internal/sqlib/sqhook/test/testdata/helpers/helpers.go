@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"runtime"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 )
 
 func ShouldNotBeInstrumented(symbol string) {

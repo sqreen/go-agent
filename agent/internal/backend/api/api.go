@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqsanitize"
 )
 
 type AppLoginRequest struct {

@@ -57,7 +57,7 @@ import (
 	"time"
 
 	"github.com/sqreen/go-agent/agent/internal/plog"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 // Engine manages the metrics stores in oder to create new one, and to poll

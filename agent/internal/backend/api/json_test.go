@@ -13,7 +13,7 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/sqreen/go-agent/agent/internal/backend/api"
-	"github.com/sqreen/go-agent/agent/sqlib/sqsanitize"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqsanitize"
 	"github.com/stretchr/testify/require"
 )
 

@@ -6,7 +6,7 @@
 
 package rule
 
-import "github.com/sqreen/go-agent/agent/sqlib/sqhook"
+import "github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 
 type InstrumentationFace interface {
 	Find(symbol string) (HookFace, error)
