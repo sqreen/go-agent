@@ -59,9 +59,14 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 
 	procInfo := appInfo.GetProcessInfo()
 
+	_, bundleSignature, err := appInfo.Dependencies()
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "could not retrieve the dependencies"))
+	}
+
 	appLoginReq := api.AppLoginRequest{
 		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace(procInfo),
-		BundleSignature: "",
+		BundleSignature: bundleSignature,
 		AgentType:       "golang",
 		AgentVersion:    version,
 		OsType:          app.GoBuildTarget(),
@@ -69,10 +74,7 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 		RuntimeVersion:  app.GoVersion(),
 	}
 
-	var (
-		appLoginRes *api.AppLoginResponse
-		err         error
-	)
+	var appLoginRes *api.AppLoginResponse
 
 	backoff := sqtime.NewBackoff(backoffStartDuration, backoffMaxDuration, backoffRate)
 	for {

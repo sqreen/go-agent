@@ -91,6 +91,10 @@ func TestCommandManager(t *testing.T) {
 			AgentCallReturnError:   []interface{}{"", nil},
 			ExpectedOutput:         "my pack id",
 		},
+		{
+			Command:           "get_bundle",
+			ExpectedAgentCall: agent.ExpectSendAppBundle,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -320,6 +324,15 @@ func (a *agentMockup) SetCIDRWhitelist(cidrs []string) error {
 func (a *agentMockup) RulesReload() (string, error) {
 	ret := a.Called()
 	return ret.String(0), ret.Error(1)
+}
+
+func (a *agentMockup) SendAppBundle() error {
+	ret := a.Called()
+	return ret.Error(0)
+}
+
+func (a *agentMockup) ExpectSendAppBundle(...interface{}) *mock.Call {
+	return a.On("SendAppBundle")
 }
 
 func (a *agentMockup) ExpectInstrumentationEnable(...interface{}) *mock.Call {

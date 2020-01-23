@@ -373,6 +373,27 @@ func (a *Agent) ActionsReload() error {
 	return a.actors.SetActions(actions.Actions)
 }
 
+func (a *Agent) SendAppBundle() error {
+	deps, sig, err := a.appInfo.Dependencies()
+	if err != nil {
+		return err
+	}
+
+	bundleDeps := make([]api.AppDependency, len(deps))
+	for i, dep := range deps {
+		bundleDeps[i] = api.AppDependency{
+			Name:    dep.Path,
+			Version: dep.Version,
+		}
+	}
+	bundle := api.AppBundle{
+		Signature:    sig,
+		Dependencies: bundleDeps,
+	}
+
+	return a.client.SendAppBundle(&bundle)
+}
+
 func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
 	return a.actors.SetCIDRWhitelist(cidrs)
 }
