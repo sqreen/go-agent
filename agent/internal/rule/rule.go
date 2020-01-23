@@ -156,10 +156,10 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			}
 		}
 		if hook == nil {
-			logger.Debugf("rule `%s`: could not find the hook of function", r.Name, symbol)
+			logger.Debugf("rule `%s`: could not find the hook of function `%s`", r.Name, symbol)
 			continue
 		} else {
-			logger.Debugf("rule `%s`: successfully found hook `%s`", r.Name, hook)
+			logger.Debugf("rule `%s`: successfully found hook `%v`", r.Name, hook)
 		}
 
 		// Instantiate the callback

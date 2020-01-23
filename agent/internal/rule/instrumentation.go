@@ -25,6 +25,9 @@ func (defaultInstrumentation) Find(symbol string) (HookFace, error) {
 	if err != nil {
 		return nil, err
 	}
+	if hook == nil {
+		return nil, nil
+	}
 	return defaultHook{hook}, nil
 }
 
