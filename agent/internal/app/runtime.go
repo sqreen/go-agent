@@ -5,24 +5,29 @@
 package app
 
 import (
-	"debug/elf"
-	"debug/gosym"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"reflect"
 	"runtime"
+	"runtime/debug"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/agent/internal/plog"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-libsqreen/waf"
 )
 
 type Info struct {
-	logger      *plog.Logger
-	hostname    string
-	processInfo ProcessInfo
+	logger       *plog.Logger
+	hostname     string
+	processInfo  ProcessInfo
+	dependencies []*debug.Module
+	signature    string
 }
 
 func NewInfo(logger *plog.Logger) *Info {
@@ -39,10 +44,6 @@ func NewInfo(logger *plog.Logger) *Info {
 			gid:  uint32(os.Getgid()),
 		},
 	}
-
-}
-
-type Dependency struct {
 }
 
 type ProcessInfo struct {
@@ -114,87 +115,30 @@ func (a *Info) Hostname() string {
 	return a.hostname
 }
 
-func (i *Info) Dependencies() ([]*Dependency, error) {
-	executable := i.processInfo.GetName()
-
-	i.logger.Debug("reading ELF file ", executable)
-	exe, err := elf.Open(executable)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := exe.Close(); err != nil {
-			i.logger.Error(err)
-		}
-	}()
-
-	var pclndat []byte
-	if sec := exe.Section(".gopclntab"); sec != nil {
-		pclndat, err = sec.Data()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read .gopclntab section")
-		}
+func (i *Info) Dependencies() (deps []*debug.Module, sig string, err error) {
+	if i.dependencies != nil {
+		return i.dependencies, i.signature, nil
 	}
 
-	sec := exe.Section(".gosymtab")
-	symTabRaw, err := sec.Data()
-	if err != nil {
-		return nil, err
-	}
-	pcln := gosym.NewLineTable(pclndat, exe.Section(".text").Addr)
-	symTab, err := gosym.NewTable(symTabRaw, pcln)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot create the Go symbol table")
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return nil, "", sqerrors.New("could not read the build information")
 	}
 
-	dependencies := make(map[string]struct{})
-
-	for _, f := range symTab.Funcs {
-		if strings.HasPrefix(f.Name, "type.") ||
-			strings.HasPrefix(f.Name, "go.") ||
-			strings.Index(f.Name, "(") != -1 ||
-			strings.Contains(f.Name, "cgo_") {
-			continue
-		}
-
-		pkg := f.PackageName()
-		if i := strings.LastIndex(pkg, "vendor/"); i != -1 {
-			pkg = pkg[i+len("vendor/"):]
-		}
-
-		if _, exists := dependencies[pkg]; exists {
-			continue
-		}
-		fmt.Println(pkg)
-		dependencies[pkg] = struct{}{}
-	}
-
-	importedLibs, err := exe.ImportedLibraries()
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println(importedLibs)
-	//
-	//	for _, symbol := range importedSymbols {
-	//
-	//	}
-
-	return nil, nil
+	i.dependencies = info.Deps
+	i.signature = bundleSignature(info.Deps)
+	return i.dependencies, i.signature, nil
 }
 
-func packageName(symbol string) string {
-
-	pathend := strings.LastIndex(symbol, "/")
-	if pathend < 0 {
-		pathend = 0
+func bundleSignature(deps []*debug.Module) string {
+	set := make([]string, len(deps))
+	for i, dep := range deps {
+		set[i] = fmt.Sprintf("%s-%s", dep.Path, dep.Version)
 	}
-
-	i := strings.Index(symbol[pathend:], ".")
-	if i == -1 {
-		return ""
-	}
-
-	return symbol[:pathend+i]
+	sort.Strings(set)
+	str := strings.Join(set, "|")
+	sum := sha1.Sum([]byte(str))
+	return hex.EncodeToString(sum[:])
 }
 
 func executable(logger *plog.Logger) string {

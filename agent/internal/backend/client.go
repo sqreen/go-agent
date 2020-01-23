@@ -155,6 +155,15 @@ func (c *Client) RulesPack() (*api.RulesPackResponse, error) {
 	return res, nil
 }
 
+func (c *Client) SendAppBundle(req *api.AppBundle) error {
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.Bundle)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
+	return c.Do(httpReq, req)
+}
+
 // Do performs the request whose body is pbs[0] pointer, while the expected
 // response is pbs[1] pointer. They are optional, and must be used according to
 // the cases request case.

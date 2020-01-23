@@ -28,6 +28,7 @@ type CommandManagerAgent interface {
 	ActionsReload() error
 	SetCIDRWhitelist([]string) error
 	RulesReload() (rulespackID string, err error)
+	SendAppBundle() error
 }
 
 func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
@@ -43,6 +44,7 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 		"actions_reload":         mng.ActionsReload,
 		"ips_whitelist":          mng.IPSWhitelist,
 		"rules_reload":           mng.RulesReload,
+		"get_bundle":             mng.GetBundle,
 	}
 
 	return mng
@@ -109,6 +111,10 @@ func (m *CommandManager) IPSWhitelist(args []json.RawMessage) (string, error) {
 
 func (m *CommandManager) RulesReload([]json.RawMessage) (string, error) {
 	return m.agent.RulesReload()
+}
+
+func (m *CommandManager) GetBundle([]json.RawMessage) (string, error) {
+	return "", m.agent.SendAppBundle()
 }
 
 // commandResult converts an error to a command result API object.

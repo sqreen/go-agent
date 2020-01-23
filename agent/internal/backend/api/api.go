@@ -1022,3 +1022,13 @@ type RulesPackResponse struct {
 	PackID string `json:"pack_id"`
 	Rules  []Rule `json:"rules"`
 }
+
+type AppBundle struct {
+	Signature    string          `json:"bundle_signature"`
+	Dependencies []AppDependency `json:"dependencies"`
+}
+
+type AppDependency struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
