@@ -10,6 +10,7 @@ import (
 )
 
 type instrumentationToolFlagSet struct {
+	Help    bool `sqflag:"-h"`
 	Verbose bool `sqflag:"-v"`
 	Full    bool `sqflag:"-full"`
 }
