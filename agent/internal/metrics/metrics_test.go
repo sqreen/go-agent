@@ -25,44 +25,44 @@ func TestUsage(t *testing.T) {
 
 	t.Run("store usage", func(t *testing.T) {
 		t.Run("empty stores are never ready", func(t *testing.T) {
-			store := engine.NewStore("id 1", time.Microsecond)
+			store := engine.GetStore("id 1", time.Microsecond)
 			require.False(t, store.Ready())
 			time.Sleep(time.Microsecond)
 			require.False(t, store.Ready())
 		})
 
 		t.Run("non-empty stores get ready starting as soon as a value was added", func(t *testing.T) {
-			store := engine.NewStore("id 1", time.Millisecond)
+			// The time delay must be long enough so that the following sleeps should
+			// work on any OS (given the fact sleeping is actually "sleep at least").
+			store := engine.GetStore("id 1", time.Second)
 			require.False(t, store.Ready())
-			time.Sleep(time.Millisecond)
+			time.Sleep(time.Microsecond)
 			// Should be still not ready because no values were added
 			require.False(t, store.Ready())
-			// Now add a value
+			// Now add a value and wait the expiration time
 			store.Add("key 1", 1)
-			// Should be started but still not expired
-			require.False(t, store.Ready())
-			time.Sleep(time.Millisecond)
+			time.Sleep(time.Second)
 			// Should be now expired
 			require.True(t, store.Ready())
 			// Flushing the store should give the map and "restart" the store
 			old := store.Flush()
 			require.False(t, store.Ready())
 			// Should not be expired while empty
-			time.Sleep(time.Millisecond)
+			time.Sleep(time.Microsecond)
 			require.False(t, store.Ready())
 			// The old store should have the stored values
 			require.Equal(t, metrics.ReadyStoreMap{"key 1": 1}, old.Metrics())
 			// Adding a new value to the store and then waiting for it to become ready
-			// should return the net value
+			// should return the new value
 			store.Add("key 2", 3)
-			time.Sleep(time.Millisecond)
+			time.Sleep(time.Second)
 			require.True(t, store.Ready())
 			old = store.Flush()
 			require.Equal(t, metrics.ReadyStoreMap{"key 2": 3}, old.Metrics())
 		})
 
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
-			store := engine.NewStore("id 1", time.Millisecond)
+			store := engine.GetStore("id 1", time.Millisecond)
 			require.False(t, store.Ready())
 			store.Add("key 1", 1)
 			time.Sleep(time.Millisecond)
@@ -82,7 +82,7 @@ func TestUsage(t *testing.T) {
 		})
 
 		t.Run("key types", func(t *testing.T) {
-			store := engine.NewStore("id 1", time.Millisecond)
+			store := engine.GetStore("id 1", time.Millisecond)
 
 			t.Run("non comparable key types are not allowed and do not panic", func(t *testing.T) {
 				type Struct2 struct {
@@ -168,7 +168,7 @@ func TestUsage(t *testing.T) {
 		readerPeriod := time.Microsecond
 		metricsStorePeriod := 4 * readerPeriod
 		tick := time.Tick(readerPeriod)
-		store := engine.NewStore("id", metricsStorePeriod)
+		store := engine.GetStore("id", metricsStorePeriod)
 
 		// Signal channel between this test and the reader to tear down the test
 		done := make(chan struct{})
@@ -264,8 +264,8 @@ func TestUsage(t *testing.T) {
 		var maxLen uint = 3
 		engine := metrics.NewEngine(logger, maxLen)
 		period := time.Millisecond
-		s1 := engine.NewStore("s1", period)
-		errors := engine.NewStore("errors", period)
+		s1 := engine.GetStore("s1", period)
+		errors := engine.GetStore("errors", period)
 
 		require.NoError(t, s1.Add("k1", 1))
 		require.NoError(t, s1.Add("k1", 1))
@@ -321,7 +321,7 @@ func BenchmarkStore(b *testing.B) {
 		b.Run("integer key type", func(b *testing.B) {
 			b.Run("non existing keys", func(b *testing.B) {
 				b.Run("using MetricsStore", func(b *testing.B) {
-					store := engine.NewStore("id", time.Minute)
+					store := engine.GetStore("id", time.Minute)
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						_ = store.Add(n, 1)
@@ -339,7 +339,7 @@ func BenchmarkStore(b *testing.B) {
 
 			b.Run("already existing key", func(b *testing.B) {
 				b.Run("using MetricsStore", func(b *testing.B) {
-					store := engine.NewStore("id", time.Minute)
+					store := engine.GetStore("id", time.Minute)
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						_ = store.Add(42, 1)
@@ -363,7 +363,7 @@ func BenchmarkStore(b *testing.B) {
 				}
 
 				b.Run("using MetricsStore", func(b *testing.B) {
-					store := engine.NewStore("id", time.Minute)
+					store := engine.GetStore("id", time.Minute)
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						key.n = n
@@ -387,7 +387,7 @@ func BenchmarkStore(b *testing.B) {
 					s: testlib.RandPrintableUSASCIIString(50),
 				}
 				b.Run("using MetricsStore", func(b *testing.B) {
-					store := engine.NewStore("id", time.Minute)
+					store := engine.GetStore("id", time.Minute)
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						_ = store.Add(key, 1)
@@ -412,7 +412,7 @@ func BenchmarkStore(b *testing.B) {
 				b.Run("integer key type", func(b *testing.B) {
 					b.Run("same non existing keys", func(b *testing.B) {
 						b.Run("using MetricsStore", func(b *testing.B) {
-							store := engine.NewStore("id", time.Minute)
+							store := engine.GetStore("id", time.Minute)
 							b.ResetTimer()
 							b.SetParallelism(p)
 							b.RunParallel(func(pb *testing.PB) {
@@ -440,7 +440,7 @@ func BenchmarkStore(b *testing.B) {
 
 					b.Run("same key", func(b *testing.B) {
 						b.Run("using MetricsStore", func(b *testing.B) {
-							store := engine.NewStore("id", time.Minute)
+							store := engine.GetStore("id", time.Minute)
 							b.ResetTimer()
 							b.SetParallelism(p)
 							b.RunParallel(func(pb *testing.PB) {
@@ -465,7 +465,7 @@ func BenchmarkStore(b *testing.B) {
 				b.Run("structure key type", func(b *testing.B) {
 					b.Run("same non existing keys", func(b *testing.B) {
 						b.Run("using MetricsStore", func(b *testing.B) {
-							store := engine.NewStore("id", time.Minute)
+							store := engine.GetStore("id", time.Minute)
 							b.ResetTimer()
 							b.SetParallelism(p)
 							b.RunParallel(func(pb *testing.PB) {
@@ -502,7 +502,7 @@ func BenchmarkStore(b *testing.B) {
 						}
 
 						b.Run("using MetricsStore", func(b *testing.B) {
-							store := engine.NewStore("id", time.Minute)
+							store := engine.GetStore("id", time.Minute)
 							b.ResetTimer()
 							b.SetParallelism(p)
 							b.RunParallel(func(pb *testing.PB) {
@@ -548,7 +548,7 @@ func BenchmarkUsage(b *testing.B) {
 				b.Run("integer key type", func(b *testing.B) {
 					b.Run("concurrent writes to the same key", func(b *testing.B) {
 						b.SetParallelism(p)
-						store := engine.NewStore("id", time.Minute)
+						store := engine.GetStore("id", time.Minute)
 						b.ResetTimer()
 						b.RunParallel(func(pb *testing.PB) {
 							for pb.Next() {
@@ -560,7 +560,7 @@ func BenchmarkUsage(b *testing.B) {
 
 					b.Run("concurrent writes to multiple keys", func(b *testing.B) {
 						b.SetParallelism(p)
-						store := engine.NewStore("id", time.Minute)
+						store := engine.GetStore("id", time.Minute)
 						b.ResetTimer()
 						b.RunParallel(func(pb *testing.PB) {
 							n := 0

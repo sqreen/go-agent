@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 // Package metrics provides shared metrics stores. A metrics store is a
 // key/value store with a given time period after which the data is considered
 // ready. This package provides an implementation optimized for writes updating
@@ -55,7 +57,7 @@ import (
 	"time"
 
 	"github.com/sqreen/go-agent/agent/internal/plog"
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 // Engine manages the metrics stores in oder to create new one, and to poll
@@ -75,8 +77,12 @@ func NewEngine(logger plog.DebugLogger, maxMetricsStoreLen uint) *Engine {
 	}
 }
 
-// NewStore creates and registers a new metrics store.
-func (e *Engine) NewStore(id string, period time.Duration) *Store {
+// GetStore creates and registers a new metrics store when it does not exist. It
+// returns the existing one otherwise.
+func (e *Engine) GetStore(id string, period time.Duration) *Store {
+	if s, exists := e.stores[id]; exists {
+		return s
+	}
 	store := newStore(period, e.maxMetricsStoreLen)
 	e.stores[id] = store
 	return store

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"unicode"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 )
 
 func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {

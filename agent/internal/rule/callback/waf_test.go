@@ -19,7 +19,7 @@ import (
 	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/internal/rule"
 	"github.com/sqreen/go-agent/agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/sqreen/go-agent/tools/testlib/testmock"
 	"github.com/sqreen/go-libsqreen/waf"

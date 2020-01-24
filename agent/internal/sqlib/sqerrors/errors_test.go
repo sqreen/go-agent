@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
 	"github.com/stretchr/testify/require"
 )
 

@@ -7,7 +7,7 @@ package sqhttp
 import (
 	"net/http"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	_ "github.com/sqreen/go-agent/agent"
 	"github.com/sqreen/go-agent/sdk"
 	"golang.org/x/xerrors"
 )
@@ -110,22 +110,8 @@ func MiddlewareWithError(next Handler) Handler {
 
 // waf is dynamically instrumented when required in order to apply WAF
 // protection rules on the request. It blocks the request when necessary.
+//go:noinline
 func waf(w http.ResponseWriter, r *http.Request) (err error) {
-	{
-		type Epilog = func(*error)
-		type Prolog = func(*http.ResponseWriter, **http.Request) (Epilog, error)
-		prolog := wafHook.Prolog()
-		if prolog, ok := prolog.(Prolog); ok {
-			epilog, err := prolog(&w, &r)
-			if epilog != nil {
-				defer epilog(&err)
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	return
 }
 
@@ -153,41 +139,9 @@ func (AbortRequestError) Error() string {
 	return "request aborted"
 }
 
-// addSecurityHeaders is a mean to add a hook to the function closure returned
-// by MiddlewareWithError() since it is not possible to get the symbol of
-// function closures at compilation-time, so it is not possible to create a hook
-// with the address of the function closure. The solution for this precise case
-// where only a prolog is enough is therefore to simply define a function having
-// a hook and called by the closure.
+//go:noinline
 func addSecurityHeaders(w http.ResponseWriter) (err error) {
-	{
-		type Epilog = func(*error)
-		type Prolog = func(*http.ResponseWriter) (Epilog, error)
-		prolog := addSecurityHeaderHook.Prolog()
-		if prolog, ok := prolog.(Prolog); ok {
-			epilog, err := prolog(&w)
-			if epilog != nil {
-				defer epilog(&err)
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	return nil
-}
-
-var (
-	addSecurityHeaderHook     *sqhook.Hook
-	responseWriterWriteHeader *sqhook.Hook
-	wafHook                   *sqhook.Hook
-)
-
-func init() {
-	addSecurityHeaderHook = sqhook.New(addSecurityHeaders)
-	responseWriterWriteHeader = sqhook.New(responseWriter.WriteHeader)
-	wafHook = sqhook.New(waf)
 }
 
 type ResponseWriter = responseWriter
@@ -196,22 +150,8 @@ type responseWriter struct {
 	http.ResponseWriter
 }
 
+//go:noinline
 func (w responseWriter) WriteHeader(statusCode int) {
-	{
-		type Epilog = func()
-		type Prolog = func(sqhook.MethodReceiver, *int) (Epilog, error)
-		prolog := responseWriterWriteHeader.Prolog()
-		if prolog, ok := prolog.(Prolog); ok {
-			epilog, err := prolog(sqhook.MethodReceiver{&w}, &statusCode)
-			if epilog != nil {
-				defer epilog()
-			}
-			if err != nil {
-				return
-			}
-		}
-	}
-
 	if w.ResponseWriter != nil {
 		w.ResponseWriter.WriteHeader(statusCode)
 	}

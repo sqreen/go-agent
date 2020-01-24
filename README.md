@@ -5,7 +5,6 @@
 [![Release](https://img.shields.io/github/release/sqreen/go-agent.svg)](https://github.com/sqreen/go-agent/releases)
 [![GoDoc](https://godoc.org/github.com/sqreen/go-agent?status.svg)](https://godoc.org/github.com/sqreen/go-agent)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sqreen/go-agent)](https://goreportcard.com/report/github.com/sqreen/go-agent)
-[![codecov](https://codecov.io/gh/sqreen/go-agent/branch/master/graph/badge.svg)](https://codecov.io/gh/sqreen/go-agent)
 [![Build Status](https://dev.azure.com/sqreenci/Go%20Agent/_apis/build/status/sqreen.go-agent?branchName=master)](https://dev.azure.com/sqreenci/Go%20Agent/_build/latest?definitionId=8&branchName=master)
 [![Sourcegraph](https://sourcegraph.com/github.com/sqreen/go-agent/-/badge.svg)](https://sourcegraph.com/github.com/sqreen/go-agent?badge)
 
@@ -31,33 +30,64 @@ Sqreen provides automatic defense against attacks:
 
 For more details, visit [sqreen.com](https://www.sqreen.com/)
 
-# Installation
-
-Installing the agent is just installing a regular Go package. Simply import it
-and let the toolchain do the job.
-
-
-1. Import the agent package into the `main` package of your app:
-
-    ```go
-    import _ "github.com/sqreen/go-agent/agent"
-    ```
+# Quick start
 
 1. Use the middleware function for the Go web framework you use:
    - [sqhttp](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp) for the standard `net/http` package.
    - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin) for `github.com/gin-gonic/gin`.
    - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho) for `github.com/labstack/echo`.
-   
-   If your framework is not in the list, it is usually possible to use the
-   standard `net/http` middleware. If not, please, [create an issue](http://github.com/sqreen/go-agent/issues/new)
-   to let us know.
 
+   If your framework is not listed, it is usually possible to use instead the
+   standard `net/http` middleware. If not, please, let us know by [creating an
+   issue](http://github.com/sqreen/go-agent/issues/new).
+
+1. Without Go modules: Download the new dependencies
+
+   `go get` will automatically download the new dependencies of the SDK, including
+   Sqreen's agent for Go:
+
+   ```consol
+   $ go get -d -v ./...
+   ```
+
+1. Compile your program with Sqreen
+
+   Sqreen's dynamic configuration of your protection is made possible thanks to
+   Go instrumentation. It is safely performed at compilation time by the following
+   instrumentation tool.
+
+   Install the following instrumentation tool and compile your program using it in
+   order to enable Sqreen.
+
+   1. Use `go install` to compile the instrumentation tool:
+
+      ```console
+      $ go install github.com/sqreen/go-agent/sdk/sqreen-instrumentation
+      ```
+
+      By default, the resulting `sqreen-instrumentation` tool is installed in the
+      `bin` directory of the `GOPATH`. You can find it using `go env GOPATH`.
+
+   1. Configure the Go toolchain to use it:
+
+      Use the instrumentation tool using the go options
+      `-a -toolexec /path/to/sqreen-instrumentation`.
+
+      It can be done either in your Go compilation command lines or by setting the
+      `GOFLAGS` environment variable.
+      
+      For example, the following two commands are equivalent:
+      ```console
+      $ go build -a -toolexec $(go env GOPATH)/bin/sqreen-instrumentation my-project
+      $ env GOFLAGS="-a -toolexec $(go env GOPATH)/bin/sqreen-instrumentation" go build my-project
+      ```
+    
 1. [Signup to Sqreen](https://my.sqreen.io/signup) to get a token for your app,
    and store it in the agent's configuration file `sqreen.yaml`:
    
     ```sh
+    app_name: Your Go service name
     token: your token
-    app_name: Your App Name
     ```
    
    This file can be stored in your current working directory when starting the
@@ -70,13 +100,11 @@ and let the toolchain do the job.
    agent version.
 
 1. Optionally, use the [SDK](https://godoc.org/github.com/sqreen/go-agent/sdk)
-   to send security [events related to
-   users](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.ForUser)
-   (eg. signing-in) or completely [custom security-related
-   events](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.TrackEvent)
+   to perform [user monitoring](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.ForUser)
+   (eg. signing-in) or [custom security events](https://godoc.org/github.com/sqreen/go-agent/sdk#HTTPRequestRecord.TrackEvent)
    you would like to track (eg. password changes).
 
-Find out more about the agent installation at https://docs.sqreen.com/go/installation/
+Find out more about the agent setup at https://docs.sqreen.com/go/installation/
 
 # Licensing
 

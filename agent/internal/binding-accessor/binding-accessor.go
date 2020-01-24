@@ -16,8 +16,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sqreen/go-agent/agent/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/sqlib/sqsafe"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqsafe"
 )
 
 // Context is the data type a binding accessor expression is executed with.

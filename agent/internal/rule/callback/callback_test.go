@@ -10,7 +10,7 @@ import (
 
 	"github.com/sqreen/go-agent/agent/internal/record"
 	"github.com/sqreen/go-agent/agent/internal/rule"
-	"github.com/sqreen/go-agent/agent/sqlib/sqhook"
+	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
