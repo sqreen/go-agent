@@ -6,11 +6,11 @@
   your Go programs is made possible at run time thanks to Go instrumentation.
   It is a building block of the upcoming run time self-protection (aka RASP) and
   it is safely performed at compilation time by an instrumentation tool that
-  seamlessly integrates with the Go toolchain. To begin, only a specific set of
-  Go packages are instrumented: the agent and `database/sql` (to prepare the
-  upcoming SQL injection protection).
+  seamlessly integrates with the Go toolchain. To begin with, only a specific
+  set of Go packages are instrumented: the agent and `database/sql` (to prepare
+  the upcoming SQL injection protection).
 
-  Please, find out to install and use the tool on the new agent installation
+  Please, find out how to install and use the tool on the new agent installation
   documentation available at https://docs.sqreen.com/go/installation/.
 
 ## New Features
@@ -22,7 +22,7 @@
 - (#91) The program dependencies are now sent to Sqreen to perform dependency
   analysis (outdated, vulnerable, etc.). They are only available when the Go
   program you compile is a Go module. Sqreen's dashboard Dependency page will
-  be soon unlocked.
+  made available be soon.
 
 ## Fix
 
