@@ -1,3 +1,62 @@
+# v0.1.0-beta.10
+
+## Breaking Change
+
+- (#89) Go instrumentation: Sqreen's dynamic configuration of the protection
+  your Go programs is made possible at run time thanks to Go instrumentation.
+  It is a building block of the upcoming run time self-protection (aka RASP) and
+  it is safely performed at compilation time by an instrumentation tool that
+  seamlessly integrates with the Go toolchain. To begin with, only a specific
+  set of Go packages are instrumented: the agent and `database/sql` (to prepare
+  the upcoming SQL injection protection).
+
+  Please, find out how to install and use the tool on the new agent installation
+  documentation available at https://docs.sqreen.com/go/installation/.
+
+## New Features
+
+- (#90) The SDK now imports the agent package to no longer have to import it in the
+  `main` package. The SDK is indeed mandatory when setting up Sqreen for Go,
+  making it the best place to import the agent.
+
+- (#91) The program dependencies are now sent to Sqreen to perform dependency
+  analysis (outdated, vulnerable, etc.). They are only available when the Go
+  program you compile is a Go module. Sqreen's dashboard Dependency page will
+  made available be soon.
+
+## Fix
+
+- (#92) Vendoring using `go mod vendor` could lead to compilation errors due to
+  missing files.
+
+# v0.1.0-beta.9
+
+## New Features
+
+- Request parameters such as query or post parameters are now added in the attack
+  events and shown in the attack logs and in the event explorer pages of our dashboard. (#84)
+
+- PII scrubbing is now performed on every event sent to Sqreen, as documented
+  on https://docs.sqreen.com/guides/how-sqreen-works/#pii-scrubbing. (#86)
+
+## Fixes
+
+- Add PII scrubbing to the WAF logs that may include data from the request. (#87)
+
+## Internal Changes
+
+- The In-App WAF has been intensively optimized so that large requests can no longer impact
+  its execution time. (#83)
+
+# v0.1.0-beta.8
+
+## Internal Changes
+
+- In-App WAF:
+  - Dynamically set the WAF timeout (#79).
+  - Ignore WAF timeout errors and add more context when reporting an error (#80).
+  - Update the libsqreen to v0.4.0 to add support for the `@pm` operator.
+
 # v0.1.0-beta.7
 
 ## Breaking Changes

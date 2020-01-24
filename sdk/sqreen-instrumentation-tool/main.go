@@ -25,7 +25,7 @@ func main() {
 
 	args := os.Args[1:]
 	cmd, cmdArgPos, err := parseCommand(&globalFlags, args)
-	if err != nil {
+	if err != nil || globalFlags.Help {
 		log.Println(err)
 		printUsage()
 		os.Exit(1)
@@ -60,8 +60,12 @@ func main() {
 
 	err = forwardCommand(args)
 	var exitErr *exec.ExitError
-	if xerrors.As(err, &exitErr) {
-		os.Exit(exitErr.ExitCode())
+	if err != nil {
+		if xerrors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		} else {
+			log.Fatalln(err)
+		}
 	}
 	os.Exit(0)
 }
@@ -81,8 +85,38 @@ func forwardCommand(args []string) error {
 }
 
 func printUsage() {
-	const usageMessage = "printUsage: TODO\n"
-	_, _ = fmt.Fprint(os.Stderr, usageMessage)
+	const usageFormat = `Usage: go {build,install,get,test} -a -toolexec '%s [-v] [-full]' PACKAGES...
+
+Sqreen's instrumentation tool for Go. It instruments Go source code at
+compilation time by adding hooks on every instrumented functions. The set of
+instrumented functions is restricted to a few required packages by default but
+can be fully performed on every package by using option -full. Low-level package
+such as cgo or the runtime are never instrumented. The verbose output can be
+enabled using option -v and gives some details about the instrumentation.
+It is integrated into the go toolchain thanks to the option -toolexec and must
+be used along with option -a so that every package is compiled no matter the
+previously cached compilations.
+
+Note that Sqreen's Go agent provides the instrumentation engine and therefore
+needs to be imported by the compiled package to be able to link.
+
+Options:
+        -h
+                Print this usage message.
+        -v
+                Verbose mode. Detailed logs will be printed by the tool.
+        -full
+                Perform a full instrumentation of the program.
+
+To see the instrumented code, use the go option -work in order to keep the
+build directory. It will contain every instrumented Go source file.
+
+Limitations:
+- Debugging an instrumented program is possible by using the Go option -work so
+  that debuggers can find the instrumented Go source code into the build
+  directory. Better debugging support will be added in the future.
+`
+	_, _ = fmt.Fprintf(os.Stderr, usageFormat, os.Args[0])
 	os.Exit(2)
 }
 
