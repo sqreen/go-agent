@@ -19,7 +19,7 @@ jobs:
       vmImage: ubuntu-latest
       go:
         container: julio/azure-pipelines-golang
-        versions: [ rc-alpine, 1.13-alpine, 1.12-alpine ]
+        versions: [ 1.13-alpine, 1.12-alpine ]
         targets:
           GOARCH: [ amd64 ]
 
