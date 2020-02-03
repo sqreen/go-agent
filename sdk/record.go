@@ -7,7 +7,7 @@ package sdk
 import (
 	"context"
 
-	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/types"
 )
 
 // HTTPRequestRecord is the SDK record associated to a HTTP request. Its methods

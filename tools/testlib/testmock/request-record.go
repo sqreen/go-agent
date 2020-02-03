@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/types"
 	"github.com/stretchr/testify/mock"
 )
 

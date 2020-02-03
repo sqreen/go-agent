@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/types"
 )
 
 // EventProperties is an interface type representing extra custom event

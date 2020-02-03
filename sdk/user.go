@@ -7,7 +7,7 @@ package sdk
 import (
 	"net/http"
 
-	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/types"
 )
 
 // UserHTTPRequestRecord is the SDK record associated to a HTTP request for a

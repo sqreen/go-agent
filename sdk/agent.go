@@ -7,7 +7,7 @@ package sdk
 import (
 	"net/http"
 
-	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/types"
 )
 
 // The agent entry points are disabled by default. It must set its entry points

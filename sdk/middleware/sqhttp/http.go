@@ -7,7 +7,7 @@ package sqhttp
 import (
 	"net/http"
 
-	_ "github.com/sqreen/go-agent/agent"
+	_ "github.com/sqreen/go-agent"
 	"github.com/sqreen/go-agent/sdk"
 	"golang.org/x/xerrors"
 )

@@ -7,7 +7,7 @@ package testlib
 import (
 	"net/http"
 
-	"github.com/sqreen/go-agent/agent/types"
+	"github.com/sqreen/go-agent/types"
 	"github.com/sqreen/go-agent/tools/testlib/testmock"
 	"github.com/stretchr/testify/mock"
 )
