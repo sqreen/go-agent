@@ -13,6 +13,7 @@ import (
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
+	"gopkg.in/go-playground/assert.v1"
 )
 
 type contextWithMethods struct{}
@@ -37,6 +38,15 @@ func TestBindingAccessor(t *testing.T) {
 		ExpectedCompilationError bool
 	}{
 		{
+			Title:      "nil value",
+			Expression: `nil`,
+			Context: struct {
+				A string
+				B int
+			}{A: "Sqreen", B: 33},
+			ExpectedValue: nil,
+		},
+		{
 			Title:      "context value",
 			Expression: `#`,
 			Context: struct {
@@ -59,6 +69,25 @@ func TestBindingAccessor(t *testing.T) {
 			Expression:    `#['One']`,
 			Context:       map[string]string{"One": "Sqreen"},
 			ExpectedValue: "Sqreen",
+		},
+		{
+			Title:      "function value",
+			Expression: `#.A(#.B)`,
+			Context: struct {
+				A func(int) (int, error)
+				B int
+			}{A: func(i int) (int, error) { return i, nil }, B: 23},
+			ExpectedValue: 23,
+		},
+		{
+			Title:      "function value",
+			Expression: `#.A(#.C.D).B`,
+			Context: struct {
+				A func(struct{ A, B, C, D string }) (struct{ A, B, C, D string }, error)
+				B int
+				C struct{ D struct{ A, B, C, D string } }
+			}{A: func(d struct{ A, B, C, D string }) (struct{ A, B, C, D string }, error) { return d, nil }, B: 23, C: struct{ D struct{ A, B, C, D string } }{D: struct{ A, B, C, D string }{B: "yes"}}},
+			ExpectedValue: "yes",
 		},
 		{
 			Title:      "field value",
@@ -89,6 +118,24 @@ func TestBindingAccessor(t *testing.T) {
 				B: 33,
 			},
 			ExpectedValue: 42,
+		},
+		{
+			Title:      "pointer field traversal",
+			Expression: `#.A.C`,
+			Context: struct {
+				A *struct{ C string }
+				B int
+			}{A: &struct{ C string }{C: "Sqreen"}, B: 33},
+			ExpectedValue: "Sqreen",
+		},
+		{
+			Title:      "nil pointer field traversal",
+			Expression: `#.A.C`,
+			Context: struct {
+				A *struct{ C string }
+				B int
+			}{A: nil, B: 33},
+			ExpectedExecutionError: true,
 		},
 		{
 			Title:         "interface value",
@@ -133,6 +180,15 @@ func TestBindingAccessor(t *testing.T) {
 			Expression:    `#.MyMethodField2`,
 			Context:       &contextWithMethods{},
 			ExpectedValue: "Sqreen",
+		},
+		{
+			Title:      "Nil pointer field access",
+			Expression: `#.B.C`,
+			Context: struct {
+				A string
+				B *struct{ C int }
+			}{},
+			ExpectedExecutionError: true,
 		},
 		{
 			Title:                  "method",
@@ -523,3 +579,17 @@ func TestBindingAccessorUsage(t *testing.T) {
 }
 
 type FlattenedResult []interface{}
+
+func requireEqualFlatResult(t *testing.T, expected FlattenedResult, value interface{}) {
+	got := value.([]interface{})
+	require.Equal(t, len(expected), len(got), got)
+loop:
+	for _, f := range expected {
+		for _, g := range got {
+			if assert.IsEqual(g, f) {
+				continue loop
+			}
+		}
+		require.Failf(t, "missing expected value", "expected `%v` having type `%T`", f, f)
+	}
+}

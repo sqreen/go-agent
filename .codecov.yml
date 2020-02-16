@@ -1,6 +1,0 @@
-comment:
-  layout: "header, reach, changes, diff, flags, files"
-  behavior: default
-
-ignore:
-  - "*.go"

@@ -185,7 +185,7 @@ func (s *Store) Add(key interface{}, delta uint64) error {
 			// operation because of possible concurrent `Flush()`.
 		} else {
 			if l := len(s.set); l == 0 {
-				// Set the deadline when the first valuMaxMetricsStoreLengthe inserted into the metrics store
+				// Set the deadline when this is the first value inserted into the store
 				s.deadline = time.Now().Add(s.period)
 			} else if s.maxLen > 0 && uint(l) >= s.maxLen {
 				// The maximum length is reached - no more new insertions are allowed

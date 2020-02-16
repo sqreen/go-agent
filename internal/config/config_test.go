@@ -92,7 +92,7 @@ func TestUserConfig(t *testing.T) {
 		os.Setenv("SQREEN_TOKEN", testlib.RandUTF8String(2, 30))
 		defer os.Unsetenv("SQREEN_TOKEN")
 
-		getCfgValue := cfg.Disable
+		getCfgValue := cfg.Disabled
 		defaultValue := false
 		envKey := configKeyDisable
 		someValue := testlib.RandUTF8String(2, 30)

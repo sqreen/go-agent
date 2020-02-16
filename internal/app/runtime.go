@@ -18,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
-	"github.com/sqreen/go-libsqreen/waf"
 )
 
 type Info struct {
@@ -55,40 +54,36 @@ func (i *Info) GetProcessInfo() *ProcessInfo {
 	return &i.processInfo
 }
 
-func (p *ProcessInfo) GetName() string {
+func (p *ProcessInfo) Name() string {
 	return p.name
 }
 
-func (p *ProcessInfo) GetTime() time.Time {
+func (p *ProcessInfo) StartTime() time.Time {
 	return p.time
 }
 
-func (p *ProcessInfo) GetPid() uint32 {
+func (p *ProcessInfo) Pid() uint32 {
 	return p.pid
 }
 
-func (p *ProcessInfo) GetPpid() uint32 {
+func (p *ProcessInfo) Ppid() uint32 {
 	return p.ppid
 }
 
-func (p *ProcessInfo) GetEuid() uint32 {
+func (p *ProcessInfo) Euid() uint32 {
 	return p.euid
 }
 
-func (p *ProcessInfo) GetEgid() uint32 {
+func (p *ProcessInfo) Egid() uint32 {
 	return p.egid
 }
 
-func (p *ProcessInfo) GetUid() uint32 {
+func (p *ProcessInfo) Uid() uint32 {
 	return p.uid
 }
 
-func (p *ProcessInfo) GetGid() uint32 {
+func (p *ProcessInfo) Gid() uint32 {
 	return p.gid
-}
-
-func (p *ProcessInfo) GetLibSqreenVersion() *string {
-	return waf.Version()
 }
 
 func GoVersion() string {
@@ -120,7 +115,8 @@ func (i *Info) Dependencies() (deps []*debug.Module, sig string, err error) {
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return nil, "", sqerrors.New("could not read the build information")
+		// Return an error but also the signature of the empty dependency bundle
+		return nil, bundleSignature(deps), sqerrors.New("could not read the go build information - only available with go modules")
 	}
 
 	i.dependencies = info.Deps
@@ -130,8 +126,14 @@ func (i *Info) Dependencies() (deps []*debug.Module, sig string, err error) {
 
 func bundleSignature(deps []*debug.Module) string {
 	set := make([]string, len(deps))
+	var strBuilder strings.Builder
 	for i, dep := range deps {
-		set[i] = fmt.Sprintf("%s-%s", dep.Path, dep.Version)
+		strBuilder.Reset()
+		strBuilder.Grow(len(dep.Path) + len(dep.Version) + 1)
+		strBuilder.WriteString(dep.Path)
+		strBuilder.WriteByte('-')
+		strBuilder.WriteString(dep.Version)
+		set[i] = strBuilder.String()
 	}
 	sort.Strings(set)
 	str := strings.Join(set, "|")

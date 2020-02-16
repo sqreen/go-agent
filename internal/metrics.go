@@ -7,23 +7,19 @@ package internal
 import (
 	"encoding/json"
 
+	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
-	"github.com/sqreen/go-agent/internal/record"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 )
 
-func (a *Agent) AddUserEvent(event record.UserEventFace) {
-	if a.config.Disable() || a.metrics == nil {
-		// Disabled or not yet initialized agent
-		return
-	}
+func (a *AgentType) addUserEvent(e event.UserEventFace) {
 	var (
 		store  *metrics.Store
 		logFmt string
 	)
-	var uevent *record.UserEvent
-	switch actual := event.(type) {
-	case *record.AuthUserEvent:
+	var uevent *event.UserEvent
+	switch actual := e.(type) {
+	case *event.AuthUserEvent:
 		uevent = actual.UserEvent
 		if actual.LoginSuccess {
 			store = a.staticMetrics.sdkUserLoginSuccess
@@ -32,7 +28,7 @@ func (a *Agent) AddUserEvent(event record.UserEventFace) {
 			store = a.staticMetrics.sdkUserLoginFailure
 			logFmt = "user event: user login failure `%+v`"
 		}
-	case *record.SignupUserEvent:
+	case *event.SignupUserEvent:
 		uevent = actual.UserEvent
 		store = a.staticMetrics.sdkUserSignup
 		logFmt = "user event: user signup `%+v`"
@@ -61,11 +57,7 @@ func (a *Agent) AddUserEvent(event record.UserEventFace) {
 	}
 }
 
-func (a *Agent) AddWhitelistEvent(matchedWhitelistEntry string) {
-	if a.config.Disable() || a.metrics == nil {
-		// Agent is disabled or not yet initialized
-		return
-	}
+func (a *AgentType) addWhitelistEvent(matchedWhitelistEntry string) {
 	a.logger.Debug("request whitelisted for `%s`", matchedWhitelistEntry)
 	err := a.staticMetrics.whitelistedIP.Add(matchedWhitelistEntry, 1)
 	if err != nil {
@@ -82,15 +74,15 @@ func (a *Agent) AddWhitelistEvent(matchedWhitelistEntry string) {
 	}
 }
 
-func UserEventMetricsStoreKey(event *record.UserEvent) (json.Marshaler, error) {
+func UserEventMetricsStoreKey(e *event.UserEvent) (json.Marshaler, error) {
 	var keys [][]interface{}
-	for prop, val := range event.UserIdentifiers {
+	for prop, val := range e.UserIdentifiers {
 		keys = append(keys, []interface{}{prop, val})
 	}
 	jsonKeys, _ := json.Marshal(keys)
 	return userMetricsKey{
 		Keys: string(jsonKeys),
-		IP:   event.IP.String(),
+		IP:   e.IP.String(),
 	}, nil
 }
 

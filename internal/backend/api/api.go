@@ -35,6 +35,8 @@ type AppLoginRequest_VariousInfos struct {
 	Gid              uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
 	Name             string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
 	LibSqreenVersion *string   `json:"libsqreen_version"`
+	HasDependencies  bool      `json:"has_dependencies"`
+	HasLibsqreen     bool      `json:"has_libsqreen"`
 }
 
 type AppLoginResponse struct {
@@ -181,7 +183,7 @@ type Rule struct {
 }
 
 type RuleConditions struct{}
-type RuleCallbacks struct{}
+type RuleCallbacks map[string][]string
 
 type ECDSASignature struct {
 	Keys  []string `json:"keys"`
@@ -202,7 +204,7 @@ type MetricDefinition struct {
 }
 
 type Hookpoint struct {
-	Class    string `json:"klass"`
+	Strategy string `json:"strategy"`
 	Method   string `json:"method"`
 	Callback string `json:"callback_class"`
 }
@@ -214,9 +216,10 @@ type RuleData struct {
 type RuleDataEntry Struct
 
 const (
-	CustomErrorPageType = "custom_error_page"
-	RedirectionType     = "redirection"
-	WAFType             = "waf"
+	CustomErrorPageType         = "custom_error_page"
+	RedirectionType             = "redirection"
+	WAFType                     = "waf"
+	ReflectedCallbackConfigType = "reflected_callback_config"
 )
 
 type CustomErrorPageRuleDataEntry struct {
@@ -231,6 +234,40 @@ type WAFRuleDataEntry struct {
 	BindingAccessors []string `json:"binding_accessors"`
 	WAFRules         string   `json:"waf_rules"`
 	Timeout          uint64   `json:"max_budget_ms"`
+}
+
+type ReflectedCallbackBindingAccessorConfig struct {
+	Capabilities []string `json:"capabilities"`
+}
+
+type ReflectedCallbackBlockStrategyReturnFunctionErrorConfig struct {
+	RetIndex uint `json:"ret_index"`
+}
+
+type ReflectedCallbackBlockStrategyConfig struct {
+	ReflectedCallbackBlockStrategyReturnFunctionErrorConfig
+}
+
+type ReflectedCallbackHTTPProtectionContextFromFuncArgConfig struct {
+	ArgIndex uint `json:"arg_index"`
+}
+
+type ReflectedCallbackHTTPProtectionContextConfig struct {
+	ReflectedCallbackHTTPProtectionContextFromFuncArgConfig
+}
+
+type ReflectedCallbackHTTPProtectionConfig struct {
+	Context       ReflectedCallbackHTTPProtectionContextConfig `json:"context"`
+	BlockStrategy ReflectedCallbackBlockStrategyConfig         `json:"block_strategy"`
+}
+
+type ReflectedCallbackProtectionConfig struct {
+	ReflectedCallbackHTTPProtectionConfig
+}
+
+type ReflectedCallbackConfig struct {
+	Protection      *ReflectedCallbackProtectionConfig     `json:"protection"`
+	BindingAccessor ReflectedCallbackBindingAccessorConfig `json:"binding_accessor"`
 }
 
 type Dependency struct {
@@ -302,7 +339,8 @@ type RequestRecord_Request_Parameters struct {
 	// Query parameters
 	Query map[string][]string `json:"query,omitempty"`
 	// application/x-www-form-urlencoded or multipart/form-data parameters
-	Form map[string][]string `json:"form,omitempty"`
+	Form      map[string][]string `json:"form,omitempty"`
+	Framework map[string][]string `json:"framework,omitempty"`
 }
 
 type RequestRecord_Response struct {
@@ -505,6 +543,8 @@ type AppLoginRequest_VariousInfosFace interface {
 	GetGid() uint32
 	GetName() string
 	GetLibSqreenVersion() *string
+	GetHasDependencies() bool
+	GetHasLibsqreen() bool
 }
 
 func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFace) *AppLoginRequest_VariousInfos {
@@ -518,6 +558,8 @@ func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFa
 	this.Gid = that.GetGid()
 	this.Name = that.GetName()
 	this.LibSqreenVersion = that.GetLibSqreenVersion()
+	this.HasDependencies = that.GetHasDependencies()
+	this.HasLibsqreen = that.GetHasLibsqreen()
 	return this
 }
 
@@ -1031,4 +1073,10 @@ type AppBundle struct {
 type AppDependency struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+}
+
+type AgentMessage struct {
+	Id      string `json:"id"`
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
 }

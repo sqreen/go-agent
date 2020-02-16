@@ -20,7 +20,7 @@ type CommandManager struct {
 // Command arguments need to be validated by the handler itself.
 type CommandHandler func(args []json.RawMessage) (output string, err error)
 
-// CommandManagerAgent defines the expected agent SDK and allows to easily
+// CommandManagerAgent defines the expected agentInstance SDK and allows to easily
 // implement functional tests by mocking it up.
 type CommandManagerAgent interface {
 	InstrumentationEnable() (rulespackID string, err error)

@@ -7,40 +7,18 @@
 package callback
 
 import (
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-func NewMonitorHTTPStatusCodeCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {
-	// Next callbacks to call
-	actualNextProlog, ok := nextProlog.(MonitorHTTPStatusCodePrologCallbackType)
-	if nextProlog != nil && !ok {
-		err = sqerrors.Errorf("unexpected next prolog type `%T` instead of `%T`", nextProlog, MonitorHTTPStatusCodePrologCallbackType(nil))
-		return
-	}
-	return newMonitorHTTPStatusCodePrologCallback(rule, actualNextProlog), nil
+func NewMonitorHTTPStatusCodeCallback(rule RuleFace) (sqhook.PrologCallback, error) {
+	return newMonitorHTTPStatusCodePrologCallback(rule), nil
 }
 
-func newMonitorHTTPStatusCodePrologCallback(rule Context, next MonitorHTTPStatusCodePrologCallbackType) MonitorHTTPStatusCodePrologCallbackType {
-	return func(r sqhook.MethodReceiver, code *int) (MonitorHTTPStatusCodeEpilogCallbackType, error) {
-		var (
-			nextEpilog MonitorHTTPStatusCodeEpilogCallbackType
-			err        error
-		)
-		if next != nil {
-			nextEpilog, err = next(r, code)
-		}
-		return newMonitorHTTPStatusCodeEpilogCallback(rule, code, nextEpilog), err
+func newMonitorHTTPStatusCodePrologCallback(rule RuleFace) http_protection.ResponseMonitoringPrologCallbackType {
+	return func(_ **http_protection.RequestContext, r *types.ResponseFace) (http_protection.NonBlockingEpilogCallbackType, error) {
+		_ = rule.PushMetricsValue((*r).Status(), 1)
+		return nil, nil
 	}
 }
-
-func newMonitorHTTPStatusCodeEpilogCallback(rule Context, code *int, next MonitorHTTPStatusCodeEpilogCallbackType) MonitorHTTPStatusCodeEpilogCallbackType {
-	return func() {
-		if next != nil {
-			defer next()
-		}
-		rule.PushMetricsValue(*code, 1)
-	}
-}
-
-type MonitorHTTPStatusCodeEpilogCallbackType = func()
-type MonitorHTTPStatusCodePrologCallbackType = func(sqhook.MethodReceiver, *int) (MonitorHTTPStatusCodeEpilogCallbackType, error)

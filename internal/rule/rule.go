@@ -25,7 +25,6 @@ import (
 
 	"github.com/sqreen/go-agent/internal/app"
 	"github.com/sqreen/go-agent/internal/backend/api"
-	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/internal/rule/callback"
@@ -37,9 +36,10 @@ type Engine struct {
 	logger Logger
 	// Map rules to their corresponding symbol in order to be able to modify them
 	// at run time by atomically replacing a running rule.
+	// TODO: write a test to check two HookFaces are correctly comparable
+	//   to find back a hook
 	hooks                 hookDescriptors
 	packID                string
-	cfg                   *config.Config
 	enabled               bool
 	metricsEngine         *metrics.Engine
 	publicKey             *ecdsa.PublicKey
@@ -69,6 +69,11 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 	}
 }
 
+// Health returns a detailed error when the
+func (e *Engine) Health() error {
+	return e.instrumentationEngine.Health()
+}
+
 // PackID returns the ID of the current pack of rules.
 func (e *Engine) PackID() string {
 	return e.packID
@@ -78,22 +83,26 @@ func (e *Engine) PackID() string {
 // them by atomically modifying the hooks, and removing what is left.
 func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	// Create the new rule descriptors and replace the existing ones
-	ruleDescriptors := newHookDescriptors(e, rules)
+	var ruleDescriptors hookDescriptors
+	if len(rules) > 0 {
+		e.logger.Debugf("security rules: setting pack `%s`", packID)
+		ruleDescriptors = newHookDescriptors(e, rules)
+	}
 	e.setRules(packID, ruleDescriptors)
 }
 
 func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 	// Firstly update already enabled hookpoints with their new callbacks in order
-	// to avoid having a blank without any callback. This case happens when a rule
-	// is updated.
+	// to avoid having a blank moment without any callback set. This case happens
+	// when a rule is updated.
 	disabledDescriptors := e.hooks
 	for hook, descr := range descriptors {
 		if e.enabled {
 			// Attach the callback to the hook, possibly overwriting the previous one.
-			e.logger.Debugf("rule: attaching callback to `%s`", hook)
-			err := hook.Attach(descr.Prolog())
+			e.logger.Debugf("security rules: attaching callback to `%s`", hook)
+			err := hook.Attach(descr.callback)
 			if err != nil {
-				e.logger.Error(sqerrors.Wrapf(err, "rule: could not attach the prolog callback to `%s`", hook))
+				e.logger.Error(sqerrors.Wrapf(err, "security rules: could not attach the prolog callback to `%s`", hook))
 				continue
 			}
 		}
@@ -104,21 +113,21 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 		if prevDescr, exists := disabledDescriptors[hook]; exists {
 			delete(disabledDescriptors, hook)
 			if err := prevDescr.Close(); err != nil {
-				e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: error while closing the callback of hook `%v`", hook)))
+				e.logger.Error(sqerrors.Wrapf(err, "security rules: error while closing the callback of hook `%v`", hook))
 			}
 		}
 	}
 
 	// Close the previous descriptors that are now disabled.
 	for hook, descr := range disabledDescriptors {
-		e.logger.Debugf("rule: disabling hook `%s`", hook)
+		e.logger.Debugf("security rules: disabling no longer needed hook `%s`", hook)
 		err := hook.Attach(nil)
 		if err != nil {
-			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callbacks")))
+			e.logger.Error(sqerrors.Wrapf(err, "security rules: could not disable hook `%v`", hook))
 			continue
 		}
 		if err := descr.Close(); err != nil {
-			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: error while closing the callback of hook `%v`", hook)))
+			e.logger.Error(sqerrors.Wrapf(err, "security rules: error while closing the callback of hook `%v`", hook))
 		}
 	}
 
@@ -138,47 +147,69 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
 		// Verify the signature
-		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
-			logger.Error(sqerrors.Wrapf(err, "rule `%s`: signature verification", r.Name))
-			continue
-		}
+		//if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
+		//	logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
+		//	continue
+		//}
 		// Find the symbol
 		hookpoint := r.Hookpoint
-		symbol := fmt.Sprintf("%s.%s", hookpoint.Class, hookpoint.Method)
+		symbol := hookpoint.Method
 		hook, err := e.instrumentationEngine.Find(symbol)
 		if err != nil {
-			logger.Error(sqerrors.Wrapf(err, "rule `%s`: expected error while looking for the hook of `%s`", r.Name, symbol))
+			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
 			continue
 		}
 		if hook == nil && e.vendorPrefix != "" {
 			hook, err = e.instrumentationEngine.Find(e.vendorPrefix + symbol)
 			if err != nil {
-				logger.Error(sqerrors.Wrapf(err, "rule `%s`: expected error while looking for the hook of `%s`", r.Name, symbol))
+				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
 				continue
 			}
 		}
 		if hook == nil {
-			logger.Debugf("rule `%s`: could not find the hook of function `%s`", r.Name, symbol)
+			logger.Debugf("security rules: rule `%s`: could not find the hook of function `%s`", r.Name, symbol)
 			continue
 		} else {
-			logger.Debugf("rule `%s`: successfully found hook `%v`", r.Name, hook)
+			logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
 		}
 
 		// Instantiate the callback
-		descr := hookDescriptors.Get(hook)
-		var nextProlog sqhook.PrologCallback
-		if descr != nil {
-			nextProlog = descr.Prolog()
-		}
-		ruleDescriptor := NewCallbackContext(&r, logger, e.metricsEngine, e.errorMetricsStore)
-		prolog, err := NewCallback(hookpoint.Callback, ruleDescriptor, nextProlog)
+		//descr := hookDescriptors.Get(hook)
+		//var nextProlog sqhook.PrologCallback
+		//if next := descr.callback; next != nil {
+		//	nextProlog = next
+		//}
+
+		callbackContext, err := NewCallbackContext(&r, e.metricsEngine, e.errorMetricsStore)
 		if err != nil {
-			logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule `%s`: could not instantiate the callbacks", r.Name)))
+			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
 			continue
 		}
-		// Create the descriptor with everything required to be able to enable or
-		// disable it afterwards.
-		hookDescriptors.Set(hook, prolog)
+
+		switch hookpoint.Strategy {
+		case "":
+			fallthrough
+		case "native":
+			prolog, err := callback.NewNativeCallback(hookpoint.Callback, callbackContext)
+			if err != nil {
+				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
+				continue
+			}
+			// Create the descriptor with everything required to be able to enable or
+			// disable it afterwards.
+			hookDescriptors.Set(hook, prolog)
+
+		case "reflected":
+			prolog, err := callback.NewReflectedCallback(hookpoint.Callback, hook.PrologFuncType(), callbackContext)
+			if err != nil {
+				logger.Error(sqerrors.Wrap(err, fmt.Sprintf("security rules: rule `%s`: callback constructor", r.Name)))
+				continue
+			}
+			// Create the descriptor with everything required to be able to enable or
+			// disable it afterwards.
+			hookDescriptors.Set(hook, prolog)
+		}
+
 	}
 	// Nothing in the end
 	if len(hookDescriptors) == 0 {
@@ -190,76 +221,103 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 // Enable the hooks of the ongoing configured rules.
 func (e *Engine) Enable() {
 	for hook, descr := range e.hooks {
-		err := hook.Attach(descr.Prolog())
-		if err != nil {
-			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not attach the callback `%v` to hook `%v`", descr.Prolog(), hook)))
+		prolog := descr.callback
+		e.logger.Debugf("security rules: attaching callback to hook `%s`", hook)
+		if err := hook.Attach(prolog); err != nil {
+			e.logger.Error(sqerrors.Wrapf(err, "security rules: could not attach the callback to hook `%v`", hook))
 		}
 	}
 	e.enabled = true
+	e.logger.Debugf("security rules: %d security rules enabled", len(e.hooks))
 }
 
 // Disable the hooks currently attached to callbacks.
 func (e *Engine) Disable() {
+	e.enabled = false
 	for hook := range e.hooks {
 		err := hook.Attach(nil)
 		if err != nil {
-			e.logger.Error(sqerrors.Wrap(err, fmt.Sprintf("rule: could not disable hook `%v`", hook)))
+			e.logger.Error(sqerrors.Wrapf(err, "security rules: error while disabling hook `%v`", hook))
 		}
 	}
-	e.enabled = false
+	e.logger.Debugf("security rules: %d security rules disabled", len(e.hooks))
 }
 
-type hookDescriptors map[HookFace]CallbackObject
-
-type noopCloserCallbackObject struct {
-	prolog sqhook.PrologCallback
+// Count returns the count of correctly instantiated and enabled rules.
+func (e *Engine) Count() int {
+	// Not precise but should do the job for now
+	return len(e.hooks)
 }
 
-func (cbo noopCloserCallbackObject) Prolog() sqhook.PrologCallback {
-	return cbo.prolog
+type callbackWrapper struct {
+	callback sqhook.PrologCallback
 }
 
-func (cbo noopCloserCallbackObject) Close() error {
+func (c callbackWrapper) Close() error {
+	if closer, ok := c.callback.(io.Closer); ok {
+		return closer.Close()
+	}
 	return nil
 }
+
+//type hookDescriptors map[HookFace]CallbackObject
+
+//type noopCloserCallbackObject struct {
+//	prolog sqhook.PrologCallback
+//}
+//
+//func (cbo noopCloserCallbackObject) Prolog() sqhook.PrologCallback {
+//	return cbo.prolog
+//}
+//
+//func (cbo noopCloserCallbackObject) Close() error {
+//	return nil
+//}
 
 // chainedCallbackObject is the set of callbacks attached to a hookpoint.
 // Callbacks already have a reference to the next callback, and it is their
 // responsibility to call it. But closing them is done agent-side using this
 // chain.
 // FIXME: better design to simplify and unify this
-type chainedCallbackObject struct {
-	current, next CallbackObject
+//type chainedCallbackObject struct {
+//	current, next CallbackObject
+//}
+
+//func (c *chainedCallbackObject) Prolog() sqhook.PrologCallback {
+//	return c.current.Prolog()
+//}
+//
+//func (c *chainedCallbackObject) Close() error {
+//	err1 := c.current.Close()
+//	var err2 error
+//	if c.next != nil {
+//		err2 = c.next.Close()
+//	}
+//	// FIXME: create a "error set" error type
+//	if err1 != nil {
+//		return err1
+//	}
+//	return err2
+//}
+
+//
+//func (m hookDescriptors) Set(hook HookFace, prolog interface{}) {
+//	var callback CallbackObject
+//	if cbo, ok := prolog.(CallbackObject); ok {
+//		callback = cbo
+//	} else {
+//		callback = noopCloserCallbackObject{prolog}
+//	}
+//	current := m[hook]
+//	m[hook] = &chainedCallbackObject{current: callback, next: current}
+//}
+
+type hookDescriptors map[HookFace]callbackWrapper
+
+func (m hookDescriptors) Set(hook HookFace, prolog sqhook.PrologCallback) {
+	m[hook] = callbackWrapper{prolog}
 }
 
-func (c *chainedCallbackObject) Prolog() sqhook.PrologCallback {
-	return c.current.Prolog()
-}
-
-func (c *chainedCallbackObject) Close() error {
-	err1 := c.current.Close()
-	var err2 error
-	if c.next != nil {
-		err2 = c.next.Close()
-	}
-	// FIXME: create a "error set" error type
-	if err1 != nil {
-		return err1
-	}
-	return err2
-}
-
-func (m hookDescriptors) Set(hook HookFace, prolog interface{}) {
-	var callback CallbackObject
-	if cbo, ok := prolog.(CallbackObject); ok {
-		callback = cbo
-	} else {
-		callback = noopCloserCallbackObject{prolog}
-	}
-	current := m[hook]
-	m[hook] = &chainedCallbackObject{current: callback, next: current}
-}
-
-func (m hookDescriptors) Get(hook HookFace) CallbackObject {
+func (m hookDescriptors) Get(hook HookFace) callbackWrapper {
 	return m[hook]
 }

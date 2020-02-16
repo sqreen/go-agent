@@ -17,7 +17,7 @@ import (
 
 func TestNewAddSecurityHeadersCallbacks(t *testing.T) {
 	RunCallbackTest(t, TestConfig{
-		CallbacksCtor: callback.NewAddSecurityHeadersCallbacks,
+		CallbacksCtor: callback.NewAddSecurityHeadersCallback,
 		ExpectProlog:  true,
 		PrologType:    reflect.TypeOf(callback.AddSecurityHeadersPrologCallbackType(nil)),
 		EpilogType:    reflect.TypeOf(callback.AddSecurityHeadersEpilogCallbackType(nil)),

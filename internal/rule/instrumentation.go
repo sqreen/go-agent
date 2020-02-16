@@ -7,22 +7,30 @@
 package rule
 
 import (
+	"reflect"
+
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
 type InstrumentationFace interface {
 	Find(symbol string) (HookFace, error)
+	Health() error
 }
 
 type HookFace interface {
 	Attach(prolog sqhook.PrologCallback) error
+	PrologFuncType() reflect.Type
 }
 
-type defaultInstrumentation struct{}
+type defaultInstrumentationImpl struct{}
 
-var defaultInstrumentationEngine defaultInstrumentation
+var defaultInstrumentationEngine defaultInstrumentationImpl
 
-func (defaultInstrumentation) Find(symbol string) (HookFace, error) {
+func (defaultInstrumentationImpl) Health() error {
+	return sqhook.Health()
+}
+
+func (defaultInstrumentationImpl) Find(symbol string) (HookFace, error) {
 	hook, err := sqhook.Find(symbol)
 	if err != nil {
 		return nil, err
@@ -34,7 +42,3 @@ func (defaultInstrumentation) Find(symbol string) (HookFace, error) {
 }
 
 type defaultHook struct{ *sqhook.Hook }
-
-func (h defaultHook) Attach(prolog sqhook.PrologCallback) error {
-	return h.Hook.Attach(prolog)
-}

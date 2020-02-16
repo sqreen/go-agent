@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package internal
 
 import (
@@ -10,8 +12,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,16 +24,50 @@ import (
 	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
-	"github.com/sqreen/go-agent/internal/record"
+	protectionContext "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/rule"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
-	"github.com/sqreen/go-agent/types"
-	"github.com/sqreen/go-agent/sdk"
 	"golang.org/x/xerrors"
 )
+
+func Start() {
+	agentInstance.start()
+}
+
+func Agent() protectionContext.AgentFace {
+	if agent := agentInstance.get(); agent != nil && agent.isRunning() {
+		return agent
+	}
+	return disabledAgent{}
+}
+
+var agentInstance agentInstanceType
+
+// agent instance holder type with synchronization
+type agentInstanceType struct {
+	// The agent goroutine must be started once.
+	// It will asynchronously set the instance pointer.
+	startOnce sync.Once
+	// Instance pointer access R/W lock.
+	instanceAccessLock sync.RWMutex
+	instance           *AgentType
+}
+
+func (instance *agentInstanceType) get() *AgentType {
+	instance.instanceAccessLock.RLock()
+	defer instance.instanceAccessLock.RUnlock()
+	return instance.instance
+}
+
+func (instance *agentInstanceType) set(agent *AgentType) {
+	instance.instanceAccessLock.Lock()
+	defer instance.instanceAccessLock.Unlock()
+	instance.instance = agent
+}
 
 // Start the agent when enabled and back-off restart it when unhandled errors
 // or panics occur.
@@ -54,105 +90,112 @@ import (
 // - Otherwise, the overall agent initialization and main loop is re-executed
 //   with a backoff sleep.
 // - If this backoff-retry loop fails, the outer-most safe goroutine captures
-//   it an silently return.
-func Start() {
-	_ = sqsafe.Go(func() error {
-		// Level 1
-		// Backoff-sleep loop to retry starting the agent
-		// To properly work, this level relies on:
-		//   - the backoff.
-		//   - the logger.
-		//   - the correctness of sub-level error handling (ie. they don't panic).
-		// Any panics from these would stop the execution of this level.
-		backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-		logger := plog.NewLogger(plog.Info, os.Stderr, 0)
-		for {
-			err := sqsafe.Call(func() error {
-				// Level 2
-				// Agent initialization and serve loop.
-				// To properly work, this level relies on:
-				//   - the user configuration initialization.
-				//   - the agent initialization.
-				// Any panics from these would stop the execution and would be returned
-				// to the outer level.
-				cfg := config.New(logger)
-				agent := New(cfg)
-				if agent == nil {
-					return nil
-				}
-				// Level 3 returns unhandled agent errors or panics
-				err := sqsafe.Call(agent.Serve)
+//   it and silently return.
+func (instance *agentInstanceType) start() {
+	instance.startOnce.Do(func() {
+		_ = sqsafe.Go(func() error {
+			// Level 1
+			// Backoff-sleep loop to retry starting the agent
+			// To properly work, this level relies on:
+			//   - the backoff.
+			//   - the logger.
+			//   - the correctness of sub-level error handling (ie. they don't panic).
+			// Any panics from these would stop the execution of this level.
+			backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
+			logger := plog.NewLogger(plog.Info, os.Stderr, 0)
+			for {
+				err := sqsafe.Call(func() error {
+					// Level 2
+					// Agent initialization and serve loop.
+					// To properly work, this level relies on:
+					//   - the user configuration initialization.
+					//   - the agent initialization.
+					// Any panics from these would stop the execution and would be returned
+					// to the outer level.
+					cfg := config.New(logger)
+					agent := New(cfg)
+					if agent == nil {
+						return nil
+					} else {
+						instance.set(agent)
+					}
+
+					// Level 3 returns unhandled agent errors or panics
+					err := sqsafe.Call(agent.Serve)
+					if err == nil {
+						return nil
+					}
+					// Error ignored here
+					_ = sqsafe.Call(func() error {
+						// Send the error with a direct HTTP POST call without using the
+						// failed agent, but rather using the standard library's default
+						// HTTP client.
+						TrySendAppException(logger, cfg, err)
+						return nil
+					})
+
+					if panicErr, ok := err.(*sqsafe.PanicError); ok {
+						// agent.Serve() panic-ed: return the wrapped error in order to retry
+						return panicErr.Unwrap()
+					}
+					return err
+				})
+
+				// No error: regular exit case of the agent.
 				if err == nil {
 					return nil
 				}
-				// Error ignored here
-				_ = sqsafe.Call(func() error {
-					// Send the error with a direct HTTP POST call without using the
-					// failed agent, but rather using the standard library's default
-					// HTTP client.
-					TrySendAppException(logger, cfg, err)
-					return nil
-				})
 
-				if panicErr, ok := err.(*sqsafe.PanicError); ok {
-					// agent.Serve() panic-ed: return the wrapped error in order to retry
-					return panicErr.Unwrap()
+				if _, ok := err.(*sqsafe.PanicError); ok {
+					// Unexpected level 2 panic from its requirements: stop retrying as it
+					// is no longer reliable.
+					logger.Error(err)
+					return err
 				}
-				return err
-			})
 
-			// No error: regular exit case of the agent.
-			if err == nil {
-				return nil
+				// An unhandled error was returned: retry
+				logger.Error(errors.Wrap(err, "unexpected agent error"))
+				d, max := backoff.Next()
+				if max {
+					logger.Error(errors.New("agent stopped: maximum agent retries reached"))
+					break
+				}
+				logger.Error(errors.Errorf("retrying to start the agent in %s", d))
+				time.Sleep(d)
 			}
-
-			if _, ok := err.(*sqsafe.PanicError); ok {
-				// Unexpected level 2 panic from its requirements: stop retrying as it
-				// is no longer reliable.
-				logger.Error(err)
-				return err
-			}
-
-			// An unhandled error was returned: retry
-			logger.Error(errors.Wrap(err, "unexpected agent error"))
-			d, max := backoff.Next()
-			if max {
-				logger.Error(errors.New("agent stopped: maximum agent retries reached"))
-				break
-			}
-			logger.Error(errors.Errorf("retrying to start the agent in %s", d))
-			time.Sleep(d)
-		}
-		return nil
+			return nil
+		})
 	})
 }
 
-type Agent struct {
-	logger        *plog.Logger
-	eventMng      *eventManager
-	metrics       *metrics.Engine
-	staticMetrics staticMetrics
-	ctx           context.Context
-	cancel        context.CancelFunc
-	isDone        chan struct{}
-	config        *config.Config
-	appInfo       *app.Info
-	client        *backend.Client
-	actors        *actor.Store
-	rules         *rule.Engine
-	piiScrubber   *sqsanitize.Scrubber
-}
+type disabledAgent struct{}
 
-func (a *Agent) FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error) {
-	return a.actors.FindIP(ip)
+func (disabledAgent) FindActionByIP(net.IP) (action actor.Action, exists bool, err error)     { return }
+func (disabledAgent) FindActionByUserID(map[string]string) (action actor.Action, exists bool) { return }
+func (disabledAgent) Logger() *plog.Logger                                                    { return nil }
+func (d disabledAgent) Config() protectionContext.ConfigReader                                { return d }
+func (disabledAgent) SendClosedRequestContext(protectionContext.ClosedRequestContextFace) error {
+	return nil
 }
+func (disabledAgent) PrioritizedIPHeader() string       { return "" }
+func (disabledAgent) PrioritizedIPHeaderFormat() string { return "" }
 
-func (a *Agent) FindActionByUserID(userID map[string]string) (action actor.Action, exists bool) {
-	return a.actors.FindUser(userID)
-}
-
-func (a *Agent) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
-	return a.actors.IsIPWhitelisted(ip)
+type AgentType struct {
+	logger            *plog.Logger
+	eventMng          *eventManager
+	metrics           *metrics.Engine
+	staticMetrics     staticMetrics
+	ctx               context.Context
+	cancel            context.CancelFunc
+	isDone            chan struct{}
+	config            *config.Config
+	appInfo           *app.Info
+	client            *backend.Client
+	actors            *actor.Store
+	rules             *rule.Engine
+	piiScrubber       *sqsanitize.Scrubber
+	runningAccessLock sync.RWMutex
+	running           bool
 }
 
 type staticMetrics struct {
@@ -162,11 +205,13 @@ type staticMetrics struct {
 // Error channel buffer length.
 const errorChanBufferLength = 256
 
-func New(cfg *config.Config) *Agent {
+func New(cfg *config.Config) *AgentType {
 	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
 
-	if cfg.Disable() {
-		logger.Info("config: empty token value or explicitly disabled agent")
+	logger.Infof("go agent v%s", version)
+
+	if disabled, reason := cfg.Disabled(); disabled {
+		logger.Infof("agent disabled: %s", reason)
 		return nil
 	}
 
@@ -181,6 +226,13 @@ func New(cfg *config.Config) *Agent {
 	}
 	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
+	if err := rulesEngine.Health(); err != nil {
+		message := fmt.Sprintf("agent disabled: %s", err)
+		backend.SendAgentMessage(logger, cfg, "error", message)
+		logger.Info(message)
+		return nil
+	}
+
 	// TODO: remove this SDK metrics period config when the corresponding js rule
 	//  is supported
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
@@ -192,9 +244,9 @@ func New(cfg *config.Config) *Agent {
 		return nil
 	}
 
-	// Agent graceful stopping using context cancellation.
+	// AgentType graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Agent{
+	return &AgentType{
 		logger:  logger,
 		isDone:  make(chan struct{}),
 		metrics: metrics,
@@ -216,11 +268,72 @@ func New(cfg *config.Config) *Agent {
 	}
 }
 
-func (a *Agent) NewRequestRecord(req *http.Request) (types.RequestRecord, *http.Request) {
-	return record.NewRequestRecord(a, a.logger, req, a.config)
+func (a *AgentType) FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error) {
+	return a.actors.FindIP(ip)
 }
 
-func (a *Agent) Serve() error {
+func (a *AgentType) FindActionByUserID(userID map[string]string) (action actor.Action, exists bool) {
+	return a.actors.FindUser(userID)
+}
+
+func (a *AgentType) Logger() *plog.Logger {
+	return a.logger
+}
+
+type publicConfig config.Config
+
+func (p *publicConfig) unwrap() *config.Config           { return (*config.Config)(p) }
+func (p publicConfig) PrioritizedIPHeader() string       { return p.unwrap().HTTPClientIPHeader() }
+func (p publicConfig) PrioritizedIPHeaderFormat() string { return p.unwrap().HTTPClientIPHeaderFormat() }
+
+func (a *AgentType) Config() protectionContext.ConfigReader {
+	return (*publicConfig)(a.config)
+}
+
+func (a *AgentType) SendClosedRequestContext(ctx protectionContext.ClosedRequestContextFace) error {
+	actual, ok := ctx.(types.ClosedRequestContextFace)
+	if !ok {
+		return sqerrors.Errorf("unexpected context type `%T`", ctx)
+	}
+	return a.sendClosedHTTPRequestContext(actual)
+}
+
+type AgentNotRunningError struct{}
+
+func (AgentNotRunningError) Error() string {
+	return "agent not running"
+}
+
+func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextFace) error {
+	if !a.isRunning() {
+		return AgentNotRunningError{}
+	}
+
+	// User events are not part of the request record
+	events := ctx.Events()
+	for _, event := range events.UserEvents {
+		a.addUserEvent(event)
+	}
+
+	event := newClosedHTTPRequestContextEvent(a.RulespackID(), ctx.Response(), ctx.Request(), events)
+	if event.shouldSend() {
+		return a.eventMng.send(event)
+	}
+
+	return nil
+}
+
+func (a *AgentType) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
+	return a.actors.IsIPWhitelisted(ip)
+}
+
+type withNotificationError struct {
+	error
+}
+
+func (e *withNotificationError) Unwrap() error { return e.error }
+
+func (a *AgentType) Serve() error {
 	defer func() {
 		// Signal we are done
 		close(a.isDone)
@@ -252,10 +365,6 @@ func (a *Agent) Serve() error {
 		heartbeat = config.BackendHTTPAPIDefaultHeartbeatDelay
 	}
 
-	a.logger.Infof("go agent v%s up and running", version)
-	a.logger.Debugf("agent: heartbeat set to %s", heartbeat)
-	ticker := time.Tick(heartbeat)
-
 	batchSize := int(appLoginRes.Features.BatchSize)
 	if batchSize == 0 {
 		batchSize = config.EventBatchMaxEventsPerHeartbeat
@@ -265,21 +374,28 @@ func (a *Agent) Serve() error {
 		maxStaleness = config.EventBatchMaxStaleness
 	}
 
-	// Start the event manager's loop
+	// start the event manager's loop
 	a.eventMng = newEventManager(a, batchSize, maxStaleness)
 	eventMngErrChan := sqsafe.Go(func() error {
 		a.eventMng.Loop(a.ctx, a.client)
 		return nil
 	})
 
-	// Start the heartbeat's loop
+	a.setRunning(true)
+	defer a.setRunning(false)
+
+	a.logger.Debugf("agent: heartbeat ticker set to %s", heartbeat)
+	ticker := time.Tick(heartbeat)
+	a.logger.Info("agent: up and running")
+
+	// start the agent main loop
 	for {
 		select {
 		case <-ticker:
 			a.logger.Debug("heartbeat")
 
 			appBeatReq := api.AppBeatRequest{
-				Metrics:        makeAPIMetrics(a.logger, a.metrics.ReadyMetrics()),
+				Metrics:        newMetricsAPIAdapter(a.logger, a.metrics.ReadyMetrics()),
 				CommandResults: commandResults,
 			}
 
@@ -309,76 +425,47 @@ func (a *Agent) Serve() error {
 			return err
 
 		case err := <-a.logger.ErrChan():
-			// Unhandled errors that were logged.
-			a.AddExceptionEvent(NewExceptionEvent(err, a.RulespackID()))
+			// Logged errors.
+			if xerrors.As(err, &withNotificationError{}) {
+				_ = a.client.SendAgentMessage(err.Error())
+			}
+			a.addExceptionEvent(NewExceptionEvent(err, a.RulespackID()))
 		}
 	}
 }
 
-func makeAPIMetrics(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadyStore) []api.MetricResponse {
-	var metricsArray []api.MetricResponse
-	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
-		metricsArray = make([]api.MetricResponse, 0, len(readyMetrics))
-		for name, values := range readyMetrics {
-			observations := make(map[string]uint64, len(values.Metrics()))
-			for k, v := range values.Metrics() {
-				jsonKey, err := json.Marshal(k)
-				if err != nil {
-					logger.Error(sqerrors.Wrap(err, fmt.Sprintf("could not marshal to json key the value `%v` of type `%T`", k, k)))
-					continue
-				}
-				observations[string(jsonKey)] = v
-			}
-			if len(observations) > 0 {
-				metricsArray = append(metricsArray, api.MetricResponse{
-					Name:        name,
-					Start:       values.Start(),
-					Finish:      values.Finish(),
-					Observation: api.Struct{Value: observations},
-				})
-			}
-		}
-	}
-	return metricsArray
-}
-
-func (a *Agent) InstrumentationEnable() (string, error) {
+func (a *AgentType) InstrumentationEnable() (string, error) {
 	rulespackId, err := a.RulesReload()
 	if err != nil {
 		return "", err
 	}
 	a.rules.Enable()
-	sdk.SetAgent(a)
-	a.logger.Debug("instrumentation enabled")
+	a.setRunning(true)
+	a.logger.Debug("agent: enabled")
 	return rulespackId, nil
 }
 
 // InstrumentationDisable disables the agent instrumentation, which includes for
 // now the SDK.
-func (a *Agent) InstrumentationDisable() error {
-	sdk.SetAgent(nil)
+func (a *AgentType) InstrumentationDisable() error {
+	a.setRunning(false)
 	a.rules.Disable()
 	err := a.actors.SetActions(nil)
-	a.logger.Debug("instrumentation disabled")
+	a.logger.Debug("agent: disabled")
 	return err
 }
 
-func (a *Agent) ActionsReload() error {
+func (a *AgentType) ActionsReload() error {
 	actions, err := a.client.ActionsPack()
 	if err != nil {
 		a.logger.Error(err)
 		return err
 	}
-
 	return a.actors.SetActions(actions.Actions)
 }
 
-func (a *Agent) SendAppBundle() error {
-	deps, sig, err := a.appInfo.Dependencies()
-	if err != nil {
-		return err
-	}
-
+func (a *AgentType) SendAppBundle() error {
+	deps, sig, _ := a.appInfo.Dependencies()
 	bundleDeps := make([]api.AppDependency, len(deps))
 	for i, dep := range deps {
 		bundleDeps[i] = api.AppDependency{
@@ -394,11 +481,11 @@ func (a *Agent) SendAppBundle() error {
 	return a.client.SendAppBundle(&bundle)
 }
 
-func (a *Agent) SetCIDRWhitelist(cidrs []string) error {
+func (a *AgentType) SetCIDRWhitelist(cidrs []string) error {
 	return a.actors.SetCIDRWhitelist(cidrs)
 }
 
-func (a *Agent) RulesReload() (string, error) {
+func (a *AgentType) RulesReload() (string, error) {
 	rulespack, err := a.client.RulesPack()
 	if err != nil {
 		a.logger.Error(err)
@@ -425,22 +512,19 @@ func (a *Agent) RulesReload() (string, error) {
 	return rulespack.PackID, nil
 }
 
-func (a *Agent) GracefulStop() {
-	if a.config.Disable() {
-		return
-	}
+func (a *AgentType) gracefulStop() {
 	a.cancel()
 	<-a.isDone
 }
 
 type eventManager struct {
-	agent        *Agent
+	agent        *AgentType
 	count        int
 	eventsChan   chan Event
 	maxStaleness time.Duration
 }
 
-func newEventManager(agent *Agent, count int, maxStaleness time.Duration) *eventManager {
+func newEventManager(agent *AgentType, count int, maxStaleness time.Duration) *eventManager {
 	return &eventManager{
 		agent:        agent,
 		eventsChan:   make(chan Event, count*100),
@@ -449,13 +533,13 @@ func newEventManager(agent *Agent, count int, maxStaleness time.Duration) *event
 	}
 }
 
-func (m *eventManager) add(r Event) {
+func (m *eventManager) send(r Event) error {
 	select {
 	case m.eventsChan <- r:
-		return
+		return nil
 	default:
 		// The channel buffer is full - drop this new event
-		m.agent.logger.Debug("event channel is full, dropping the event")
+		return sqerrors.New("event dropped: the event channel is full")
 	}
 }
 
@@ -481,7 +565,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 
 		case <-stalenessChan:
 			m.agent.logger.Debug("event batch data staleness reached")
-			m.send(client, batch)
+			m.sendBatch(client, batch)
 			batch = batch[0:0]
 			stalenessChan = nil
 
@@ -499,7 +583,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 			case batchLen >= m.count:
 				// No more room in the batch
 				m.agent.logger.Debugf("sending the batch of %d events", batchLen)
-				m.send(client, batch)
+				m.sendBatch(client, batch)
 				batch = batch[0:0]
 				stalenessChan = nil
 				stopTimer(stalenessTimer)
@@ -508,7 +592,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	}
 }
 
-func (m *eventManager) send(client *backend.Client, batch []Event) {
+func (m *eventManager) sendBatch(client *backend.Client, batch []Event) {
 	req := api.BatchRequest{
 		Batch: make([]api.BatchRequest_Event, 0, len(batch)),
 	}
@@ -516,8 +600,10 @@ func (m *eventManager) send(client *backend.Client, batch []Event) {
 	for _, e := range batch {
 		var event api.BatchRequest_EventFace
 		switch actual := e.(type) {
-		case *HTTPRequestRecordEvent:
-			event = api.RequestRecordEvent{api.NewRequestRecordFromFace(actual)}
+		case *closedHTTPRequestContextEvent:
+			cfg := m.agent.config
+			adapter := newProtectedHTTPRequestEventAPIAdapter(actual, cfg.StripHTTPReferer(), cfg.HTTPClientIPHeader())
+			event = api.RequestRecordEvent{api.NewRequestRecordFromFace(adapter)}
 		case *ExceptionEvent:
 			event = api.NewExceptionEventFromFace(actual)
 		}
@@ -538,22 +624,25 @@ func (m *eventManager) send(client *backend.Client, batch []Event) {
 	}
 }
 
-func (a *Agent) AddHTTPRequestRecord(rr *record.RequestRecord) {
-	if a.config.Disable() || a.eventMng == nil {
-		// Disabled or not yet initialized agent
-		return
-	}
-	a.eventMng.add(NewHTTPRequestRecordEvent(rr, a.RulespackID(), a.config, a.logger))
+func (a *AgentType) setRunning(r bool) {
+	a.runningAccessLock.Lock()
+	defer a.runningAccessLock.Unlock()
+	a.running = r
 }
 
-func (a *Agent) AddExceptionEvent(e *ExceptionEvent) {
-	if a.config.Disable() || a.eventMng == nil {
-		// Disabled or not yet initialized agent
-		return
-	}
-	a.eventMng.add(e)
+func (a *AgentType) isRunning() bool {
+	a.runningAccessLock.RLock()
+	defer a.runningAccessLock.RUnlock()
+	return a.running
 }
 
-func (a *Agent) RulespackID() string {
+func (a *AgentType) addExceptionEvent(e *ExceptionEvent) {
+	if !a.isRunning() {
+		return
+	}
+	a.eventMng.send(e)
+}
+
+func (a *AgentType) RulespackID() string {
 	return a.rules.PackID()
 }

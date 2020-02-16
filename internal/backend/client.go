@@ -6,6 +6,8 @@ package backend
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -248,4 +250,50 @@ func (c *Client) newRequest(descriptor *config.HTTPAPIEndpoint) (*http.Request, 
 	req.Header.Set("Accept", "application/json")
 
 	return req, nil
+}
+
+func (c *Client) SendAgentMessage(message string) error {
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AgentMessage)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
+	id := sha1.Sum([]byte(message))
+	payload := api.AgentMessage{
+		Id:      hex.EncodeToString(id[:]),
+		Kind:    "error",
+		Message: message,
+	}
+	return c.Do(httpReq, payload)
+}
+
+// SendAgentMessage is a special client function allowing to send app-level
+// messages when the instance is not logged in yet and will not.
+func SendAgentMessage(logger plog.DebugLogger, cfg *config.Config, kind, message string) {
+	b := new(bytes.Buffer)
+	id := sha1.Sum([]byte(message))
+	payload := api.AgentMessage{
+		Id:      hex.EncodeToString(id[:]),
+		Kind:    "error",
+		Message: message,
+	}
+	err := json.NewEncoder(b).Encode(payload)
+	if err != nil {
+		return
+	}
+	endpoint := config.BackendHTTPAPIEndpoint.AppAgentMessage
+	req, err := http.NewRequest(endpoint.Method, cfg.BackendHTTPAPIBaseURL()+endpoint.URL, b)
+	if err != nil {
+		return
+	}
+	req.Header.Add(config.BackendHTTPAPIHeaderToken, cfg.BackendHTTPAPIToken())
+	req.Header.Add(config.BackendHTTPAPIHeaderAppName, cfg.AppName())
+	req.Header.Add("Content-Type", "application/json")
+
+	logger.Debugf("sending app message:\n%s\n", (*HTTPRequestStringer)(req))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	logger.Debugf("received app exception response:\n%s\n", (*HTTPResponseStringer)(res))
 }

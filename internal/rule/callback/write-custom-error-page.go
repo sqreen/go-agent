@@ -7,51 +7,38 @@
 package callback
 
 import (
-	"net/http"
-
-	"github.com/sqreen/go-agent/agent/internal/backend/api"
-	"github.com/sqreen/go-agent/agent/internal/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/agent/internal/sqlib/sqhook"
+	"github.com/sqreen/go-agent/internal/backend/api"
+	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-// NewWriteCustomErrorPageCallbacks returns the native prolog and epilog
+// NewWriteCustomErrorPageCallback returns the native prolog and epilog
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallbacks(rule Context, nextProlog sqhook.PrologCallback) (prolog interface{}, err error) {
-	var statusCode = 500
-	if cfg := rule.Config(); cfg != nil {
+func NewWriteCustomErrorPageCallback(rule RuleFace) (sqhook.PrologCallback, error) {
+	var statusCode = 500 // default status code
+	if cfg := rule.Config().Data(); cfg != nil {
 		cfg, ok := cfg.(*api.CustomErrorPageRuleDataEntry)
 		if !ok {
-			err = sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", cfg)
-			return
+			return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", cfg)
 		}
 		statusCode = cfg.StatusCode
 	}
-
-	// Next callbacks to call
-	actualNextProlog, ok := nextProlog.(WriteCustomErrorPagePrologCallbackType)
-	if nextProlog != nil && !ok {
-		err = sqerrors.Errorf("unexpected next prolog type `%T`", nextProlog)
-		return
-	}
-	return newWriteCustomErrorPagePrologCallback(statusCode, []byte(blockedBySqreenPage), actualNextProlog), nil
+	return newWriteCustomErrorPagePrologCallback(statusCode), nil
 }
-
-type WriteCustomErrorPageEpilogCallbackType = func()
-type WriteCustomErrorPagePrologCallbackType = func(*http.ResponseWriter, **http.Request, *http.Header, *int, *[]byte) (WriteCustomErrorPageEpilogCallbackType, error)
 
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
-func newWriteCustomErrorPagePrologCallback(statusCode int, body []byte, next WriteCustomErrorPagePrologCallbackType) WriteCustomErrorPagePrologCallbackType {
-	return func(callerWriter *http.ResponseWriter, callerRequest **http.Request, callerHeaders *http.Header, callerStatusCode *int, callerBody *[]byte) (WriteCustomErrorPageEpilogCallbackType, error) {
-		*callerStatusCode = statusCode
-		*callerBody = body
-
-		if next == nil {
-			return nil, nil
-		}
-		return next(callerWriter, callerRequest, callerHeaders, callerStatusCode, callerBody)
+func newWriteCustomErrorPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
+	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+		ctx := *m
+		// Note that the header must be written first because body writting will
+		// otherwise write the default OK status
+		ctx.ResponseWriter.WriteHeader(statusCode)
+		ctx.ResponseWriter.WriteString(blockedBySqreenPage)
+		return nil, nil
 	}
 }
 

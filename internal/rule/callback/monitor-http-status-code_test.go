@@ -16,7 +16,7 @@ import (
 
 func TestNewMonitorHTTPStatusCodeCallbacks(t *testing.T) {
 	RunCallbackTest(t, TestConfig{
-		CallbacksCtor: callback.NewMonitorHTTPStatusCodeCallbacks,
+		CallbacksCtor: callback.NewMonitorHTTPStatusCodeCallback,
 		ExpectProlog:  true,
 		PrologType:    reflect.TypeOf(callback.MonitorHTTPStatusCodePrologCallbackType(nil)),
 		EpilogType:    reflect.TypeOf(callback.MonitorHTTPStatusCodeEpilogCallbackType(nil)),

@@ -54,16 +54,19 @@ var (
 
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
-		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack, RulesPack, Bundle HTTPAPIEndpoint
+		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack, RulesPack,
+		Bundle, AgentMessage, AppAgentMessage HTTPAPIEndpoint
 	}{
-		AppLogin:     HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
-		AppLogout:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
-		AppBeat:      HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
-		AppException: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_sqreen_exception"},
-		Batch:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
-		ActionsPack:  HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
-		RulesPack:    HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/rulespack"},
-		Bundle:       HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/bundle"},
+		AppLogin:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
+		AppLogout:       HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
+		AppBeat:         HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-beat"},
+		AppException:    HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_sqreen_exception"},
+		Batch:           HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/batch"},
+		ActionsPack:     HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/actionspack"},
+		RulesPack:       HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/rulespack"},
+		Bundle:          HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/bundle"},
+		AgentMessage:    HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/agent_message"},
+		AppAgentMessage: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_agent_message"},
 	}
 
 	// Header name of the API token.
@@ -357,9 +360,15 @@ func (c *Config) BackendHTTPAPIProxy() string {
 }
 
 // Disable returns true when the agent should be disabled, false otherwise.
-func (c *Config) Disable() bool {
+func (c *Config) Disabled() (disabled bool, reason string) {
 	disable := sanitizeString(c.GetString(configKeyDisable))
-	return disable != "" || c.BackendHTTPAPIToken() == ""
+	if disable != "" {
+		return true, fmt.Sprintf("configuration entry `%s` set to true", configKeyDisable)
+	}
+	if c.BackendHTTPAPIToken() == "" {
+		return true, "empty token value"
+	}
+	return false, ""
 }
 
 // Disable returns true when the agent should be strip the `Referer` HTTP

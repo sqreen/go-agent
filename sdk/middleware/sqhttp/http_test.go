@@ -31,10 +31,10 @@ func TestMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 		router.Handle("/", sqhttp.Middleware(subrouter))
-		// Perform the request and record the output
+		// Perform the requestImplType and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		// Check the request was performed as expected
+		// Check the requestImplType was performed as expected
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, body, rec.Body.String())
 	})
@@ -56,10 +56,10 @@ func TestMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 		router.Handle("/", subrouter)
-		// Perform the request and record the output
+		// Perform the requestImplType and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		// Check the request was performed as expected
+		// Check the requestImplType was performed as expected
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, body, rec.Body.String())
 	})
@@ -77,15 +77,15 @@ func TestMiddleware(t *testing.T) {
 		// Add an endpoint accessing the SDK handle
 		subrouter := http.NewServeMux()
 		subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
-			require.NotNil(t, sdk.FromContext(req.Context()), "The middleware should attach its handle object to the request's context")
+			require.NotNil(t, sdk.FromContext(req.Context()), "The middleware should attach its handle object to the requestImplType's context")
 			w.Write([]byte(body))
 			w.WriteHeader(http.StatusOK)
 		})
 		router.Handle("/", sqhttp.Middleware(subrouter))
-		// Perform the request and record the output
+		// Perform the requestImplType and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		// Check the request was performed as expected
+		// Check the requestImplType was performed as expected
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, body, rec.Body.String())
 	})
@@ -108,11 +108,11 @@ func TestMiddleware(t *testing.T) {
 				panic("must not be called")
 			})
 			router.Handle("/", sqhttp.Middleware(subrouter))
-			// Perform the request and record the output
+			// Perform the requestImplType and record the output
 			req, _ := http.NewRequest("GET", "/hello", nil)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
-			// Check the request was performed as expected
+			// Check the requestImplType was performed as expected
 			require.Equal(t, rec.Body.String(), "")
 			require.Equal(t, rec.Code, status)
 		})
@@ -141,11 +141,11 @@ func TestMiddleware(t *testing.T) {
 				require.Error(t, err)
 			})
 			router.Handle("/", sqhttp.Middleware(subrouter))
-			// Perform the request and record the output
+			// Perform the requestImplType and record the output
 			req, _ := http.NewRequest("GET", "/hello", nil)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
-			// Check the request was performed as expected
+			// Check the requestImplType was performed as expected
 			require.Equal(t, rec.Body.String(), "")
 			require.Equal(t, rec.Code, status)
 		})

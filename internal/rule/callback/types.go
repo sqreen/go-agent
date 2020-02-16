@@ -5,25 +5,35 @@
 package callback
 
 import (
-	"github.com/sqreen/go-agent/internal/plog"
-	"github.com/sqreen/go-agent/internal/record"
+	"reflect"
+
+	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-type Context interface {
-	// Get the rule configuration.
-	Config() interface{}
+// RuleFace is the callback context of things it can use at run time.
+type RuleFace interface {
 	// Push a new metrics value for the given key into the default metrics store
 	// given by the rule.
-	PushMetricsValue(key interface{}, value uint64)
-	// NewAttack creates and returns a new attack event linked to the rule.
-	NewAttack(blocked bool, infos interface{}) *record.AttackEvent
-	// BlockingMode returns true when a callback should block when an attack is
-	// detected. It should monitor otherwise.
-	// FIXME: rather implement a method allowing to report or block a request
-	BlockingMode() bool
-	// ErrorLogger allows to log errors from callbacks. It is restricted to
-	// errors only as logs are expensive and should not be used for debugging
-	// logs.
-	plog.ErrorLogger
+	// TODO: this should be instead performed when the request context is
+	//   closed by checking the metrics stored in the event record and
+	//   pushing them. But the current metrics store interface doesn't allow
+	//   to pass a time (to pass the time of the observation).
+	PushMetricsValue(key interface{}, value uint64) error
+	Config() Config
+	NewAttackEvent(blocked bool, info interface{}) *event.AttackEvent
 }
+
+// Config is the interface of the rule configuration.
+type Config interface {
+	BlockingMode() bool
+	Data() interface{}
+}
+
+// NativeCallbackConstructorFunc is a function returning a native callback
+// function or a CallbackObject.
+type NativeCallbackConstructorFunc func(r RuleFace) (prolog sqhook.PrologCallback, err error)
+
+// ReflectedCallbackConstructorFunc is a function returning a reflected callback
+// function for the provided type.
+type ReflectedCallbackConstructorFunc func(r RuleFace, prologFuncType reflect.Type) (prolog sqhook.ReflectedPrologCallback, err error)

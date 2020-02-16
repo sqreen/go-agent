@@ -252,7 +252,7 @@ func testProxy(t *testing.T, envVar string) {
 	//back.HTTPTestServer.Listener.Close()
 	//listener, _ := net.Listen("tcp", testlib.GetNonLoopbackIP().String()+":0")
 	//back.HTTPTestServer.Listener = listener
-	//back.Start()
+	//back.start()
 	//defer back.Close()
 	//back.AppendHandlers(ghttp.CombineHandlers(
 	//	ghttp.VerifyRequest(http.MethodPost, "/sqreen/v1/app-login"),

@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package internal
 
 import (
@@ -57,15 +59,13 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 		return nil, NewLoginError(err)
 	}
 
-	procInfo := appInfo.GetProcessInfo()
-
 	_, bundleSignature, err := appInfo.Dependencies()
 	if err != nil {
-		logger.Error(sqerrors.Wrap(err, "could not retrieve the dependencies"))
+		logger.Error(withNotificationError{sqerrors.Wrap(err, "could not retrieve the program dependencies")})
 	}
 
 	appLoginReq := api.AppLoginRequest{
-		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace(procInfo),
+		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace((*appInfoAPIAdapter)(appInfo)),
 		BundleSignature: bundleSignature,
 		AgentType:       "golang",
 		AgentVersion:    version,

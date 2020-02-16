@@ -162,7 +162,7 @@ func TestCommandManager(t *testing.T) {
 					for _, args := range tc.BadArgs {
 						args := args // new scope
 						agent.Reset()
-						// No agent calls are expected
+						// No agentInstance calls are expected
 
 						uuid := testlib.RandPrintableUSASCIIString(1, 126)
 						results := mng.Do([]api.CommandRequest{

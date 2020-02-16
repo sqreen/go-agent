@@ -59,6 +59,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook/internal"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
+	"golang.org/x/xerrors"
 )
 
 //go:linkname _sqreen_atomic_load_pointer _sqreen_atomic_load_pointer
@@ -70,7 +71,7 @@ func _sqreen_atomic_load_pointer(addr *unsafe.Pointer) unsafe.Pointer {
 //go:linkname _sqreen_hook_table _sqreen_hook_table
 var _sqreen_hook_table internal.HookTableType
 
-type symbolIndexType map[string]Hook
+type symbolIndexType map[string]*Hook
 
 // index of hooks by symbol string. The index is lazily created when symbols
 // are searched. Note that due to the large amount of hooks, we avoid having
@@ -95,10 +96,14 @@ type Hook struct {
 // The expected epilog signature is:
 //		type epilog = func(*R, *S, *T)
 // The returned epilog value can be nil when there is no need for epilog.
-type PrologCallback interface{}
-
-// MethodReceiver is the first argument of a method prolog.
-type MethodReceiver = interface{}
+type (
+	PrologCallback       interface{}
+	PrologCallbackGetter interface {
+		PrologCallback() PrologCallback
+	}
+	ReflectedPrologCallback = func(params []reflect.Value) (epilog ReflectedEpilogCallback, err error)
+	ReflectedEpilogCallback = func(results []reflect.Value)
+)
 
 // Errors that hooks can return in order to modify the control flow of the
 // function.
@@ -111,11 +116,23 @@ const (
 )
 
 func (e Error) Error() string {
-	return fmt.Sprintf("Error(%d)", e)
+	switch e {
+	case AbortError:
+		return "abort function execution"
+	default:
+		return "unknown"
+	}
 }
 
 // Static assertion that `Error` implements interface `error`
 var _ error = Error(0)
+
+func Health() error {
+	if len(_sqreen_hook_table) == 0 {
+		return sqerrors.New("the program is not instrumented - please refer to docs.sqreen.com/go/installation in order to instrument your program")
+	}
+	return nil
+}
 
 // Find returns the hook associated to the given symbol string when it was
 // created using `New()`, nil otherwise.
@@ -128,7 +145,7 @@ func Find(symbol string) (*Hook, error) {
 func (t symbolIndexType) find(symbol string) (*Hook, error) {
 	// Lookup the symbol index first
 	if hook, exists := index[symbol]; exists {
-		return &hook, nil
+		return hook, nil
 	}
 	// Not found in the index: lookup the hook table
 	return hookTableLookup(_sqreen_hook_table, symbol, index)
@@ -157,8 +174,9 @@ func hookTableLookup(table internal.HookTableType, symbol string, index symbolIn
 		return nil
 	})
 
-	if err != nil {
-		return nil, sqerrors.Wrapf(err, "hook table lookup of symbol `%s`", symbol)
+	var panicErr *sqsafe.PanicError
+	if err != nil && xerrors.As(err, &panicErr) {
+		return nil, sqerrors.Wrapf(panicErr.Err, "hook table lookup of symbol `%s`", symbol)
 	}
 	return found, nil
 }
@@ -195,24 +213,28 @@ func (t symbolIndexType) add(fn, prologVar interface{}) (*Hook, error) {
 	prologFuncType := prologVarValue.Type()
 
 	if err := validatePrologVar(fnType, prologFuncType); err != nil {
-		return nil, sqerrors.Wrap(err, "prolog validation")
+		return nil, sqerrors.Wrap(err, "prolog variable validation")
 	}
 
 	prologFuncType = prologFuncType.Elem().Elem()
 	prologVarAddr := (*unsafe.Pointer)(unsafe.Pointer(prologVarValue.Pointer()))
 
 	// Create the hook, store it in the map and return it.
-	hook := Hook{
+	hook := &Hook{
 		symbol:         symbol,
 		prologFuncType: prologFuncType,
 		prologVarAddr:  prologVarAddr,
 	}
 	t[symbol] = hook
-	return &hook, nil
+	return hook, nil
 }
 
 func (h *Hook) String() string {
 	return fmt.Sprintf("%s (%s)", h.symbol, h.prologFuncType)
+}
+
+func (h *Hook) PrologFuncType() reflect.Type {
+	return h.prologFuncType
 }
 
 // Attach atomically attaches a prolog function to the hook. The hook can be
@@ -225,7 +247,14 @@ func (h *Hook) Attach(prolog PrologCallback) error {
 		return nil
 	}
 
-	if h.prologFuncType != reflect.ValueOf(prolog).Type() {
+	switch actual := prolog.(type) {
+	case ReflectedPrologCallback:
+		prolog = makePrologCallback(h, actual)
+	case PrologCallbackGetter:
+		prolog = actual.PrologCallback()
+	}
+
+	if h.prologFuncType != reflect.TypeOf(prolog) {
 		return sqerrors.Errorf("unexpected prolog type for hook `%s`: got `%T`, wanted `%s`", h, prolog, h.prologFuncType)
 	}
 
@@ -236,6 +265,27 @@ func (h *Hook) Attach(prolog PrologCallback) error {
 	// Atomically store it: *addr = ptr
 	atomic.StorePointer(addr, unsafe.Pointer(ptr.Pointer()))
 	return nil
+}
+
+func makePrologCallback(h *Hook, prolog ReflectedPrologCallback) PrologCallback {
+	prologFuncType := h.prologFuncType
+	epilogFuncType := h.prologFuncType.Out(0)
+	return reflect.MakeFunc(prologFuncType, func(args []reflect.Value) (results []reflect.Value) {
+		epilog, err := prolog(args)
+		var epilogFuncValue reflect.Value
+		if epilog != nil {
+			epilogFuncValue = reflect.MakeFunc(epilogFuncType, func(args []reflect.Value) (results []reflect.Value) {
+				epilog(args)
+				return []reflect.Value{}
+			})
+		} else {
+			epilogFuncValue = reflect.New(epilogFuncType).Elem()
+		}
+		// The error value is retrieved through its pointer because ValueOf returns
+		// the concrete type value and error is an interface
+		// cf. https://github.com/golang/go/issues/28761
+		return []reflect.Value{epilogFuncValue, reflect.ValueOf(&err).Elem()}
+	}).Interface()
 }
 
 // validatePrologVar validates that the prolog variable has the expected type.
@@ -324,11 +374,11 @@ func validateCallbackArgs(callbackType reflect.Type, expectedArgs []reflect.Type
 
 	// Check arguments are pointers to the same types than the function arguments.
 	// The first argument is the only exception which may be a method receiver.
-	i := 0
-	if callbackType.In(i) == reflect.TypeOf((*MethodReceiver)(nil)).Elem() {
-		i++
-	}
-	for ; i < callbackArgc; i++ {
+	//i := 0
+	//if callbackType.In(i) == reflect.TypeOf((*MethodReceiver)(nil)).Elem() {
+	//	i++
+	//}
+	for i := 0; i < callbackArgc; i++ {
 		expectedArgType := reflect.PtrTo(expectedArgs[i])
 		callbackArgType := callbackType.In(i)
 		if expectedArgType != callbackArgType {

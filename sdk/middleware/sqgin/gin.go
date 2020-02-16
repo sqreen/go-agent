@@ -2,14 +2,23 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package sqgin
 
 import (
+	"context"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	gingonic "github.com/gin-gonic/gin"
-	"github.com/sqreen/go-agent/sdk"
-	"github.com/sqreen/go-agent/sdk/middleware/sqhttp"
+	"github.com/sqreen/go-agent/internal"
+	protection_context "github.com/sqreen/go-agent/internal/protection/context"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 )
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
@@ -55,29 +64,195 @@ import (
 //	}
 //
 func Middleware() gingonic.HandlerFunc {
+	internal.Start()
 	return func(c *gingonic.Context) {
-		// Adapt sqhttp middleware to Gin's
-		err := sqhttp.MiddlewareWithError(sqhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
-			c.Request = r
-			// Gin implements the `context.Context` interface but with string keys, so
-			// we need to also store the request record in Gin's context using a string
-			// key (previous call to `sdk.NewHTTPRequest()` stored it with a non-string
-			// key, as documented by `context.WithValue()`
-			// (https://godoc.org/context#WithValue)).
-			contextKey := sdk.HTTPRequestRecordContextKey.String
-			c.Set(contextKey, sdk.FromContext(r.Context()))
+		requestReader := &requestReaderImpl{c: c}
+		responseWriter := &responseWriterImpl{c: c}
+
+		reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
+		defer cancelHandlerContext()
+
+		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
+		if ctx == nil {
 			c.Next()
-			monitorHTTPStatusCode(c.Writer.Status())
-			return nil
-		})).ServeHTTP(c.Writer, c.Request)
-		if err != nil {
+			return
+		}
+
+		defer func() {
+			_ = ctx.Close(responseWriter.closeResponseWriter())
+		}()
+
+		c.Set(protection_context.ContextKey.String, ctx)
+		c.Request = c.Request.WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx))
+
+		if err := ctx.Before(); err != nil {
 			c.Abort()
+			return
+		}
+		c.Next()
+		// Handler-based protection such as user security responses or RASP
+		// protection may lead to aborted requests. Simply
+		if c.IsAborted() {
+			return
+		}
+		if err := ctx.After(); err != nil {
+			c.Abort()
+			return
 		}
 	}
 }
 
-func monitorHTTPStatusCode(statusCode int) {
-	// Hack for now to monitor the status code because Gin doesn't use the
-	// HTTP ResponseWriter when overwriting it through c.Writer = ...
-	sqhttp.ResponseWriter{}.WriteHeader(statusCode)
+type requestReaderImpl struct {
+	c *gingonic.Context
+}
+
+func (r *requestReaderImpl) UserAgent() string {
+	return r.c.Request.UserAgent()
+}
+
+func (r *requestReaderImpl) Referer() string {
+	return r.c.Request.Referer()
+}
+
+func (r *requestReaderImpl) ClientIP() net.IP {
+	return nil // Delegated to the middleware according the agent configuration
+}
+
+func (r *requestReaderImpl) Method() string {
+	return r.c.Request.Method
+}
+
+func (r *requestReaderImpl) URL() *url.URL {
+	return r.c.Request.URL
+}
+
+func (r *requestReaderImpl) RequestURI() string {
+	return r.c.Request.RequestURI
+}
+
+func (r *requestReaderImpl) Host() string {
+	return r.c.Request.Host
+}
+
+func (r *requestReaderImpl) IsTLS() bool {
+	return r.c.Request.TLS != nil
+}
+
+func (r *requestReaderImpl) FrameworkParams() url.Values {
+	params := r.c.Params
+	res := url.Values{}
+	for _, param := range params {
+		res[param.Key] = []string{param.Value}
+	}
+	return res
+}
+
+func (r *requestReaderImpl) Form() url.Values {
+	_ = r.c.Request.ParseForm()
+	return r.c.Request.Form
+}
+
+func (r *requestReaderImpl) PostForm() url.Values {
+	_ = r.c.Request.ParseForm()
+	return r.c.Request.PostForm
+}
+
+func (r *requestReaderImpl) Headers() http.Header {
+	return r.c.Request.Header
+}
+
+func (r *requestReaderImpl) Header(h string) string {
+	return r.c.Request.Header.Get(h)
+}
+
+func (r *requestReaderImpl) RemoteAddr() string {
+	return r.c.Request.RemoteAddr
+}
+
+type responseWriterImpl struct {
+	c      *gingonic.Context
+	status int
+	closed bool
+}
+
+func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
+	if !w.closed {
+		w.c.Writer.Flush()
+		w.closed = true
+	}
+	return newObservedResponse(w)
+}
+
+func (w *responseWriterImpl) Header() http.Header {
+	headers := w.c.Writer.Header()
+	if w.closed {
+		return headers.Clone()
+	}
+	return headers
+}
+
+func (w *responseWriterImpl) Write(b []byte) (int, error) {
+	if w.closed {
+		return 0, types.WriteAfterCloseError{}
+	}
+	return w.c.Writer.Write(b)
+}
+
+func (w *responseWriterImpl) WriteString(s string) (int, error) {
+	if w.closed {
+		return 0, types.WriteAfterCloseError{}
+	}
+	return io.WriteString(w.c.Writer, s)
+}
+
+// Static assert that the io.StringWriter is implemented
+var _ io.StringWriter = (*responseWriterImpl)(nil)
+
+func (w *responseWriterImpl) WriteHeader(statusCode int) {
+	if w.closed {
+		return
+	}
+	w.status = statusCode
+	w.c.Writer.WriteHeader(statusCode)
+}
+
+// response observed by the response writer
+type observedResponse struct {
+	contentType   string
+	contentLength int
+	status        int
+}
+
+func newObservedResponse(r *responseWriterImpl) *observedResponse {
+	// Content-Type will be not empty only when explicitly set.
+	// It could be guessed as net/http does. Not implemented for now.
+	ct := r.Header().Get("Content-Type")
+	// Content-Length is either explicitly set or the amount of written data.
+	cl := r.c.Writer.Size()
+	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
+		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
+			cl = int(l)
+		}
+	}
+	return &observedResponse{
+		contentType:   ct,
+		contentLength: cl,
+		status:        r.status,
+	}
+}
+
+func (r *observedResponse) Status() int {
+	if status := r.status; status != 0 {
+		return status
+	}
+	// Default net/http status is 200
+	return http.StatusOK
+}
+
+func (r *observedResponse) ContentType() string {
+	return r.contentType
+}
+
+func (r *observedResponse) ContentLength() int {
+	return r.contentLength
 }

@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 // A binding accessor is an expression allowing to get data from a given
 // context. It is used in order to dynamically get data from, for example,
 // requests. Rules the agent receives can therefore contain the binding
@@ -13,6 +15,7 @@ package bindingaccessor
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -88,6 +91,11 @@ func compileExpr(expr string) (valueFunc, error) {
 
 	for len(buf) > 0 {
 		switch buf[0] {
+		case '(':
+			valueFn, buf, err = compileCall(valueFn, buf[1:])
+			if err != nil {
+				return nil, err
+			}
 		case '.':
 			valueFn, buf, err = compileField(valueFn, buf[1:])
 			if err != nil {
@@ -131,6 +139,50 @@ func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 	return valueFn, nil
 }
 
+func compileCall(valueFn valueFunc, buf string) (valueFunc, string, error) {
+	close := strings.IndexByte(buf, ')')
+	if close == -1 {
+		return nil, buf, sqerrors.Errorf("missing closing index bracket `)` in `%s`", buf)
+	}
+
+	arg, err := compileExpr(buf[:close])
+	if err != nil {
+		return nil, buf, err
+	}
+
+	buf = buf[close:]
+	if len(buf) == 1 {
+		buf = buf[:0]
+	} else {
+		buf = buf[1:]
+	}
+
+	return func(ctx Context, depth int) (interface{}, error) {
+		if depth == 0 {
+			return nil, ErrMaxExecutionDepth
+		}
+		v, err := valueFn(ctx, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		a, err := arg(ctx, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		return execCall(v, a)
+	}, buf, nil
+}
+
+func execCall(fn interface{}, arg interface{}) (interface{}, error) {
+	results := reflect.ValueOf(fn).Call([]reflect.Value{reflect.ValueOf(arg)})
+	r1 := results[1]
+	var err error
+	if !r1.IsNil() {
+		err = r1.Interface().(error)
+	}
+	return results[0].Interface(), err
+}
+
 func compileField(valueFn valueFunc, buf string) (valueFunc, string, error) {
 	field, buf := parseIdentifier(buf)
 	field = strings.TrimRight(field, " ")
@@ -172,7 +224,7 @@ func compileOperand(buf string) (valueFunc, string, error) {
 }
 
 func parseIdentifier(buf string) (identifier string, newBuf string) {
-	switch separator := strings.IndexAny(buf, "[.|"); separator {
+	switch separator := strings.IndexAny(buf, "([.|"); separator {
 	case -1:
 		return buf, buf[:0]
 	default:
@@ -185,12 +237,19 @@ func compileIdentifier(buf string) (valueFunc, string, error) {
 	identifier = strings.TrimSpace(identifier)
 
 	var valueFn valueFunc
-	if identifier == "#" {
+	switch identifier {
+	default:
+		return nil, buf, sqerrors.Errorf("unknown identifier `%s`", identifier)
+	case "#":
 		valueFn = func(ctx Context, depth int) (interface{}, error) {
 			return ctx, nil
 		}
-	} else {
-		return nil, buf, sqerrors.Errorf("unknown identifier `%s`", identifier)
+	case "nil":
+		fallthrough
+	case "null":
+		valueFn = func(ctx Context, depth int) (interface{}, error) {
+			return nil, nil
+		}
 	}
 
 	return valueFn, buf, nil

@@ -156,6 +156,8 @@ func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 		value = &RedirectionRuleDataEntry{}
 	case WAFType:
 		value = &WAFRuleDataEntry{}
+	case ReflectedCallbackConfigType:
+		value = &ReflectedCallbackConfig{}
 	default:
 		return sqerrors.Errorf("unexpected type of rule data value `%s`", t)
 	}
@@ -175,8 +177,8 @@ func (v *RuleDataEntry) MarshalJSON() ([]byte, error) {
 	switch actual := v.Value.(type) {
 	case *CustomErrorPageRuleDataEntry:
 		discriminant = struct {
-			Type string `json:"type"`
-			*CustomErrorPageRuleDataEntry // Inlined
+			Type                          string `json:"type"`
+			*CustomErrorPageRuleDataEntry        // Inlined
 		}{
 			Type: CustomErrorPageType, CustomErrorPageRuleDataEntry: actual,
 		}

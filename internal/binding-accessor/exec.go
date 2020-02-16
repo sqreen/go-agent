@@ -2,6 +2,8 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
+//sqreen:ignore
+
 package bindingaccessor
 
 import (
@@ -14,6 +16,13 @@ import (
 func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 	lvalue := reflect.ValueOf(v)
 	switch lvalue.Kind() {
+	case reflect.Func:
+		// TODO: this is only for backward compatible with some binding accessor
+		//   expressions that were struct fields and became interface methods such
+		//   as `#.Request.Header['header']` that formerly was the http header map
+		//   and is now an interface method... To remove as soon as we deprecate
+		//   versions below v1.
+		return execCall(lvalue, index)
 	case reflect.Map:
 		value := lvalue.MapIndex(reflect.ValueOf(index))
 		var zero reflect.Value
@@ -24,47 +33,56 @@ func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 	case reflect.Slice:
 		return lvalue.Index(index.(int)).Interface(), nil
 	default:
-		return nil, sqerrors.Errorf("cannot index value `%v` of type `%T` with index `%v` of type `%T`", v, v, index, index)
+		return nil, sqerrors.Errorf("cannot index value `%[1]v` of type `%[1]T` with index `%[2]v` of type `%[2]T`", v, index)
 	}
 }
 
 func execFieldAccess(value interface{}, field string) (interface{}, error) {
-	root := reflect.ValueOf(value)
-	v := root
-loop:
+	v := reflect.ValueOf(value)
 	for {
 		switch v.Kind() {
 		case reflect.Interface:
 			fallthrough
 		case reflect.Ptr:
+			if m := v.MethodByName(field); m.IsValid() {
+				// Call the the method which is expected to take no argument and to return a
+				// single value. This line can panic on purpose as this is the primary way
+				// of the `reflect` package for error management. Panics are therefore caught
+				// by the root binding accessor function and returned as an error.
+				if m.Type().NumIn() == 0 {
+					// TODO: validate and return instead an error if not possible
+					return m.Call(nil)[0].Interface(), nil
+				} else {
+					return m.Interface(), nil
+				}
+			}
 			v = v.Elem()
+			continue
+
+		case reflect.Struct:
+			// Try to access a field first
+			if f := v.FieldByName(field); f.IsValid() {
+				return f.Interface(), nil
+			}
+
+			if m := v.MethodByName(field); m.IsValid() {
+				// Call the the method which is expected to take no argument and to return a
+				// single value. This line can panic on purpose as this is the primary way
+				// of the `reflect` package for error management. Panics are therefore caught
+				// by the root binding accessor function and returned as an error.
+				if m.Type().NumIn() == 0 {
+					// TODO: validate and return instead an error if not possible
+					return m.Call(nil)[0].Interface(), nil
+				} else {
+					return m.Interface(), nil
+				}
+			}
+			fallthrough
+
 		default:
-			break loop
+			return nil, sqerrors.Errorf("no field nor method `%s` found in value of type `%T`", field, value)
 		}
 	}
-
-	// Try to access a field first
-	zero := reflect.Value{}
-	if f := v.FieldByName(field); f != zero {
-		return f.Interface(), nil
-	}
-
-	// Otherwise a method on the unreferenced value
-	m := v.MethodByName(field)
-	if m == zero && v != root {
-		// Otherwise on the root value (in case of a pointer receiver)
-		m = root.MethodByName(field)
-	}
-
-	if m == zero {
-		return nil, sqerrors.Errorf("no field nor method `%s` found in value of type `%T`", field, value)
-	}
-
-	// Call the the method which is expected to take no argument and to return a
-	// single value. This line can panic on purpose as this is the primary way
-	// of the `reflect` package for error management. Panics are therefore caught
-	// by the root binding accessor function and returned as an error.
-	return m.Call(nil)[0].Interface(), nil
 }
 
 func execFlatKeys(ctx Context, v interface{}, maxDepth, maxElements int) interface{} {

@@ -26,6 +26,16 @@ type Action interface {
 	ActionID() string
 }
 
+type RedirectAction interface {
+	Action
+	RedirectionURL() string
+}
+
+type UserRedirectAction interface {
+	RedirectAction
+	UserID() map[string]string
+}
+
 // Timed is an interface implemented by actions having an expiration time.
 type Timed interface {
 	Expired() bool

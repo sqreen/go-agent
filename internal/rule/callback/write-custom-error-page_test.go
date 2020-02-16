@@ -16,7 +16,7 @@ import (
 
 func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 	RunCallbackTest(t, TestConfig{
-		CallbacksCtor: callback.NewWriteCustomErrorPageCallbacks,
+		CallbacksCtor: callback.NewWriteCustomErrorPageCallback,
 		ExpectProlog:  true,
 		PrologType:    reflect.TypeOf(callback.WriteCustomErrorPagePrologCallbackType(nil)),
 		EpilogType:    reflect.TypeOf(callback.WriteCustomErrorPageEpilogCallbackType(nil)),

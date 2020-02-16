@@ -9,14 +9,12 @@ package callback
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/binding-accessor"
-	"github.com/sqreen/go-agent/internal/httphandler"
-	"github.com/sqreen/go-agent/internal/record"
+	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 	"github.com/sqreen/go-libsqreen/waf"
@@ -25,8 +23,8 @@ import (
 
 const defaultMaxWAFTimeBudget = 3 * time.Millisecond
 
-func NewWAFCallback(rule Context, nextProlog sqhook.PrologCallback) (callback interface{}, err error) {
-	cfg, ok := rule.Config().(*api.WAFRuleDataEntry)
+func NewWAFCallback(rule RuleFace) (sqhook.PrologCallback, error) {
+	cfg, ok := rule.Config().Data().(*api.WAFRuleDataEntry)
 	if !ok {
 		return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.WAFRuleDataEntry`", cfg)
 	}
@@ -53,12 +51,6 @@ func NewWAFCallback(rule Context, nextProlog sqhook.PrologCallback) (callback in
 		bindingAccessors[expr] = ba
 	}
 
-	// Next callbacks to call
-	actualNextProlog, ok := nextProlog.(WAFPrologCallbackType)
-	if nextProlog != nil && !ok {
-		return nil, sqerrors.Errorf("unexpected next prolog type `%T`", nextProlog)
-	}
-
 	var timeout time.Duration
 	if cfg.Timeout != 0 {
 		timeout = time.Duration(cfg.Timeout) * time.Millisecond
@@ -66,27 +58,28 @@ func NewWAFCallback(rule Context, nextProlog sqhook.PrologCallback) (callback in
 		timeout = defaultMaxWAFTimeBudget
 	}
 
-	return newWAFPrologCallback(rule, wafRule, bindingAccessors, timeout, actualNextProlog), nil
+	return newWAFPrologCallback(rule, wafRule, bindingAccessors, timeout), nil
 }
 
-type WAFPrologCallbackType = func(*http.ResponseWriter, **http.Request) (WAFEpilogCallbackType, error)
-type WAFEpilogCallbackType = func(*error)
+type (
+	WAFPrologCallbackType = httpprotection.BlockingPrologCallbackType
+	WAFEpilogCallbackType = httpprotection.BlockingEpilogCallbackType
+)
 
 var WAFProtectionError = errors.New("waf protection triggered")
 
-func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, next WAFPrologCallbackType) *wafCallbackObject {
+func newWAFPrologCallback(rule RuleFace, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
-		prolog: func(w *http.ResponseWriter, r **http.Request) (WAFEpilogCallbackType, error) {
-			req := *r
-			rr := record.FromContext(req.Context())
-			baCtx := bindingaccessor.MakeBindingAccessorContext(req, rr.ClientIP().String())
+		prolog: func(p **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
+			ctx := *p
+			baCtx := NewRequestCallbackBindingAccessorContext(ctx.RequestReader)
 			args := make(waf_types.DataSet, len(bindingAccessors))
 			for expr, ba := range bindingAccessors {
 				value, err := ba(baCtx)
 				if err != nil {
 					// Log the error and continue
-					ctx.Error(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr))
+					ctx.Logger().Error(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr))
 					continue
 				}
 				if value == nil {
@@ -98,16 +91,14 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 
 			action, info, err := wafRule.Run(args, timeout)
 			if err != nil {
-				ctx.Error(sqerrors.Wrap(newWAFRunError(err, args, timeout), "waf rule execution error"))
+				ctx.Logger().Error(sqerrors.Wrap(newWAFRunError(err, args, timeout), "waf rule execution error"))
 			} else if err == waf_types.ErrTimeout {
-				// no-op: we don't log on the hot path unless an error occurred
+				// no-op: we don't log in such a hot path
 			} else {
 				info := api.WAFAttackInfo{WAFData: string(info)}
-				if ctx.BlockingMode() && action == waf_types.BlockAction {
-					// Write the blocking response.
-					httphandler.WriteResponse(*w, *r, nil, http.StatusBadRequest, nil)
+				if rule.Config().BlockingMode() && action == waf_types.BlockAction {
 					// Report the event
-					rr.AddAttackEvent(ctx.NewAttack(true, info))
+					ctx.AddAttackEvent(rule.NewAttackEvent(true, info))
 					// Return the epilog and abort the call.
 					return func(err *error) {
 						// An error needs to be written in order to abort handling the
@@ -116,14 +107,11 @@ func newWAFPrologCallback(ctx Context, wafRule waf_types.Rule, bindingAccessors 
 					}, sqhook.AbortError
 				} else if action == waf_types.BlockAction || action == waf_types.MonitorAction {
 					// Report the event
-					rr.AddAttackEvent(ctx.NewAttack(false, info))
+					ctx.AddAttackEvent(rule.NewAttackEvent(false, info))
 				}
 			}
 
-			if next == nil {
-				return nil, nil
-			}
-			return next(w, r)
+			return nil, nil
 		},
 	}
 }
@@ -145,7 +133,7 @@ type wafCallbackObject struct {
 	prolog  WAFPrologCallbackType
 }
 
-func (o *wafCallbackObject) Prolog() sqhook.PrologCallback {
+func (o *wafCallbackObject) PrologCallback() sqhook.PrologCallback {
 	return o.prolog
 }
 
