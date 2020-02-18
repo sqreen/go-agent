@@ -74,7 +74,7 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 	strategy := cfg.Strategy()
 
 	return func(params []reflect.Value) (epilogFunc sqhook.ReflectedEpilogCallback, prologErr error) {
-		sqsafe.Call(func() error {
+		err := sqsafe.Call(func() error {
 			goCtx := params[strategy.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
 			ctx := httpprotection.FromContext(goCtx)
 			if ctx == nil {
@@ -147,7 +147,10 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 			prologErr = sqhook.AbortError
 			return nil
 		})
-		// TODO: if panic: log once
+		if err != nil {
+			// TODO: if panic: log once
+			
+		}
 		return
 	}, nil
 }
