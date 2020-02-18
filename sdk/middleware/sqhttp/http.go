@@ -203,11 +203,7 @@ func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 }
 
 func (w *responseWriterImpl) Header() http.Header {
-	headers := w.ResponseWriter.Header()
-	if w.closed {
-		return headers.Clone()
-	}
-	return headers
+	return w.ResponseWriter.Header()
 }
 
 func (w *responseWriterImpl) Write(b []byte) (int, error) {

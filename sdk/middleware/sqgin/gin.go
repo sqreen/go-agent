@@ -193,11 +193,7 @@ func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 }
 
 func (w *responseWriterImpl) Header() http.Header {
-	headers := w.c.Writer.Header()
-	if w.closed {
-		return headers.Clone()
-	}
-	return headers
+	return w.c.Writer.Header()
 }
 
 func (w *responseWriterImpl) Write(b []byte) (int, error) {
