@@ -94,8 +94,12 @@ func execCall(fn interface{}, arg interface{}) (interface{}, error) {
 	}
 
 	var value interface{}
-	if r0 := results[0]; r0.CanInterface() && !r0.IsZero() || !r0.IsNil() {
-		// TODO: clarify this with tests
+	switch r0 := results[0]; r0.Kind() {
+	case reflect.Interface, reflect.Ptr:
+		if !r0.IsNil() {
+			value = r0.Interface()
+		}
+	default:
 		value = r0.Interface()
 	}
 	return value, nil
