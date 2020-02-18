@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strconv"
 
-	_ "github.com/sqreen/go-agent"
 	"github.com/sqreen/go-agent/internal"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
