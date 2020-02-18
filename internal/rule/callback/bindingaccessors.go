@@ -9,6 +9,7 @@ package callback
 import (
 	"database/sql"
 	"reflect"
+	"regexp"
 
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
@@ -20,8 +21,8 @@ func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflec
 		c   = &BindingAccessorContextType{}
 		err error
 	)
-	for _, field := range capabilities {
-		switch field {
+	for _, cap := range capabilities {
+		switch cap {
 		case "sql":
 			c.SQL, err = NewSQLBindingAccessorContext()
 			if err != nil {
@@ -32,7 +33,7 @@ func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflec
 		case "request":
 			c.RequestBindingAccessorContext = NewRequestCallbackBindingAccessorContext(req)
 		default:
-			return nil, sqerrors.Errorf("unknown binding accessor field")
+			return nil, sqerrors.Errorf("unknown binding accessor capability `%s`", cap)
 		}
 	}
 	return c, nil
@@ -61,13 +62,27 @@ func NewSQLBindingAccessorContext() (*SQLBindingAccessorContextType, error) {
 	return &SQLBindingAccessorContextType{}, nil
 }
 
+// TODO: make dynamic via the rule config
+var dialects = map[string]*regexp.Regexp{
+	"mysql":      regexp.MustCompile(`(?i)(my.*sql)`),
+	"postgresql": regexp.MustCompile(`(?i)(pg)|(pq)|(post)`),
+	"sqlite":     regexp.MustCompile(`(?i)(lite)`),
+	"oracle":     regexp.MustCompile(`(?i)(ora)`),
+}
+
 func (*SQLBindingAccessorContextType) Dialect(v interface{}) (string, error) {
-	return "mysql", nil
 	db, ok := v.(*sql.DB)
 	if !ok {
 		return "", sqerrors.Errorf("unexpected type `%T` while expecting `*sql.DB`", v)
 	}
-	return reflect.ValueOf(db.Driver()).Elem().Type().Name(), nil
+	drvType := reflect.ValueOf(db.Driver()).Elem().Type()
+	pkgPath := drvType.PkgPath()
+	for dialect, re := range dialects {
+		if re.MatchString(pkgPath) {
+			return dialect, nil
+		}
+	}
+	return "", sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath)
 }
 
 type BindingAccessorContextType struct {

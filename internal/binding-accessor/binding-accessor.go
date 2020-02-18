@@ -15,7 +15,6 @@ package bindingaccessor
 
 import (
 	"errors"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -173,16 +172,6 @@ func compileCall(valueFn valueFunc, buf string) (valueFunc, string, error) {
 	}, buf, nil
 }
 
-func execCall(fn interface{}, arg interface{}) (interface{}, error) {
-	results := reflect.ValueOf(fn).Call([]reflect.Value{reflect.ValueOf(arg)})
-	r1 := results[1]
-	var err error
-	if !r1.IsNil() {
-		err = r1.Interface().(error)
-	}
-	return results[0].Interface(), err
-}
-
 func compileField(valueFn valueFunc, buf string) (valueFunc, string, error) {
 	field, buf := parseIdentifier(buf)
 	field = strings.TrimRight(field, " ")
@@ -239,6 +228,14 @@ func compileIdentifier(buf string) (valueFunc, string, error) {
 	var valueFn valueFunc
 	switch identifier {
 	default:
+		// Try match string value
+		if l := len(identifier); l >= 2 && identifier[0] == '\'' && identifier[l-1] == '\'' {
+			str := identifier[1 : l-1]
+			valueFn = func(ctx Context, depth int) (interface{}, error) {
+				return str, nil
+			}
+			break
+		}
 		return nil, buf, sqerrors.Errorf("unknown identifier `%s`", identifier)
 	case "#":
 		valueFn = func(ctx Context, depth int) (interface{}, error) {

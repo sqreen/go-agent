@@ -85,7 +85,7 @@ func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	// Create the new rule descriptors and replace the existing ones
 	var ruleDescriptors hookDescriptors
 	if len(rules) > 0 {
-		e.logger.Debugf("security rules: setting pack `%s`", packID)
+		e.logger.Debugf("security rules: loading rules from pack `%s`", packID)
 		ruleDescriptors = newHookDescriptors(e, rules)
 	}
 	e.setRules(packID, ruleDescriptors)

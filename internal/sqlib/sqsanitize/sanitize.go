@@ -97,6 +97,10 @@ func (s *Scrubber) scrubValue(v reflect.Value, info Info) bool {
 		return scrubbed
 	}
 
+	if !scrubbable(v) {
+		return false
+	}
+
 walk:
 	switch v.Kind() {
 	case reflect.Interface:
@@ -142,6 +146,19 @@ func (s *Scrubber) tryCustomScrubberInterface(v reflect.Value, info Info) (ok, s
 		}
 	}
 	return
+}
+
+// NoScrubber can be implemented by type that do not want to be scrubbed.
+type NoScrubber interface {
+	NoScrub()
+}
+
+func scrubbable(v reflect.Value) bool {
+	if !v.CanInterface() {
+		return true
+	}
+	_, ok := v.Interface().(NoScrubber)
+	return !ok
 }
 
 // tryCustomScrubber call the CustomScrubber method when v implements it.

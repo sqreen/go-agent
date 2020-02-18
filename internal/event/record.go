@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 )
 
@@ -41,11 +42,12 @@ type CustomEvent struct {
 }
 
 type AttackEvent struct {
-	Rule      string
-	Test      bool
-	Blocked   bool
-	Timestamp time.Time
-	Info      interface{}
+	Rule       string
+	Test       bool
+	Blocked    bool
+	Timestamp  time.Time
+	Info       interface{}
+	StackTrace errors.StackTrace
 }
 
 func (r *Record) AddAttackEvent(attack *AttackEvent) {

@@ -22,7 +22,7 @@ func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 		//   as `#.Request.Header['header']` that formerly was the http header map
 		//   and is now an interface method... To remove as soon as we deprecate
 		//   versions below v1.
-		return execCall(lvalue, index)
+		return execCall(v, index)
 	case reflect.Map:
 		value := lvalue.MapIndex(reflect.ValueOf(index))
 		var zero reflect.Value
@@ -83,6 +83,22 @@ func execFieldAccess(value interface{}, field string) (interface{}, error) {
 			return nil, sqerrors.Errorf("no field nor method `%s` found in value of type `%T`", field, value)
 		}
 	}
+}
+
+func execCall(fn interface{}, arg interface{}) (interface{}, error) {
+	// TODO: func type validation
+	results := reflect.ValueOf(fn).Call([]reflect.Value{reflect.ValueOf(arg)})
+
+	if r1 := results[1]; !r1.IsNil() {
+		return nil, r1.Interface().(error)
+	}
+
+	var value interface{}
+	if r0 := results[0]; r0.CanInterface() && !r0.IsZero() || !r0.IsNil() {
+		// TODO: clarify this with tests
+		value = r0.Interface()
+	}
+	return value, nil
 }
 
 func execFlatKeys(ctx Context, v interface{}, maxDepth, maxElements int) interface{} {

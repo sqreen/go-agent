@@ -46,7 +46,7 @@ func (c *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBind
 	}
 	reqCtx := FromContext(ctx)
 	if reqCtx == nil {
-		return nil, sqerrors.Errorf("could not get the http protection context from the context values: did you pass the request context?", v)
+		return nil, sqerrors.Errorf("could not get the http protection context from the context value `%#+v`: did you pass the request context?", v)
 	}
 	c.RequestReader = reqCtx.RequestReader
 	return c, nil
@@ -65,7 +65,7 @@ func (r *RequestBindingAccessorContext) Params() RequestParams {
 	return params
 }
 
-func (r *RequestBindingAccessorContext) Header(h string) (string, error) {
+func (r *RequestBindingAccessorContext) Header(h string) (*string, error) {
 	return r.RequestReader.Header(h), nil
 }
 

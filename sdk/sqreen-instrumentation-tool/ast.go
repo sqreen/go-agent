@@ -445,7 +445,7 @@ var ignoredPkgPrefixes = []string{
 }
 
 var limitedInstrumentationPkgPrefixes = []string{
-	"github.com/sqreen/go-agent",
+	"github.com/sqreen/go-agent/internal/protection",
 	"database/sql",
 }
 

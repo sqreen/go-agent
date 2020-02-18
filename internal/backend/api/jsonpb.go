@@ -156,8 +156,6 @@ func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 		value = &RedirectionRuleDataEntry{}
 	case WAFType:
 		value = &WAFRuleDataEntry{}
-	case ReflectedCallbackConfigType:
-		value = &ReflectedCallbackConfig{}
 	default:
 		return sqerrors.Errorf("unexpected type of rule data value `%s`", t)
 	}

@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
@@ -82,13 +83,14 @@ func (d *CallbackContext) Config() callback.Config {
 	return d.config
 }
 
-func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}) *event.AttackEvent {
+func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent {
 	return &event.AttackEvent{
-		Rule:      d.name,
-		Test:      d.testMode,
-		Blocked:   blocked,
-		Timestamp: time.Now(),
-		Info:      info,
+		Rule:       d.name,
+		Test:       d.testMode,
+		Blocked:    blocked,
+		Timestamp:  time.Now(),
+		Info:       info,
+		StackTrace: st,
 	}
 }
 
@@ -114,6 +116,11 @@ func (g *genericCallbackConfig) JSCallbacks(fname string) string {
 type config struct {
 	blockingMode bool
 	data         interface{}
+	strategy     *api.ReflectedCallbackConfig
+}
+
+func (c *config) Strategy() *api.ReflectedCallbackConfig {
+	return c.strategy
 }
 
 func (c *config) BlockingMode() bool {
@@ -141,7 +148,7 @@ func newCallbackConfig(r *api.Rule) (callback.Config, error) {
 	}
 	cfg.data = data
 
-	if len(r.Callbacks) == 0 {
+	if r.Hookpoint.Strategy == "" || r.Hookpoint.Strategy == "native" {
 		return cfg, nil
 	}
 
@@ -160,6 +167,8 @@ func newCallbackConfig(r *api.Rule) (callback.Config, error) {
 		// the js is stored in the last json array entry
 		js := values[nbEntries-1]
 		jsFuncs[funcName] = js
+
+		cfg.strategy = r.Hookpoint.Config
 
 		// the rest of it are the binding accessors to compute the js arguments
 		bindingAccessors = values[:nbEntries-1]

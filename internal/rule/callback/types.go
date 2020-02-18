@@ -7,6 +7,8 @@ package callback
 import (
 	"reflect"
 
+	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
@@ -21,13 +23,16 @@ type RuleFace interface {
 	//   to pass a time (to pass the time of the observation).
 	PushMetricsValue(key interface{}, value uint64) error
 	Config() Config
-	NewAttackEvent(blocked bool, info interface{}) *event.AttackEvent
+	// TODO: variadic options api
+	NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent
 }
 
 // Config is the interface of the rule configuration.
 type Config interface {
 	BlockingMode() bool
 	Data() interface{}
+	// TODO: make clean config interfaces according to the callback type
+	Strategy() *api.ReflectedCallbackConfig
 }
 
 // NativeCallbackConstructorFunc is a function returning a native callback

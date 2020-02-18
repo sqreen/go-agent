@@ -205,6 +205,11 @@ func (t symbolIndexType) add(fn, prologVar interface{}) (*Hook, error) {
 		return nil, sqerrors.Errorf("could not read the symbol name of function `%#v`", fn)
 	}
 
+	// The hook may have been already added by a previous lookup
+	if hook, exists := t[symbol]; exists {
+		return hook, nil
+	}
+
 	// Check the prolog variable is compatible with the function
 	if prologVar == nil {
 		return nil, sqerrors.New("unexpected prolog variable argument value `nil`")

@@ -31,6 +31,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
+	"github.com/sqreen/go-libsqreen/waf"
 	"golang.org/x/xerrors"
 )
 
@@ -226,17 +227,24 @@ func New(cfg *config.Config) *AgentType {
 	}
 	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
+	// Early health checking
 	if err := rulesEngine.Health(); err != nil {
 		message := fmt.Sprintf("agent disabled: %s", err)
 		backend.SendAgentMessage(logger, cfg, "error", message)
 		logger.Info(message)
 		return nil
 	}
+	// TODO: agent.Health() + waf.Health()
+	if waf.Version() == nil {
+		message := fmt.Sprintf("in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf")
+		backend.SendAgentMessage(logger, cfg, "error", message)
+		logger.Info("agent: ", message)
+	}
 
 	// TODO: remove this SDK metrics period config when the corresponding js rule
 	//  is supported
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
-	logger.Debugf("using sdk metrics store period of %s", sdkMetricsPeriod)
+	logger.Debugf("agent: using sdk metrics store time period of %s", sdkMetricsPeriod)
 
 	piiScrubber, err := sqsanitize.NewScrubber(config.ScrubberKeyRegexp, config.ScrubberValueRegexp, config.ScrubberRedactedString)
 	if err != nil {
@@ -435,14 +443,20 @@ func (a *AgentType) Serve() error {
 }
 
 func (a *AgentType) InstrumentationEnable() (string, error) {
-	rulespackId, err := a.RulesReload()
-	if err != nil {
-		return "", err
+	var id string
+	if a.rules.Count() == 0 {
+		var err error
+		id, err = a.RulesReload()
+		if err != nil {
+			return "", err
+		}
+	} else {
+		id = a.RulespackID()
 	}
 	a.rules.Enable()
 	a.setRunning(true)
 	a.logger.Debug("agent: enabled")
-	return rulespackId, nil
+	return id, nil
 }
 
 // InstrumentationDisable disables the agent instrumentation, which includes for

@@ -53,6 +53,12 @@ func TestGoAssumptions(t *testing.T) {
 	})
 }
 
+var _ sqsanitize.NoScrubber = (NoScrubMap)(nil)
+
+type NoScrubMap map[string]string
+
+func (NoScrubMap) NoScrub() {}
+
 func TestScrubber(t *testing.T) {
 	expectedMask := `<Redacted by Sqreen>`
 
@@ -890,6 +896,48 @@ func TestScrubber(t *testing.T) {
 							Secret_:  []string{randString, "everything"},
 							ApiKey:   9838923,
 						},
+					},
+				},
+			},
+			{
+				name: "noscrubber interface",
+				value: func() interface{} {
+					return NoScrubMap{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
+					}
+				},
+				expected: expectedValues{
+					withValueRE: NoScrubMap{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
+					},
+					withKeyRE: NoScrubMap{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
+					},
+					withBothRE: NoScrubMap{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
+					},
+					withBothDisabled: NoScrubMap{
+						"key":    "everything",
+						"passwd": randString,
+						"apikey": randString,
+						"k4":     "not everything",
+						"secret": "everything",
 					},
 				},
 			},

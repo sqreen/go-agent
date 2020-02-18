@@ -36,7 +36,7 @@ func NewWAFCallback(rule RuleFace) (sqhook.PrologCallback, error) {
 
 	wafRule, err := waf.NewRule(id.String(), cfg.WAFRules)
 	if err != nil {
-		return nil, sqerrors.New("could not instantiate the in-app waf rule")
+		return nil, sqerrors.Wrap(err, "could not instantiate the in-app waf rule")
 	}
 
 	if len(cfg.BindingAccessors) == 0 {
@@ -98,7 +98,8 @@ func newWAFPrologCallback(rule RuleFace, wafRule waf_types.Rule, bindingAccessor
 				info := api.WAFAttackInfo{WAFData: string(info)}
 				if rule.Config().BlockingMode() && action == waf_types.BlockAction {
 					// Report the event
-					ctx.AddAttackEvent(rule.NewAttackEvent(true, info))
+					ctx.AddAttackEvent(rule.NewAttackEvent(true, info, nil))
+					ctx.WriteDefaultBlockingResponse()
 					// Return the epilog and abort the call.
 					return func(err *error) {
 						// An error needs to be written in order to abort handling the
@@ -107,7 +108,7 @@ func newWAFPrologCallback(rule RuleFace, wafRule waf_types.Rule, bindingAccessor
 					}, sqhook.AbortError
 				} else if action == waf_types.BlockAction || action == waf_types.MonitorAction {
 					// Report the event
-					ctx.AddAttackEvent(rule.NewAttackEvent(false, info))
+					ctx.AddAttackEvent(rule.NewAttackEvent(false, info, nil))
 				}
 			}
 

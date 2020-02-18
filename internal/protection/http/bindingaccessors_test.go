@@ -11,18 +11,21 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/sqreen/go-agent/internal/binding-accessor"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/go-playground/assert.v1"
 )
 
 func TestRequestBindingAccessors(t *testing.T) {
 	expectedClientIP := net.IPv4(64, 81, 32, 89)
+	randString := testlib.RandPrintableUSASCIIString()
 
 	var multipartFormBody bytes.Buffer
 	mp := multipart.NewWriter(&multipartFormBody)
@@ -63,7 +66,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.ClientIP`:                     expectedClientIP,
 				`#.URL.RequestURI`:               "/admin",
 				`#.FilteredParams | flat_values`: []interface{}(nil),
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form"},
+				`#.FilteredParams | flat_keys`:   []interface{}(nil),
 			},
 		},
 		{
@@ -120,6 +123,34 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "empty", "z", "both", "prio", "", "orphan", "sqreen"},
 			},
 		},
+		{
+			Title:  "Headers accesses",
+			Method: "GET",
+			URL:    "http://sqreen.com/",
+			Headers: http.Header{
+				"Content-Type":    []string{`application/x-www-form-urlencoded`},
+				"X-Protected-By":  []string{"Sqreen", "ATF", "Julio"},
+				"X-Forwarded-For": []string{"1.2.3.4,5.6.7.8"},
+				"Rand-String":     []string{randString},
+			},
+			Body: strings.NewReader("z=post&both=y&prio=2&=nokey&orphan;empty=&"),
+			BindingAccessors: map[string]interface{}{
+				`#.Method`:                     "GET",
+				`#.Host`:                       "sqreen.com",
+				`#.ClientIP`:                   expectedClientIP,
+				`#.Headers['Content-Type']`:    []string{`application/x-www-form-urlencoded`},
+				`#.Headers['X-Protected-By']`:  []string{"Sqreen", "ATF", "Julio"},
+				`#.Headers['X-Forwarded-For']`: []string{"1.2.3.4,5.6.7.8"},
+				`#.Headers`: http.Header{
+					"Content-Type":    []string{`application/x-www-form-urlencoded`},
+					"X-Protected-By":  []string{"Sqreen", "ATF", "Julio"},
+					"X-Forwarded-For": []string{"1.2.3.4,5.6.7.8"},
+					"Rand-String":     []string{randString},
+				},
+				`#.Header['do not exist']`: (*string)(nil),
+				`#.Header['rand-STRING']`:  &randString,
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.Title, func(t *testing.T) {
@@ -169,8 +200,13 @@ loop:
 }
 
 type requestReaderImpl struct {
-	r        *http.Request
-	clientIP net.IP
+	r               *http.Request
+	clientIP        net.IP
+	frameworkParams url.Values
+}
+
+func (r requestReaderImpl) FrameworkParams() url.Values {
+	return r.frameworkParams
 }
 
 func (r requestReaderImpl) UserAgent() string {
@@ -181,8 +217,16 @@ func (r requestReaderImpl) Referer() string {
 	return r.r.Referer()
 }
 
-func (r requestReaderImpl) Header(header string) (value string) {
-	return r.r.Header.Get(header)
+func (r requestReaderImpl) Header(header string) (value *string) {
+	headers := r.r.Header
+	if headers == nil {
+		return nil
+	}
+	v := headers[textproto.CanonicalMIMEHeaderKey(header)]
+	if len(v) == 0 {
+		return nil
+	}
+	return &v[0]
 }
 
 func (r requestReaderImpl) Headers() http.Header {

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 
@@ -161,8 +162,16 @@ func (r *requestReaderImpl) Headers() http.Header {
 	return r.c.Request.Header
 }
 
-func (r *requestReaderImpl) Header(h string) string {
-	return r.c.Request.Header.Get(h)
+func (r *requestReaderImpl) Header(h string) *string {
+	headers := r.c.Request.Header
+	if headers == nil {
+		return nil
+	}
+	v := headers[textproto.CanonicalMIMEHeaderKey(h)]
+	if len(v) == 0 {
+		return nil
+	}
+	return &v[0]
 }
 
 func (r *requestReaderImpl) RemoteAddr() string {

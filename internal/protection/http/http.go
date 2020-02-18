@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"sync"
@@ -222,20 +223,30 @@ type handledRequest struct {
 	frameworkParams url.Values
 }
 
-func (h *handledRequest) Header(header string) (value string) { return h.headers.Get(header) }
-func (h *handledRequest) Headers() http.Header                { return h.headers }
-func (h *handledRequest) Method() string                      { return h.method }
-func (h *handledRequest) URL() *url.URL                       { return h.url }
-func (h *handledRequest) RequestURI() string                  { return h.requestURI }
-func (h *handledRequest) Host() string                        { return h.host }
-func (h *handledRequest) RemoteAddr() string                  { return h.remoteAddr }
-func (h *handledRequest) IsTLS() bool                         { return h.isTLS }
-func (h *handledRequest) UserAgent() string                   { return h.userAgent }
-func (h *handledRequest) Referer() string                     { return h.referer }
-func (h *handledRequest) Form() url.Values                    { return h.form }
-func (h *handledRequest) PostForm() url.Values                { return h.postForm }
-func (h *handledRequest) ClientIP() net.IP                    { return h.clientIP }
-func (h *handledRequest) FrameworkParams() url.Values         { return h.frameworkParams }
+func (h *handledRequest) Headers() http.Header        { return h.headers }
+func (h *handledRequest) Method() string              { return h.method }
+func (h *handledRequest) URL() *url.URL               { return h.url }
+func (h *handledRequest) RequestURI() string          { return h.requestURI }
+func (h *handledRequest) Host() string                { return h.host }
+func (h *handledRequest) RemoteAddr() string          { return h.remoteAddr }
+func (h *handledRequest) IsTLS() bool                 { return h.isTLS }
+func (h *handledRequest) UserAgent() string           { return h.userAgent }
+func (h *handledRequest) Referer() string             { return h.referer }
+func (h *handledRequest) Form() url.Values            { return h.form }
+func (h *handledRequest) PostForm() url.Values        { return h.postForm }
+func (h *handledRequest) ClientIP() net.IP            { return h.clientIP }
+func (h *handledRequest) FrameworkParams() url.Values { return h.frameworkParams }
+func (h *handledRequest) Header(header string) (value *string) {
+	headers := h.headers
+	if headers == nil {
+		return nil
+	}
+	v := headers[textproto.CanonicalMIMEHeaderKey(header)]
+	if len(v) == 0 {
+		return nil
+	}
+	return &v[0]
+}
 
 // Write the default blocking response. This method only write the response, it
 // doesn't block nor cancel the handler context. Users of this method must

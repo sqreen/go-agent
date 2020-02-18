@@ -59,14 +59,7 @@ func (e *ExceptionEvent) GetContext() api.ExceptionContext {
 
 func (e *ExceptionEvent) GetBacktrace() []api.StackFrame {
 	st := sqerrors.StackTrace(e.err)
-	if len(st) == 0 {
-		return nil
-	}
-	bt := make([]api.StackFrame, 0, len(st))
-	for _, f := range st {
-		bt = append(bt, *api.NewStackFrameFromFace(apiStackFrame(f)))
-	}
-	return bt
+	return stackTraceAPIAdapter(st).GetBacktrace()
 }
 
 func (e *ExceptionEvent) GetInfos() interface{} {

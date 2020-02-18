@@ -8,12 +8,11 @@ package callback
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"sync"
 
+	"github.com/pkg/errors"
 	"github.com/robertkrimen/otto"
-	"github.com/sqreen/go-agent/internal/backend/api"
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
@@ -71,15 +70,15 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 		args[i] = ba
 	}
 
-	data := cfg.Data().(*api.ReflectedCallbackConfig)
+	strategy := cfg.Strategy()
 
 	return func(params []reflect.Value) (epilogFunc sqhook.ReflectedEpilogCallback, err error) {
 		// sqsafe call + logerror
-		goCtx := params[data.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
+		goCtx := params[strategy.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
 		ctx := httpprotection.FromContext(goCtx)
 
 		// Make benefit from the fact this is a protection callback to also get the request reader
-		baCtx, err := NewCallbackBindingAccessorContext(data.BindingAccessor.Capabilities, params, nil, ctx.RequestReader)
+		baCtx, err := NewCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, nil, ctx.RequestReader)
 		if err != nil {
 			return nil, nil
 		}
@@ -117,21 +116,36 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 		}
 
 		result := exported.(map[string]interface{})
+		var raise bool
 		if status, exists := result["status"]; exists && status.(string) == "raise" {
-			blocking := cfg.BlockingMode()
-			var metadata interface{}
-			if blocking {
-				defer ctx.CancelHandlerContext()
-				ctx.WriteDefaultBlockingResponse()
-				metadata = result["record"]
-				// TODO: add stack trace
-			}
-			ctx.AddAttackEvent(rule.NewAttackEvent(blocking, metadata))
+			raise = true
+		}
+		if !raise {
+			return nil, nil
 		}
 
+		blocking := cfg.BlockingMode()
+		metadata := result["record"].(map[string]interface{})
+		abortErr := abortError{}
+		st := sqerrors.StackTrace(errors.WithStack(abortErr))
+		ctx.AddAttackEvent(rule.NewAttackEvent(blocking, noScrub(metadata), st))
+		if !blocking {
+			return nil, nil
+		}
+
+		defer ctx.CancelHandlerContext()
+		ctx.WriteDefaultBlockingResponse()
 		return func(results []reflect.Value) {
-			errorIndex := data.Protection.BlockStrategy.RetIndex
-			results[errorIndex].Elem().Set(reflect.ValueOf(errors.New("sqreen abort")))
+			errorIndex := strategy.Protection.BlockStrategy.RetIndex
+			results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
 		}, sqhook.AbortError
 	}, nil
 }
+
+type noScrub map[string]interface{}
+
+func (n noScrub) NoScrub() {}
+
+type abortError struct{}
+
+func (abortError) Error() string { return "abort" }

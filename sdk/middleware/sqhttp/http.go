@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 
@@ -85,6 +86,22 @@ type requestReaderImpl struct {
 	*http.Request
 }
 
+func (r *requestReaderImpl) Header(h string) (value *string) {
+	headers := r.Request.Header
+	if headers == nil {
+		return nil
+	}
+	v := headers[textproto.CanonicalMIMEHeaderKey(h)]
+	if len(v) == 0 {
+		return nil
+	}
+	return &v[0]
+}
+
+func (r *requestReaderImpl) FrameworkParams() url.Values {
+	return nil // none using net/http
+}
+
 func (r *requestReaderImpl) ClientIP() net.IP {
 	return nil // Delegated to the middleware according the agent configuration
 }
@@ -121,10 +138,6 @@ func (r *requestReaderImpl) PostForm() url.Values {
 
 func (r *requestReaderImpl) Headers() http.Header {
 	return r.Request.Header
-}
-
-func (r *requestReaderImpl) Header(h string) string {
-	return r.Request.Header.Get(h)
 }
 
 func (r *requestReaderImpl) RemoteAddr() string {

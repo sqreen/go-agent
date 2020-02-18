@@ -204,9 +204,10 @@ type MetricDefinition struct {
 }
 
 type Hookpoint struct {
-	Strategy string `json:"strategy"`
-	Method   string `json:"method"`
-	Callback string `json:"callback_class"`
+	Strategy string                   `json:"strategy"`
+	Method   string                   `json:"method"`
+	Callback string                   `json:"callback_class"`
+	Config   *ReflectedCallbackConfig `json:"arguments_options"`
 }
 
 type RuleData struct {
@@ -216,10 +217,9 @@ type RuleData struct {
 type RuleDataEntry Struct
 
 const (
-	CustomErrorPageType         = "custom_error_page"
-	RedirectionType             = "redirection"
-	WAFType                     = "waf"
-	ReflectedCallbackConfigType = "reflected_callback_config"
+	CustomErrorPageType = "custom_error_page"
+	RedirectionType     = "redirection"
+	WAFType             = "waf"
 )
 
 type CustomErrorPageRuleDataEntry struct {
@@ -358,11 +358,12 @@ type RequestRecord_Observed struct {
 }
 
 type RequestRecord_Observed_Attack struct {
-	RuleName string      `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
-	Test     bool        `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
-	Info     interface{} `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
-	Time     time.Time   `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
-	Block    bool        `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
+	RuleName  string       `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
+	Test      bool         `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
+	Info      interface{}  `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
+	Time      time.Time    `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
+	Block     bool         `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
+	Backtrace []StackFrame `json:"backtrace,omitempty"`
 }
 
 type WAFAttackInfo struct {
@@ -801,6 +802,7 @@ type RequestRecord_Observed_AttackFace interface {
 	GetInfo() interface{}
 	GetTime() time.Time
 	GetBlock() bool
+	GetBacktrace() []StackFrame
 }
 
 func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_AttackFace) *RequestRecord_Observed_Attack {
@@ -810,6 +812,7 @@ func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_Attack
 	this.Time = that.GetTime()
 	this.Block = that.GetBlock()
 	this.Info = that.GetInfo()
+	this.Backtrace = that.GetBacktrace()
 	return this
 }
 

@@ -15,7 +15,7 @@ import (
 
 // RequestReader is the read-only interface to the request.
 type RequestReader interface {
-	Header(header string) (value string)
+	Header(header string) (value *string)
 	Headers() http.Header
 	Method() string
 	URL() *url.URL

@@ -11,6 +11,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/app"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/config"
@@ -55,7 +56,10 @@ type httpRequestAPIAdapter struct {
 }
 
 func (a *httpRequestAPIAdapter) GetRid() string {
-	return a.adaptee.Header("X-Request-Id")
+	if rid := a.adaptee.Header("X-Request-Id"); rid != nil {
+		return *rid
+	}
+	return ""
 }
 
 func (a *httpRequestAPIAdapter) GetHeaders() []api.RequestRecord_Request_Header {
@@ -65,10 +69,10 @@ func (a *httpRequestAPIAdapter) GetHeaders() []api.RequestRecord_Request_Header 
 	}
 	var headers []api.RequestRecord_Request_Header
 	for _, header := range trackedHeaders {
-		if value := a.adaptee.Header(header); value != "" {
+		if value := a.adaptee.Header(header); value != nil {
 			headers = append(headers, api.RequestRecord_Request_Header{
 				Key:   header,
-				Value: value,
+				Value: *value,
 			})
 		}
 	}
@@ -190,6 +194,23 @@ func (a *attackEventAPIAdapter) GetTime() time.Time {
 
 func (a *attackEventAPIAdapter) GetBlock() bool {
 	return a.unwrap().Blocked
+}
+
+func (a *attackEventAPIAdapter) GetBacktrace() []api.StackFrame {
+	return stackTraceAPIAdapter(a.StackTrace).GetBacktrace()
+}
+
+type stackTraceAPIAdapter errors.StackTrace
+
+func (a stackTraceAPIAdapter) GetBacktrace() []api.StackFrame {
+	if len(a) == 0 {
+		return nil
+	}
+	bt := make([]api.StackFrame, len(a))
+	for i, f := range a {
+		bt[i] = *api.NewStackFrameFromFace(apiStackFrame(f))
+	}
+	return bt
 }
 
 func (a *closedHTTPRequestContextEventAPIAdapter) GetAttacks() []*api.RequestRecord_Observed_Attack {
