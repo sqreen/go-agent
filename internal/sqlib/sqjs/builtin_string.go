@@ -414,9 +414,10 @@ func builtinString_substring(call FunctionCall) Value {
 }
 
 func builtinString_substr(call FunctionCall) Value {
-	target := call.This.string()
+	target := call.This._object().stringValue()
+	//target := call.This.string()
 
-	size := int64(len(target))
+	size := int64(target.Length())
 	start, length := rangeStartLength(call.ArgumentList, size)
 
 	if start >= size {
@@ -435,7 +436,7 @@ func builtinString_substr(call FunctionCall) Value {
 		length = size - start
 	}
 
-	return toValue_string(target[start : start+length])
+	return toValue_string(target.Slice(uint64(start), uint64(start+length)))
 }
 
 func builtinString_toLowerCase(call FunctionCall) Value {

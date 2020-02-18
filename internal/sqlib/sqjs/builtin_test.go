@@ -8,6 +8,8 @@ func TestString_substr(t *testing.T) {
 	tt(t, func() {
 		test, _ := test()
 
+		test(`"'\xe3'".substr(2,1)`, "'")
+
 		test(`
             [
                 "abc".substr(0,1), // "a"

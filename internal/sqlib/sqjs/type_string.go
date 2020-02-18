@@ -9,9 +9,14 @@ type _stringObject interface {
 	Length() int
 	At(int) rune
 	String() string
+	Slice(from, to uint64) string
 }
 
 type _stringASCII string
+
+func (str _stringASCII) Slice(from, to uint64) string {
+	return string(str[from:to])
+}
 
 func (str _stringASCII) Length() int {
 	return len(str)
@@ -29,6 +34,13 @@ type _stringWide struct {
 	string string
 	length int
 	runes  []rune
+}
+
+func (str _stringWide) Slice(from, to uint64) string {
+	if str.runes == nil {
+		str.runes = []rune(str.string)
+	}
+	return string(str.runes[from:to])
 }
 
 func (str _stringWide) Length() int {
