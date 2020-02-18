@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sqreen/go-agent/types"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -30,7 +29,7 @@ func (rr *RequestRecordMockup) NewCustomEvent(event string) types.CustomEvent {
 }
 
 func (rr *RequestRecordMockup) ExpectTrackEvent(event string) *mock.Call {
-	return rr.On("NewCustomEvent", event)
+	return rr.On("AddCustomEvent", event)
 }
 
 func (rr *RequestRecordMockup) Whitelisted() bool {
@@ -62,7 +61,7 @@ func (rr *RequestRecordMockup) NewUserSignup(id map[string]string) {
 }
 
 func (rr *RequestRecordMockup) ExpectTrackSignup(id map[string]string) *mock.Call {
-	return rr.On("NewUserSignup", id)
+	return rr.On("AddUserSignup", id)
 }
 
 func (rr *RequestRecordMockup) Identify(id map[string]string) {
