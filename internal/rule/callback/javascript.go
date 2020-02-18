@@ -12,11 +12,12 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/robertkrimen/otto"
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
+	"github.com/sqreen/go-agent/internal/sqlib/sqjs"
+	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
 
 type GenericCallbackConfig interface {
@@ -32,7 +33,7 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 	}
 
 	// todo: newVMPool()
-	vm := otto.New()
+	vm := sqjs.New()
 	{
 		if src := cfg.JSCallbacks("pre"); src != "" {
 			_, err := vm.Run(src)
@@ -72,73 +73,82 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 
 	strategy := cfg.Strategy()
 
-	return func(params []reflect.Value) (epilogFunc sqhook.ReflectedEpilogCallback, err error) {
-		// sqsafe call + logerror
-		goCtx := params[strategy.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
-		ctx := httpprotection.FromContext(goCtx)
+	return func(params []reflect.Value) (epilogFunc sqhook.ReflectedEpilogCallback, prologErr error) {
+		sqsafe.Call(func() error {
+			goCtx := params[strategy.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
+			ctx := httpprotection.FromContext(goCtx)
+			if ctx == nil {
+				// TODO: log once that nothing found in the context
+				return nil
+			}
 
-		// Make benefit from the fact this is a protection callback to also get the request reader
-		baCtx, err := NewCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, nil, ctx.RequestReader)
-		if err != nil {
-			return nil, nil
-		}
-		jsArgs := make([]interface{}, len(args))
-		for i, a := range args {
-			v, err := a(baCtx)
+			// Make benefit from the fact this is a protection callback to also get the request reader
+			baCtx, err := NewCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, nil, ctx.RequestReader)
 			if err != nil {
-				panic(err)
+				return err
 			}
-			if v == nil {
-				v = struct{}{}
+			jsArgs := make([]interface{}, len(args))
+			for i, a := range args {
+				v, err := a(baCtx)
+				if err != nil {
+					return err
+				}
+				if v == nil {
+					v = struct{}{}
+				}
+				jsArgs[i] = v
 			}
-			jsArgs[i] = v
-		}
 
-		vm := pool.Get().(*otto.Otto)
-		defer pool.Put(vm)
-		// TODO: how to use Object?
-		pre, err := vm.Run("pre")
-		if err != nil {
-			panic(err)
-		}
+			vm := pool.Get().(*sqjs.Otto)
+			defer pool.Put(vm)
+			// TODO: how to use Object instead?
+			pre, err := vm.Run("pre")
+			if err != nil {
+				return err
+			}
 
-		r, err := pre.Call(otto.NullValue(), jsArgs...)
-		if err != nil {
-			panic(err)
-		}
+			r, err := pre.Call(sqjs.NullValue(), jsArgs...)
+			if err != nil {
+				return err
+			}
 
-		if !r.IsObject() {
-			return nil, nil
-		}
-		exported, err := r.Export()
-		if err != nil {
-			panic(err)
-		}
+			if !r.IsObject() {
+				return nil
+			}
+			exported, err := r.Export()
+			if err != nil {
+				return err
+			}
 
-		result := exported.(map[string]interface{})
-		var raise bool
-		if status, exists := result["status"]; exists && status.(string) == "raise" {
-			raise = true
-		}
-		if !raise {
-			return nil, nil
-		}
+			result := exported.(map[string]interface{})
+			var raise bool
+			if status, exists := result["status"]; exists && status.(string) == "raise" {
+				raise = true
+			}
+			if !raise {
+				return nil
+			}
 
-		blocking := cfg.BlockingMode()
-		metadata := result["record"].(map[string]interface{})
-		abortErr := abortError{}
-		st := sqerrors.StackTrace(errors.WithStack(abortErr))
-		ctx.AddAttackEvent(rule.NewAttackEvent(blocking, noScrub(metadata), st))
-		if !blocking {
-			return nil, nil
-		}
+			blocking := cfg.BlockingMode()
+			metadata := result["record"].(map[string]interface{})
+			abortErr := abortError{}
+			st := sqerrors.StackTrace(errors.WithStack(abortErr))
+			ctx.AddAttackEvent(rule.NewAttackEvent(blocking, noScrub(metadata), st))
+			if !blocking {
+				return nil
+			}
 
-		defer ctx.CancelHandlerContext()
-		ctx.WriteDefaultBlockingResponse()
-		return func(results []reflect.Value) {
-			errorIndex := strategy.Protection.BlockStrategy.RetIndex
-			results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
-		}, sqhook.AbortError
+			defer ctx.CancelHandlerContext()
+			ctx.WriteDefaultBlockingResponse()
+			epilogFunc = func(results []reflect.Value) {
+				errorIndex := strategy.Protection.BlockStrategy.RetIndex
+				results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
+			}
+			prologErr = sqhook.AbortError
+			return nil
+		})
+		// TODO: if panic: log once
+		return
 	}, nil
 }
 
