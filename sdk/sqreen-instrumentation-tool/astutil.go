@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
@@ -120,9 +121,11 @@ func newPointerTypeOf(typ dst.Expr) dst.Expr {
 	return &dst.StarExpr{X: typ}
 }
 
+// Return true if the node has a sqreen:ignore directive comment. Explanatory
+// text can be added after it (eg. `//sqreen:ignore because...`)
 func hasSqreenIgnoreDirective(node dst.Node) bool {
-	for _, c := range node.Decorations().Start.All() {
-		if c == sqreenIgnoreDirective {
+	for _, comment := range node.Decorations().Start.All() {
+		if strings.HasPrefix(comment, sqreenIgnoreDirective) {
 			return true
 		}
 	}

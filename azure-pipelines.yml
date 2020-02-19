@@ -9,7 +9,7 @@ jobs:
       vmImage: ubuntu-latest
       go:
         container: golang
-        versions: [ 1.13, 1.12 ]
+        versions: [ rc, 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
 
@@ -30,7 +30,7 @@ jobs:
       continueOnError: true
       go:
         container: golang
-        versions: [ 1.13, 1.12 ]
+        versions: [ rc, 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
 
