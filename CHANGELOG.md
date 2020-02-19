@@ -69,10 +69,10 @@ Because we now want a stable public API, find below the breaking changes:
     return err
   }
   ```
-  Read more about Go integration details at [docs.sqreen.com/go/integration].
+  Read more about Go integration details at http://docs.sqreen.com/go/integration.
 
 - Dashboard diagnostic messages: major setup issues are now also reported
-  through Sqreen's dashboard page of [running hosts](my.sqreen.com/application/goto/settings/hosts)
+  through Sqreen's dashboard page of [running hosts](https://my.sqreen.com/application/goto/settings/hosts)
   to get notified about some downgraded states of the agent, such as:
   - The Go program is not instrumented so the agent didn't start.
   - The In-App WAF wasn't compiled (eg. CGO disabled) so it is unavailable and
