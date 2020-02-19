@@ -204,7 +204,8 @@ type MetricDefinition struct {
 }
 
 type Hookpoint struct {
-	Strategy string                   `json:"strategy"`
+	Strategy string                   `json:"strategy,omitempty"`
+	Klass    string                   `json:"klass"`
 	Method   string                   `json:"method"`
 	Callback string                   `json:"callback_class"`
 	Config   *ReflectedCallbackConfig `json:"arguments_options"`
@@ -245,6 +246,7 @@ type ReflectedCallbackBlockStrategyReturnFunctionErrorConfig struct {
 }
 
 type ReflectedCallbackBlockStrategyConfig struct {
+	Type string `json:"type"`
 	ReflectedCallbackBlockStrategyReturnFunctionErrorConfig
 }
 
@@ -253,6 +255,7 @@ type ReflectedCallbackHTTPProtectionContextFromFuncArgConfig struct {
 }
 
 type ReflectedCallbackHTTPProtectionContextConfig struct {
+	Type string `json:"type"`
 	ReflectedCallbackHTTPProtectionContextFromFuncArgConfig
 }
 
@@ -262,10 +265,12 @@ type ReflectedCallbackHTTPProtectionConfig struct {
 }
 
 type ReflectedCallbackProtectionConfig struct {
+	Type string `json:"type"`
 	ReflectedCallbackHTTPProtectionConfig
 }
 
 type ReflectedCallbackConfig struct {
+	Type            string                                 `json:"type"`
 	Protection      *ReflectedCallbackProtectionConfig     `json:"protection"`
 	BindingAccessor ReflectedCallbackBindingAccessorConfig `json:"binding_accessor"`
 }
