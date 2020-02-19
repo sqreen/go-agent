@@ -5,39 +5,46 @@
 package sqhttp
 
 import (
+	"context"
+	"io"
+	"net"
 	"net/http"
+	"net/textproto"
+	"net/url"
+	"strconv"
 
-	_ "github.com/sqreen/go-agent/agent"
-	"github.com/sqreen/go-agent/sdk"
-	"golang.org/x/xerrors"
+	"github.com/sqreen/go-agent/internal"
+	protection_context "github.com/sqreen/go-agent/internal/protection/context"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 )
 
 // Middleware is Sqreen's middleware function for `net/http` to monitor and
 // protect received requests. In protection mode, it can block and redirect
 // requests according to its IP address or identified user using `Identify()`
-// and `MatchSecurityResponse()` methods during from the request handler.
+// and `MatchSecurityResponse()` methods during from the requestImplType handler.
 //
-// SDK methods can be called from request handlers by using the request event
-// record. It can be accessed using `sdk.FromContext()` on a request context.
-// The middleware function stores it into the request context.
+// SDK methods can be called from requestImplType handlers by using the requestImplType event
+// record. It can be accessed using `sdk.FromContext()` on a requestImplType context.
+// The middleware function stores it into the requestImplType context.
 //
 // Usage example:
 //
 //	fn := func(w http.ResponseWriter, r *http.Request) {
-//		// Get the request record.
+//		// Get the requestImplType record.
 //		sqreen := sdk.FromContext(r.Context())
 //
 //		// Example of sending a custom event.
 //		sqreen.TrackEvent("my.event")
 //
-//		// Example of globally identifying a user and checking if the request
+//		// Example of globally identifying a user and checking if the requestImplType
 //		// should be aborted.
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sqreen.ForUser(uid)
-//		sqUser.Identify() // Globally associate this user to the current request
+//		sqUser.Identify() // Globally associate this user to the current requestImplType
 //		if match, _ := sqUser.MatchSecurityResponse(); match {
-//			// Return to stop further handling the request and let Sqreen's
-//			// middleware apply and abort the request.
+//			// Return to stop further handling the requestImplType and let Sqreen's
+//			// middleware apply and abort the requestImplType.
 //			return
 //		}
 //		// Not blocked.
@@ -45,114 +52,193 @@ import (
 //	}
 //	http.Handle("/foo", sqhttp.Middleware(http.HandlerFunc(fn)))
 //
-func Middleware(next http.Handler) http.Handler {
-	// Simply adapt http.Handler to Handler in order to call MiddlewareWithError
-	// to get the middleware function.
-	m := MiddlewareWithError(HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
-		next.ServeHTTP(w, r)
-		return nil
-	}))
-	// And now return a function adapting Handler to http.Handler
+func Middleware(handler http.Handler) http.Handler {
+	internal.Start()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = m.ServeHTTP(w, r)
+		// requestReader is a pointer value in order to change the inner request
+		// pointer with the new one created by http.(*Request).WithContext below
+		requestReader := &requestReaderImpl{Request: r}
+		responseWriter := &responseWriterImpl{ResponseWriter: w}
+
+		reqCtx, cancelHandlerContext := context.WithCancel(r.Context())
+		defer cancelHandlerContext()
+
+		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
+		if ctx == nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		defer func() {
+			ctx.Close(responseWriter.closeResponseWriter())
+		}()
+
+		reqCtx = context.WithValue(reqCtx, protection_context.ContextKey, ctx)
+		requestReader.Request = r.WithContext(reqCtx)
+
+		if err := ctx.Before(); err != nil {
+			return
+		}
+		handler.ServeHTTP(w, requestReader.Request)
+		if err := ctx.After(); err != nil {
+			return
+		}
 	})
 }
 
-// MiddlewareWithError is a helper middleware to define other middlewares for
-// other frameworks thanks to the error returned by the handlers in order
-// to know if a request is being aborted.
-func MiddlewareWithError(next Handler) Handler {
-	// TODO: move this middleware function into the agent internal package (which
-	//  needs restructuring the SDK)
-	return HandlerFunc(func(w http.ResponseWriter, r *http.Request) (err error) {
-		// Create a new sqreen request wrapper.
-		req := sdk.NewHTTPRequest(r)
-		if req.Record().Whitelisted() {
-			return next.ServeHTTP(w, r)
-		}
-		defer req.Close()
-		// Use the newly created request compliant with `sdk.FromContext()`.
-		r = req.Request()
-		// Wrap the response writer to monitor the http status codes.
-		w = ResponseWriter{w}
+type requestReaderImpl struct {
+	*http.Request
+}
 
-		// Check the WAF
-		if err := waf(w, r); err != nil {
-			return AbortRequestError{}
-		}
-
-		// Add security headers
-		if err := addSecurityHeaders(w); err != nil {
-			return err
-		}
-		// Check if an early security action is already required such as based on
-		// the request IP address.
-		if handler := req.SecurityResponse(); handler != nil {
-			handler.ServeHTTP(w, r)
-			return AbortRequestError{}
-		}
-		// Call next handler.
-		err = next.ServeHTTP(w, r)
-		// If the returned error is not nil nor a security response, return it now.
-		var secResponse sdk.SecurityResponseMatch
-		if err != nil && !xerrors.As(err, &secResponse) {
-			return err
-		}
-		// Otherwise check if a security response should be applied now, after
-		// having used `Identify()` and `MatchSecurityResponse()`.
-		if handler := req.UserSecurityResponse(); handler != nil {
-			handler.ServeHTTP(w, r)
-			return AbortRequestError{}
-		}
+func (r *requestReaderImpl) Header(h string) (value *string) {
+	headers := r.Request.Header
+	if headers == nil {
 		return nil
-	})
-}
-
-// waf is dynamically instrumented when required in order to apply WAF
-// protection rules on the request. It blocks the request when necessary.
-//go:noinline
-func waf(w http.ResponseWriter, r *http.Request) (err error) {
-	return
-}
-
-// Handler is equivalent to http.Handler but returns an error when the request
-// should no longer be handled.
-type Handler interface {
-	ServeHTTP(w http.ResponseWriter, r *http.Request) error
-}
-
-// HandlerFunc is equivalent to http.HandlerFunc but returns an error when the
-// request should no longer be handled.
-type HandlerFunc func(http.ResponseWriter, *http.Request) error
-
-// ServeHTTP calls f(w, r).
-func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
-	return f(w, r)
-}
-
-// AbortRequestError is returned by handlers when some security response was
-// triggered and handled the response. The request handling should therefore
-// stop.
-type AbortRequestError struct{}
-
-func (AbortRequestError) Error() string {
-	return "request aborted"
-}
-
-//go:noinline
-func addSecurityHeaders(w http.ResponseWriter) (err error) {
-	return nil
-}
-
-type ResponseWriter = responseWriter
-
-type responseWriter struct {
-	http.ResponseWriter
-}
-
-//go:noinline
-func (w responseWriter) WriteHeader(statusCode int) {
-	if w.ResponseWriter != nil {
-		w.ResponseWriter.WriteHeader(statusCode)
 	}
+	v := headers[textproto.CanonicalMIMEHeaderKey(h)]
+	if len(v) == 0 {
+		return nil
+	}
+	return &v[0]
+}
+
+func (r *requestReaderImpl) FrameworkParams() url.Values {
+	return nil // none using net/http
+}
+
+func (r *requestReaderImpl) ClientIP() net.IP {
+	return nil // Delegated to the middleware according the agent configuration
+}
+
+func (r *requestReaderImpl) Method() string {
+	return r.Request.Method
+}
+
+func (r *requestReaderImpl) URL() *url.URL {
+	return r.Request.URL
+}
+
+func (r *requestReaderImpl) RequestURI() string {
+	return r.Request.RequestURI
+}
+
+func (r *requestReaderImpl) Host() string {
+	return r.Request.Host
+}
+
+func (r *requestReaderImpl) IsTLS() bool {
+	return r.Request.TLS != nil
+}
+
+func (r *requestReaderImpl) Form() url.Values {
+	_ = r.Request.ParseForm()
+	return r.Request.Form
+}
+
+func (r *requestReaderImpl) PostForm() url.Values {
+	_ = r.Request.ParseForm()
+	return r.Request.PostForm
+}
+
+func (r *requestReaderImpl) Headers() http.Header {
+	return r.Request.Header
+}
+
+func (r *requestReaderImpl) RemoteAddr() string {
+	return r.Request.RemoteAddr
+}
+
+type responseWriterImpl struct {
+	http.ResponseWriter
+	status  int
+	written int
+	closed  bool
+}
+
+// response observed by the response writer
+type observedResponse struct {
+	contentType   string
+	contentLength int
+	status        int
+}
+
+func newObservedResponse(r *responseWriterImpl) *observedResponse {
+	// Content-Type will be not empty only when explicitly set.
+	// It could be guessed as net/http does. Not implemented for now.
+	ct := r.Header().Get("Content-Type")
+	// Content-Length is either explicitly set or the amount of written data.
+	cl := r.written
+	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
+		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
+			cl = int(l)
+		}
+	}
+
+	return &observedResponse{
+		contentType:   ct,
+		contentLength: cl,
+		status:        r.status,
+	}
+}
+
+func (r *observedResponse) Status() int {
+	if status := r.status; status != 0 {
+		return status
+	}
+	// Default net/http status is 200
+	return http.StatusOK
+}
+
+func (r *observedResponse) ContentType() string {
+	return r.contentType
+}
+
+func (r *observedResponse) ContentLength() int64 {
+	return int64(r.contentLength)
+}
+
+func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
+	if !w.closed {
+		if flusher, ok := (w.ResponseWriter).(http.Flusher); ok {
+			flusher.Flush()
+		}
+		w.closed = true
+	}
+	return newObservedResponse(w)
+}
+
+func (w *responseWriterImpl) Header() http.Header {
+	return w.ResponseWriter.Header()
+}
+
+func (w *responseWriterImpl) Write(b []byte) (int, error) {
+	if w.closed {
+		return 0, types.WriteAfterCloseError{}
+	}
+	written, err := w.ResponseWriter.Write(b)
+	if err == nil {
+		w.written += written
+	}
+	return written, err
+}
+
+func (w *responseWriterImpl) WriteString(s string) (int, error) {
+	if w.closed {
+		return 0, types.WriteAfterCloseError{}
+	}
+	written, err := io.WriteString(w.ResponseWriter, s)
+	if err == nil {
+		w.written += written
+	}
+	return written, err
+}
+
+// Static assert that the io.StringWriter is implemented
+var _ io.StringWriter = &responseWriterImpl{}
+
+func (w *responseWriterImpl) WriteHeader(statusCode int) {
+	if w.closed {
+		return
+	}
+	w.status = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
 }

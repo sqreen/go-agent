@@ -225,9 +225,6 @@ func newInstrumentationStmt(prologLoadFuncIdent string, prologCallArgs, epilogCa
 func newSqreenPrologFuncType(funcDecl *dst.FuncDecl, epilogType *dst.FuncType) (prologType *dst.FuncType, callParams []dst.Expr) {
 	funcType := funcDecl.Type
 	callbackTypeParamList, callbackCallParams := newSqreenCallbackParams(funcDecl.Recv, funcType.Params, "_sqreen_param")
-	if funcDecl.Recv != nil {
-		callbackTypeParamList.List[0].Type = newEmptyInterfaceType()
-	}
 	return &dst.FuncType{
 		Params: callbackTypeParamList,
 		Results: &dst.FieldList{
@@ -448,7 +445,7 @@ var ignoredPkgPrefixes = []string{
 }
 
 var limitedInstrumentationPkgPrefixes = []string{
-	"github.com/sqreen/go-agent",
+	"github.com/sqreen/go-agent/internal/protection",
 	"database/sql",
 }
 

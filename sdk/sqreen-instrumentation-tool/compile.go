@@ -257,6 +257,11 @@ func (h *packageInstrumentationHelper) writeInstrumentedFiles(buildDirPath strin
 			return nil, err
 		}
 		defer output.Close()
+		// Add a go line directive in order to map it to its original source file.
+		// Note that otherwise it uses the build directory but it is trimmed by the
+		// compiler - so you end up with filenames without any leading path (eg.
+		// myfile.go) leading to broken debuggers or stack traces.
+		output.WriteString(fmt.Sprintf("//line %s:1\n", src))
 		if err := writeFile(node, output); err != nil {
 			return nil, err
 		}
