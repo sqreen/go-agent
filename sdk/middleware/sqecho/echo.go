@@ -33,15 +33,12 @@ func FromContext(c echo.Context) *sdk.Context {
 	return sdk.FromContext(c.Request().Context())
 }
 
-// Middleware is Sqreen's middleware function for Echo to monitor and protect
-// the requests Echo receives. In protection mode, it can block and redirect
-// requests according to their IP addresses or identified users using
-// Identify()` and `MatchSecurityResponse()` methods.
+// Middleware is Sqreen's middleware function for echo to monitor and protect the
+// requests echo receives.
 //
-// SDK methods can be called from request handlers by using the request event
-// record. It can be accessed using `sdk.FromContext()` on a request context or
-// this package's `FromContext()` on an Echo request context. The middleware
-// function stores it into both of them.
+// SDK methods can be called from request handlers by using the request context.
+// It can be retrieved from the request context using `sdk.FromContext()` or
+// on a echo's context.
 //
 // Usage example:
 //
@@ -65,10 +62,10 @@ func FromContext(c echo.Context) *sdk.Context {
 //		// aborted.
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sqecho.FromContext(c).ForUser(uid)
-//		sqUser.Identify() // Globally associate this user to the current request
-//		if match, err := sqUser.MatchSecurityResponse(); match {
-//			// Return to stop further handling the request and let Sqreen's
-//			// middleware apply and abort the request.
+//		// Globally associate this user to the current request and check if it got
+//		// blocked.
+//		if err := sqUser.Identify(); err != nil {
+//			// Return to stop further handling the request
 //			return err
 //		}
 //		// ... not blocked ...
