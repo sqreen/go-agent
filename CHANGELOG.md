@@ -1,3 +1,86 @@
+# v0.9.0
+
+This new major version says farewell to the `beta` and adds SQL-injection
+run time protection thanks the first building blocks of [RASP][RASP-Wikipedia]
+for the Go language! Thank you to everyone that helped us in this wonderful
+and amazing journey ;-)
+
+The Go agent has been protecting production servers for more than a year now and
+we reached the point where we are confident enough about its deployment, setup,
+but also its internals and specific integrations with the Go language and
+runtime.
+
+We are getting closer to the fully-featured agent v1.0 as we will now be able to
+fully add support for every RASP protection Sqreen supports.
+
+## Breaking Changes
+
+Because we now want a stable public API, find below the breaking changes:
+
+- The former separate agent package `github.com/sqreen/go-agent/agent` that was
+  asked to import in order to start the agent is no longer required nor
+  available. This is now performed by the middleware functions we
+  provide in order to avoid the most common setup mistake during the
+  beta where only the agent was setup and no middleware function was set to
+  protect the requests (and therefore nothing was happening).
+
+- SDK: the user identification SDK method `Identify()` has been updated to be
+  simpler to use and less error-prone by now making it return a non-nil error
+  when the request handler shouldn't continue any further serving the request.
+  It happens when a user security response has matched the identified user.
+  This replaces the former separate SDK method `MatchSecurityResponse()`.
+  New usage example:
+  ```go
+  sqUser := sq.ForUser(sdk.EventUserIdentifiersMap{"uid": "unique user id"})
+  if err := sqUser.Identify(); err != nil {
+    return
+  }
+  ```
+
+- The agent no longer starts if the program wasn't instrumented using the
+  instrumentation tool. See docs.sqreen.com/go/installation for details
+  on how to install and use the tool. Note that the program is not aborted -
+  only the agent is disabled.
+
+- Dropping gRPC support: the beta support for gRPC was experimental and was in
+  the end too limited by Sqreen's focus on the HTTP protocol. Most of our
+  protections are indeed designed for HTTP and couldn't be applied at the gRPC
+  protocol level. We are therefore removing it until we can provide a correct
+  experience for such HTTP-based protocol.  
+  Please contact us if you need any further information or if you are
+  interested in helping us building it (support@sqreen.com).
+
+## New Features
+
+- SQL-injection RASP protection: when enabled on [Sqreen's dashboard](https://my.sqreen.com/application/goto/modules/rasp),
+  the `database/sql` Go package gets automatically protected against SQL
+  injections. SQL queries go through our SQL-injection detection which will
+  abort the SQL function call and corresponding HTTP request when an attack
+  is detected.  
+  Note that special care was taken to properly intergrate with Go error-handling
+  principles: when a SQL query gets blocked, the HTTP request context is
+  canceled and a non-nil error is returned by the `database/sql` function call
+  in order to fall into the existing error-handling flow. For example:
+  ```go
+  // The following query can be injected. An error is returned when the SQL
+  // query was blocked.
+  rows, err := db.QueryContext(ctx, "select id, name from users where id=" + unsafe)
+  if err != nil {
+    return err
+  }
+  ```
+  Read more about Go integration details at [docs.sqreen.com/go/integration].
+
+- Dashboard diagnostic messages: major setup issues are now also reported
+  through Sqreen's dashboard page of [running hosts](my.sqreen.com/application/goto/settings/hosts)
+  to get notified about some downgraded states of the agent, such as:
+  - The Go program is not instrumented so the agent didn't start.
+  - The In-App WAF wasn't compiled (eg. CGO disabled) so it is unavailable and
+    disabled.
+  - The program dependencies couldn't be retrieved because the program was not
+    compiled as a Go module. This is also shown by the dashboard when the list
+    of dependencies is empty.
+
 # v0.1.0-beta.10
 
 ## Breaking Change
@@ -335,3 +418,4 @@ share your impressions with us.
 [playbook]: https://docs.sqreen.com/security-automation/introduction-playbooks/
 [playbooks]: https://docs.sqreen.com/security-automation/introduction-playbooks/
 [csp]: https://docs.sqreen.com/using-sqreen/automatically-set-content-security-policy/
+[RASP-Wikipedia]: https://en.wikipedia.org/wiki/Runtime_application_self-protection
