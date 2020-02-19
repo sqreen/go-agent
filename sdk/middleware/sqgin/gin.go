@@ -55,8 +55,8 @@ import (
 //		// should be aborted.
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sdk.FromContext(c).ForUser(uid)
-//		sqUser.Identify() // Globally associate this user to the current request
-//		if match, _ := sqUser.MatchSecurityResponse(); match {
+//		// Globally associate this user to the current request
+//		if err := sqUser.Identify(); err != nil {
 //			// Return to stop further handling the request and let Sqreen's
 //			// middleware apply and abort the request.
 //			return
@@ -224,7 +224,7 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 // response observed by the response writer
 type observedResponse struct {
 	contentType   string
-	contentLength int
+	contentLength int64
 	status        int
 }
 
@@ -233,10 +233,10 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// It could be guessed as net/http does. Not implemented for now.
 	ct := r.Header().Get("Content-Type")
 	// Content-Length is either explicitly set or the amount of written data.
-	cl := r.c.Writer.Size()
+	cl := int64(r.c.Writer.Size())
 	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
 		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
-			cl = int(l)
+			cl = l
 		}
 	}
 	return &observedResponse{
@@ -258,6 +258,6 @@ func (r *observedResponse) ContentType() string {
 	return r.contentType
 }
 
-func (r *observedResponse) ContentLength() int {
+func (r *observedResponse) ContentLength() int64 {
 	return r.contentLength
 }

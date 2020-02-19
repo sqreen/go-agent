@@ -27,6 +27,11 @@ import (
 )
 
 type instrumentationMockup struct{ mock.Mock }
+
+func (i *instrumentationMockup) Health() error {
+	return i.Mock.Called().Error(0)
+}
+
 type hookMockup struct{ mock.Mock }
 
 func (i *instrumentationMockup) Find(symbol string) (rule.HookFace, error) {
@@ -50,8 +55,9 @@ func (h *hookMockup) ExpectAttach(prolog interface{}) *mock.Call {
 	return h.On("Attach", prolog)
 }
 
-//func func1(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byte) {}
-//func func2(_ http.ResponseWriter, _ *http.Request, _ http.Header, _ int, _ []byte) {}
+func (h *hookMockup) PrologFuncType() reflect.Type {
+	return h.Called().Get(0).(reflect.Type)
+}
 
 type empty struct{}
 
@@ -86,8 +92,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    thisPkgPath,
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -100,8 +105,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "another valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func2",
+					Method:   thisPkgPath + ".func2",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -114,8 +118,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "valid rule but no hookpoint",
 				Hookpoint: api.Hookpoint{
-					Class:    "main",
-					Method:   "main",
+					Method:   "main.main",
 					Callback: "WriteCustomErrorPage",
 				},
 				Signature: MakeSignature(privateKey, `{"name":"my rule"}`),
@@ -123,8 +126,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "valid rule but unknown callback",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func2",
+					Method:   thisPkgPath + ".func2",
 					Callback: "don't exist",
 				},
 				Data: api.RuleData{
@@ -243,8 +245,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    thisPkgPath,
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -257,8 +258,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "another valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func2",
+					Method:   thisPkgPath + ".func2",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -271,8 +271,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "valid rule but no hookpoint",
 				Hookpoint: api.Hookpoint{
-					Class:    "main",
-					Method:   "main",
+					Method:   "main.main",
 					Callback: "WriteCustomErrorPage",
 				},
 				Signature: MakeSignature(privateKey, `{"name":"my rule"}`),
@@ -280,8 +279,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "valid rule but unknown callback",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func2",
+					Method:   thisPkgPath + ".func2",
 					Callback: "don't exist",
 				},
 				Data: api.RuleData{
@@ -296,8 +294,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "another valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func3",
+					Method:   thisPkgPath + ".func3",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -343,8 +340,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    thisPkgPath,
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -357,8 +353,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "another valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func2",
+					Method:   thisPkgPath + ".func2",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -371,8 +366,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "valid rule but no hookpoint",
 				Hookpoint: api.Hookpoint{
-					Class:    "main",
-					Method:   "main",
+					Method:   "main.main",
 					Callback: "WriteCustomErrorPage",
 				},
 				Signature: MakeSignature(privateKey, `{"name":"my rule"}`),
@@ -380,8 +374,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "valid rule but unknown callback",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func2",
+					Method:   thisPkgPath + ".func2",
 					Callback: "don't exist",
 				},
 				Data: api.RuleData{
@@ -400,8 +393,8 @@ func TestEngineUsage(t *testing.T) {
 		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
 		engine.Enable()
 
-		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
-		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
+		instrumentation.ExpectFind(thisPkgPath+".func1").Return(hook1, nil).Once()
+		instrumentation.ExpectFind(thisPkgPath+".func2").Return(hook2, nil).Twice()
 		instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
 		hook1.ExpectAttach(mock.Anything).Return(nil).Once()
 		hook2.ExpectAttach(mock.Anything).Return(nil).Once()
@@ -432,8 +425,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -446,8 +438,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -465,8 +456,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{
@@ -484,8 +474,7 @@ func TestEngineUsage(t *testing.T) {
 			{
 				Name: "a valid rule",
 				Hookpoint: api.Hookpoint{
-					Class:    reflect.TypeOf(empty{}).PkgPath(),
-					Method:   "func1",
+					Method:   thisPkgPath + ".func1",
 					Callback: "WriteCustomErrorPage",
 				},
 				Data: api.RuleData{

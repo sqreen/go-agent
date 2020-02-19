@@ -249,6 +249,7 @@ func (h *Hook) Attach(prolog PrologCallback) error {
 	if prolog == nil {
 		// Disable
 		atomic.StorePointer(addr, nil)
+		// TODO: should we check if the attach cb has a Close() method?
 		return nil
 	}
 

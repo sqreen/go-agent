@@ -171,6 +171,7 @@ func (instance *agentInstanceType) start() {
 
 type disabledAgent struct{}
 
+func (disabledAgent) IsIPWhitelisted(net.IP) bool                                             { return false }
 func (disabledAgent) FindActionByIP(net.IP) (action actor.Action, exists bool, err error)     { return }
 func (disabledAgent) FindActionByUserID(map[string]string) (action actor.Action, exists bool) { return }
 func (disabledAgent) Logger() *plog.Logger                                                    { return nil }
@@ -331,8 +332,15 @@ func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextF
 	return nil
 }
 
-func (a *AgentType) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
-	return a.actors.IsIPWhitelisted(ip)
+func (a *AgentType) IsIPWhitelisted(ip net.IP) (whitelisted bool) {
+	whitelisted, matched, err := a.actors.IsIPWhitelisted(ip)
+	if err != nil {
+		a.logger.Error(sqerrors.Wrapf(err, "agent: unexpected error while looking-up the ip whitelist with `%s`", ip))
+	}
+	if whitelisted {
+		a.addWhitelistEvent(matched)
+	}
+	return whitelisted
 }
 
 type withNotificationError struct {

@@ -5,20 +5,20 @@
 package callback_test
 
 import (
-	"reflect"
 	"testing"
 
-	"github.com/sqreen/go-agent/internal/record"
-	"github.com/sqreen/go-agent/internal/rule"
+	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/internal/backend/api"
+	"github.com/sqreen/go-agent/internal/event"
+	"github.com/sqreen/go-agent/internal/rule/callback"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 type TestConfig struct {
-	CallbacksCtor              rule.CallbacksConstructorFunc
+	CallbacksCtor              callback.NativeCallbackConstructorFunc
 	ExpectEpilog, ExpectProlog bool
-	PrologType, EpilogType     reflect.Type
 	InvalidTestCases           []interface{}
 	ValidTestCases             []ValidTestCase
 }
@@ -29,11 +29,28 @@ type ValidTestCase struct {
 	ExpectAbortedCallbackChain bool
 }
 
+type callbackConfig struct {
+	data interface{}
+}
+
+func (c callbackConfig) BlockingMode() bool {
+	return false
+}
+
+func (c callbackConfig) Data() interface{} {
+	return c.data
+}
+
+func (c callbackConfig) Strategy() *api.ReflectedCallbackConfig {
+	return nil
+}
+
 func RunCallbackTest(t *testing.T, config TestConfig) {
 	for _, data := range config.InvalidTestCases {
 		data := data
 		t.Run("with incorrect data", func(t *testing.T) {
-			prolog, err := config.CallbacksCtor(&RuleContextMockup{config: data}, nil)
+			cbCfg := callbackConfig{data}
+			prolog, err := config.CallbacksCtor(&RuleContextMockup{config: cbCfg})
 			require.Error(t, err)
 			require.Nil(t, prolog)
 		})
@@ -42,91 +59,11 @@ func RunCallbackTest(t *testing.T, config TestConfig) {
 	for _, tc := range config.ValidTestCases {
 		tc := tc
 		t.Run("with correct data", func(t *testing.T) {
-			t.Run("without next callback", func(t *testing.T) {
-				// Instantiate the callback with the given correct rule data
-				prolog, err := config.CallbacksCtor(tc.Rule, nil)
-				require.NoError(t, err)
-				if actual, ok := prolog.(rule.CallbackObject); ok {
-					prolog = actual.Prolog()
-					defer actual.Close()
-				}
-				checkCallbacksValues(t, config, prolog)
-				tc.TestCallback(t, tc.Rule, prolog)
-			})
-
-			t.Run("with next callback", func(t *testing.T) {
-				t.Run("with wrong next prolog type", func(t *testing.T) {
-					prolog, err := config.CallbacksCtor(tc.Rule, 33)
-					require.Error(t, err)
-					require.Nil(t, prolog)
-				})
-
-				t.Run("with correct next prolog", func(t *testing.T) {
-					var called bool
-					nextProlog := reflect.MakeFunc(config.PrologType, func(args []reflect.Value) (results []reflect.Value) {
-						called = true
-						return []reflect.Value{
-							reflect.Zero(config.EpilogType),
-							reflect.Zero(reflect.TypeOf((*error)(nil)).Elem()),
-						}
-					}).Interface()
-
-					prolog, err := config.CallbacksCtor(tc.Rule, nextProlog)
-					require.NoError(t, err)
-					if actual, ok := prolog.(rule.CallbackObject); ok {
-						prolog = actual.Prolog()
-						defer actual.Close()
-					}
-
-					checkCallbacksValues(t, config, prolog)
-					require.NotNil(t, prolog)
-					tc.TestCallback(t, tc.Rule, prolog)
-
-					// Check the next prolog call when expected, ie. when the callback
-					// did not abort.
-					if tc.ExpectAbortedCallbackChain {
-						require.False(t, called)
-					} else {
-						require.True(t, called)
-					}
-				})
-
-				t.Run("with correct next epilog", func(t *testing.T) {
-					var calledProlog, calledEpilog bool
-					nextEpilog := reflect.MakeFunc(config.EpilogType, func(args []reflect.Value) (results []reflect.Value) {
-						calledEpilog = true
-						return
-					})
-
-					nextProlog := reflect.MakeFunc(config.PrologType, func(args []reflect.Value) (results []reflect.Value) {
-						calledProlog = true
-						return []reflect.Value{
-							nextEpilog,
-							reflect.Zero(reflect.TypeOf((*error)(nil)).Elem()),
-						}
-					}).Interface()
-
-					prolog, err := config.CallbacksCtor(tc.Rule, nextProlog)
-					require.NoError(t, err)
-					if actual, ok := prolog.(rule.CallbackObject); ok {
-						prolog = actual.Prolog()
-						defer actual.Close()
-					}
-
-					checkCallbacksValues(t, config, prolog)
-					tc.TestCallback(t, tc.Rule, prolog)
-
-					// Check the next prolog call when expected, ie. when the callback
-					// did not abort.
-					if tc.ExpectAbortedCallbackChain {
-						require.False(t, calledProlog)
-						require.False(t, calledEpilog)
-					} else {
-						require.True(t, calledProlog)
-						require.True(t, calledEpilog)
-					}
-				})
-			})
+			// Instantiate the callback with the given correct rule data
+			prolog, err := config.CallbacksCtor(tc.Rule)
+			require.NoError(t, err)
+			checkCallbacksValues(t, config, prolog)
+			tc.TestCallback(t, tc.Rule, prolog)
 		})
 	}
 }
@@ -153,18 +90,18 @@ func (m *RuleContextMockup) ExpectBlockingMode() *mock.Call {
 func (mockup *RuleContextMockup) Error(err error) {
 }
 
-func (r *RuleContextMockup) PushMetricsValue(key interface{}, value uint64) {
-	r.Called(key, value)
+func (r *RuleContextMockup) PushMetricsValue(key interface{}, value uint64) error {
+	return r.Called(key, value).Error(0)
 }
 
-func (r *RuleContextMockup) Config() interface{} {
-	return r.config
+func (r *RuleContextMockup) Config() callback.Config {
+	return callbackConfig{data: r.config}
 }
 
-func (r *RuleContextMockup) NewAttack(blocked bool, info interface{}) *record.AttackEvent {
-	return r.Called(blocked, info).Get(0).(*record.AttackEvent)
+func (r *RuleContextMockup) NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent {
+	return r.Called(blocked, info, st).Get(0).(*event.AttackEvent)
 }
 
-func (r *RuleContextMockup) ExpectNewAttack(blocked bool, info interface{}) *mock.Call {
-	return r.On("NewAttack", blocked, info)
+func (r *RuleContextMockup) ExpectNewAttackEvent(blocked bool, info interface{}) *mock.Call {
+	return r.On("NewAttackEvent", blocked, info)
 }

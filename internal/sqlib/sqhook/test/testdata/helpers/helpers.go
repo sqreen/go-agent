@@ -89,13 +89,13 @@ func traceCallback(where, symbol string, args []reflect.Value) {
 		if arg.Kind() != reflect.Interface && arg.Kind() != reflect.Ptr {
 			log.Fatalf("argument `%d` of `%s` of symbol `%s` is not a pointer but a `%T`", i, where, symbol, arg.Interface())
 		}
-		v := arg.Elem()
 		var show interface{}
-		if v.Kind() == reflect.Ptr {
+		switch arg := arg.Elem(); arg.Kind() {
+		case reflect.Ptr:
 			// Avoid showing addresses and rather show the type
-			show = v.Type()
-		} else {
-			show = v.Interface()
+			show = arg.Type()
+		default:
+			show = arg.Interface()
 		}
 		argFaces[i] = show
 	}

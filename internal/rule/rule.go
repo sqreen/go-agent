@@ -147,11 +147,11 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
 		// Verify the signature
-		//if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
-		//	logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
-		//	continue
-		//}
-		// Find the symbol
+		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
+			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
+			continue
+		}
+		//Find the symbol
 		hookpoint := r.Hookpoint
 		symbol := hookpoint.Method
 		hook, err := e.instrumentationEngine.Find(symbol)

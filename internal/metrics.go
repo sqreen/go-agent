@@ -58,7 +58,7 @@ func (a *AgentType) addUserEvent(e event.UserEventFace) {
 }
 
 func (a *AgentType) addWhitelistEvent(matchedWhitelistEntry string) {
-	a.logger.Debug("request whitelisted for `%s`", matchedWhitelistEntry)
+	a.logger.Debugf("request whitelisted for `%s`", matchedWhitelistEntry)
 	err := a.staticMetrics.whitelistedIP.Add(matchedWhitelistEntry, 1)
 	if err != nil {
 		sqErr := sqerrors.Wrap(err, "whitelist event: could not update the whitelist metrics store")

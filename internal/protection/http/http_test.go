@@ -1,8 +1,8 @@
-// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Copyright (c) 2016 - 2020 Sqreen. All Rights Reserved.
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package record
+package http
 
 import (
 	"fmt"
@@ -12,9 +12,102 @@ import (
 	"testing"
 
 	fuzz "github.com/google/gofuzz"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMiddleware(t *testing.T) {
+	t.Run("without agent", func(t *testing.T) {
+		ctx := NewRequestContext(nil, nil, nil, nil)
+		require.Nil(t, ctx)
+	})
+
+	//t.Run("without security response", func(t *testing.T) {
+	//	agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
+	//	sdk.SetAgent(agent)
+	//	defer agent.AssertExpectations(t)
+	//	defer record.AssertExpectations(t)
+	//
+	//	req, _ := http.NewRequest("GET", "/hello", nil)
+	//	body := testlib.RandUTF8String(4096)
+	//	// Create a router
+	//	router := http.NewServeMux()
+	//	// Add an endpoint accessing the SDK handle
+	//	subrouter := http.NewServeMux()
+	//	subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+	//		require.NotNil(t, sdk.FromContext(req.Context()), "The middleware should attach its handle object to the requestImplType's context")
+	//		w.Write([]byte(body))
+	//		w.WriteHeader(http.StatusOK)
+	//	})
+	//	router.Handle("/", sqhttp.Middleware(subrouter))
+	//	// Perform the requestImplType and record the output
+	//	rec := httptest.NewRecorder()
+	//	router.ServeHTTP(rec, req)
+	//	// Check the requestImplType was performed as expected
+	//	require.Equal(t, http.StatusOK, rec.Code)
+	//	require.Equal(t, body, rec.Body.String())
+	//})
+
+	//t.Run("with security response", func(t *testing.T) {
+	//	t.Run("ip security response", func(t *testing.T) {
+	//		status := http.StatusBadRequest
+	//		agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	//			w.WriteHeader(status)
+	//		}))
+	//		sdk.SetAgent(agent)
+	//		defer agent.AssertExpectations(t)
+	//		defer record.AssertExpectations(t)
+	//
+	//		// Create a router
+	//		router := http.NewServeMux()
+	//		// Add an endpoint accessing the SDK handle
+	//		subrouter := http.NewServeMux()
+	//		subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+	//			panic("must not be called")
+	//		})
+	//		router.Handle("/", sqhttp.Middleware(subrouter))
+	//		// Perform the requestImplType and record the output
+	//		req, _ := http.NewRequest("GET", "/hello", nil)
+	//		rec := httptest.NewRecorder()
+	//		router.ServeHTTP(rec, req)
+	//		// Check the requestImplType was performed as expected
+	//		require.Equal(t, rec.Body.String(), "")
+	//		require.Equal(t, rec.Code, status)
+	//	})
+	//
+	//	t.Run("user response", func(t *testing.T) {
+	//		status := http.StatusBadRequest
+	//		agent, record := testlib.NewAgentForMiddlewareTestsWithUserSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	//			w.WriteHeader(status)
+	//		}))
+	//		uid := sdk.EventUserIdentifiersMap{}
+	//		record.ExpectIdentify(uid)
+	//		sdk.SetAgent(agent)
+	//		defer agent.AssertExpectations(t)
+	//		defer record.AssertExpectations(t)
+	//
+	//		// Create a router
+	//		router := http.NewServeMux()
+	//		// Add an endpoint accessing the SDK handle
+	//		subrouter := http.NewServeMux()
+	//		subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+	//			sqreen := sdk.FromContext(req.Context())
+	//			sqUser := sqreen.ForUser(uid)
+	//			sqUser.Identify()
+	//			match, err := sqUser.MatchSecurityResponse()
+	//			require.True(t, match)
+	//			require.Error(t, err)
+	//		})
+	//		router.Handle("/", sqhttp.Middleware(subrouter))
+	//		// Perform the requestImplType and record the output
+	//		req, _ := http.NewRequest("GET", "/hello", nil)
+	//		rec := httptest.NewRecorder()
+	//		router.ServeHTTP(rec, req)
+	//		// Check the requestImplType was performed as expected
+	//		require.Equal(t, rec.Body.String(), "")
+	//		require.Equal(t, rec.Code, status)
+	//	})
+	//})
+}
 
 func TestParseClientIPHeaderHeaderValue(t *testing.T) {
 	// Tests with malformed values
@@ -101,16 +194,13 @@ func TestGetClientIP(t *testing.T) {
 			tc := tc
 			t.Run(tc.expected, func(t *testing.T) {
 				t.Logf("%d %+v", i, tc)
-				cfg := &GetClientIPConfigMockup{}
-				defer cfg.AssertExpectations(t)
-				cfg.On("HTTPClientIPHeader").Return("")
 
 				req := newRequest(tc.remoteAddr)
 				for k, v := range tc.extraHeaders {
 					req.Header.Set(k, v)
 				}
 
-				ip := getClientIP(req, cfg)
+				ip := ClientIP(req.RemoteAddr, req.Header, "", "")
 				require.Equal(t, tc.expected, ip.String())
 			})
 		}
@@ -178,10 +268,6 @@ func TestGetClientIP(t *testing.T) {
 				tc := tc
 				t.Run(tc.expected, func(t *testing.T) {
 					t.Logf("%d %+v", i, tc)
-					cfg := &GetClientIPConfigMockup{}
-					defer cfg.AssertExpectations(t)
-					cfg.On("HTTPClientIPHeader").Return("x-uNiQue-iD")                                   // check it works even with a random case
-					cfg.On("HTTPClientIPHeaderFormat").Return("it just needs to be set for now").Maybe() // depends on the testcase
 
 					req := newRequest(tc.remoteAddr)
 					req.Header.Set("X-Unique-Id", tc.uniqueID)
@@ -189,7 +275,7 @@ func TestGetClientIP(t *testing.T) {
 						req.Header.Set(k, v)
 					}
 
-					ip := getClientIP(req, cfg)
+					ip := ClientIP(req.RemoteAddr, req.Header, "x-uNiQue-iD", "it just needs to be set for now")
 					require.Equal(t, tc.expected, ip.String())
 				})
 			}
@@ -229,18 +315,4 @@ func HAProxyUniqueID(ip net.IP) string {
 	fuzz.New().NilChance(0).Fuzz(&randStr)
 	value := fmt.Sprintf("%X:%s", []byte(ip.To4()), randStr)
 	return value
-}
-
-type GetClientIPConfigMockup struct {
-	mock.Mock
-}
-
-func (m *GetClientIPConfigMockup) HTTPClientIPHeader() string {
-	ret := m.Called()
-	return ret.String(0)
-}
-
-func (m *GetClientIPConfigMockup) HTTPClientIPHeaderFormat() string {
-	ret := m.Called()
-	return ret.String(0)
 }

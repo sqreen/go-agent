@@ -44,7 +44,7 @@ type ResponseWriter interface {
 type ResponseFace interface {
 	Status() int
 	ContentType() string
-	ContentLength() int
+	ContentLength() int64
 }
 
 type ClosedRequestContextFace interface {

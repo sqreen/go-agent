@@ -64,6 +64,10 @@ func Middleware(handler http.Handler) http.Handler {
 		defer cancelHandlerContext()
 
 		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
+		if ctx == nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
 		defer func() {
 			ctx.Close(responseWriter.closeResponseWriter())
 		}()
@@ -188,8 +192,8 @@ func (r *observedResponse) ContentType() string {
 	return r.contentType
 }
 
-func (r *observedResponse) ContentLength() int {
-	return r.contentLength
+func (r *observedResponse) ContentLength() int64 {
+	return int64(r.contentLength)
 }
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {

@@ -147,7 +147,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 					"X-Forwarded-For": []string{"1.2.3.4,5.6.7.8"},
 					"Rand-String":     []string{randString},
 				},
-				`#.Header['do not exist']`: (*string)(nil),
+				`#.Header['do not exist']`: nil,
 				`#.Header['rand-STRING']`:  &randString,
 			},
 		},

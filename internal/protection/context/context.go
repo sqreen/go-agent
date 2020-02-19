@@ -80,6 +80,7 @@ type AgentFace interface {
 	// Send the closed request context to the agent. An error is when the object
 	// could not be sent (eg. full channel).
 	SendClosedRequestContext(ClosedRequestContextFace) error
+	IsIPWhitelisted(ip net.IP) bool
 }
 
 type ClosedRequestContextFace interface{}

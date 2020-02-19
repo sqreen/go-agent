@@ -91,6 +91,9 @@ func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWrite
 			RequestReader: r,
 		}
 	}
+	if agent.IsIPWhitelisted(r.ClientIP()) {
+		return nil
+	}
 	ctx := &RequestContext{
 		RequestContext:           protection_context.NewRequestContext(agent),
 		ResponseWriter:           w,

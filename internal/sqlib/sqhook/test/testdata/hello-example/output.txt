@@ -109,27 +109,27 @@ IN: main.f24
 OUT: main.f24
 IN: main.f25
 OUT: main.f25
-PROLOG: main.(s).m0 [*main.s]
+PROLOG: main.(s).m0 [{}]
 IN: main.s.m0
 OUT: main.s.m0
 EPILOG: main.(s).m0 []
-PROLOG: main.(*s).m2 [**main.s]
+PROLOG: main.(*s).m2 [*main.s]
 IN: main.(*s).m2
 OUT: main.(*s).m2
 EPILOG: main.(*s).m2 []
-PROLOG: main.(*s).m3 [**main.s]
+PROLOG: main.(*s).m3 [*main.s]
 IN: main.(*s).m3
 OUT: main.(*s).m3
 EPILOG: main.(*s).m3 []
-PROLOG: main.(s).m4 [*main.s]
+PROLOG: main.(s).m4 [{}]
 IN: main.s.m4
 OUT: main.s.m4
 EPILOG: main.(s).m4 []
-PROLOG: main.(s).m5 [*main.s 5]
+PROLOG: main.(s).m5 [{} 5]
 IN: main.s.m5
 OUT: main.s.m5
 EPILOG: main.(s).m5 []
-PROLOG: main.(s).m6 [*main.s 6]
+PROLOG: main.(s).m6 [{} 6]
 IN: main.s.m6
 OUT: main.s.m6
 EPILOG: main.(s).m6 []

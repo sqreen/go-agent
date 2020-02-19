@@ -24,9 +24,9 @@ import (
 //go:linkname _sqreen_hook_table _sqreen_hook_table
 var _sqreen_hook_table = internal.HookTableType{}
 
-var MyMethodProlog *func(sqhook.MethodReceiver) (func(), error)
-var MyExportedMethodProlog *func(sqhook.MethodReceiver) (func(), error)
-var MyMethodWithPointerRecvProlog *func(sqhook.MethodReceiver) (func(), error)
+var MyMethodProlog *func(*example) (func(), error)
+var MyExportedMethodProlog *func(*example) (func(), error)
+var MyMethodWithPointerRecvProlog *func(**example) (func(), error)
 var MyFunctionProlog *func(*int, *string, *bool) (func(*float32, *error), error)
 var MyExportedFunctionProlog *func(*int, *string, *bool) (func(*error), error)
 
@@ -206,6 +206,7 @@ func TestAttach(t *testing.T) {
 				func() error { return nil },
 				func() {},
 				func(example) (func(), error) { return nil, nil },
+				func(*example) (func(), error) { return nil, nil },
 				func(*example) (func() error, error) { return nil, nil },
 				func(*example) func() { return nil },
 			},
@@ -218,7 +219,6 @@ func TestAttach(t *testing.T) {
 				func(example) (func(), error) { return nil, nil },
 				func(*example) (func() error, error) { return nil, nil },
 				func(*example) error { return nil },
-				func(*example) (func(), error) { return nil, nil },
 				func(example) (func(), error) { return nil, nil },
 				func(**example) func() error { return nil },
 				func(**example) error { return nil },

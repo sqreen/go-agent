@@ -5,9 +5,6 @@
 package actor
 
 import (
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -31,31 +28,32 @@ func TestAction(t *testing.T) {
 			})
 		})
 
-		t.Run("HTTP Handler", func(t *testing.T) {
-			t.Run("Block IP", func(t *testing.T) {
-				handler, err := NewIPActionHTTPHandler(action, net.IPv4(1, 2, 3, 4))
-				require.NotNil(t, handler)
-				require.Nil(t, err)
-				// Use the handler
-				req := httptest.NewRequest(http.MethodPost, "/", nil)
-				rec := httptest.NewRecorder()
-				handler.ServeHTTP(rec, req)
-				require.Equal(t, rec.Code, 500)
-				// TODO: check the sdk event
-			})
-
-			t.Run("Block User", func(t *testing.T) {
-				handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandPrintableUSASCIIString(1, 250)})
-				require.NoError(t, err)
-				require.NotNil(t, handler)
-				// Use the handler
-				req := httptest.NewRequest(http.MethodPost, "/", nil)
-				rec := httptest.NewRecorder()
-				handler.ServeHTTP(rec, req)
-				require.Equal(t, rec.Code, 500)
-				// TODO: check the sdk event
-			})
-		})
+		// TODO: move to the sec response callback test
+		//t.Run("HTTP Handler", func(t *testing.T) {
+		//	t.Run("Block IP", func(t *testing.T) {
+		//		handler, err := NewIPActionHTTPHandler(action, net.IPv4(1, 2, 3, 4))
+		//		require.NotNil(t, handler)
+		//		require.Nil(t, err)
+		//		// Use the handler
+		//		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		//		rec := httptest.NewRecorder()
+		//		handler.ServeHTTP(rec, req)
+		//		require.Equal(t, rec.Code, 500)
+		//		// TODO: check the sdk event
+		//	})
+		//
+		//	t.Run("Block User", func(t *testing.T) {
+		//		handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandPrintableUSASCIIString(1, 250)})
+		//		require.NoError(t, err)
+		//		require.NotNil(t, handler)
+		//		// Use the handler
+		//		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		//		rec := httptest.NewRecorder()
+		//		handler.ServeHTTP(rec, req)
+		//		require.Equal(t, rec.Code, 500)
+		//		// TODO: check the sdk event
+		//	})
+		//})
 	})
 
 	t.Run("Redirection action", func(t *testing.T) {
@@ -82,33 +80,34 @@ func TestAction(t *testing.T) {
 				})
 			})
 
-			t.Run("HTTP Handler", func(t *testing.T) {
-				t.Run("Redirect IP", func(t *testing.T) {
-					handler, err := NewIPActionHTTPHandler(action, net.IPv4(1, 2, 3, 4))
-					require.NotNil(t, handler)
-					require.Nil(t, err)
-					// Use the handler
-					req := httptest.NewRequest(http.MethodPost, "/", nil)
-					rec := httptest.NewRecorder()
-					handler.ServeHTTP(rec, req)
-					require.Equal(t, rec.Code, http.StatusSeeOther)
-					require.Equal(t, rec.Header().Get("Location"), action.URL)
-					// TODO: check the sdk event
-				})
-
-				t.Run("Redirect User", func(t *testing.T) {
-					handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandPrintableUSASCIIString(1, 250)})
-					require.NoError(t, err)
-					require.NotNil(t, handler)
-					// Use the handler
-					req := httptest.NewRequest(http.MethodPost, "/", nil)
-					rec := httptest.NewRecorder()
-					handler.ServeHTTP(rec, req)
-					require.Equal(t, rec.Code, http.StatusSeeOther)
-					require.Equal(t, rec.Header().Get("Location"), action.URL)
-					// TODO: check the sdk event
-				})
-			})
+			// TODO: move to sec response callback tests
+			//t.Run("HTTP Handler", func(t *testing.T) {
+			//	t.Run("Redirect IP", func(t *testing.T) {
+			//		handler, err := NewIPActionHTTPHandler(action, net.IPv4(1, 2, 3, 4))
+			//		require.NotNil(t, handler)
+			//		require.Nil(t, err)
+			//		// Use the handler
+			//		req := httptest.NewRequest(http.MethodPost, "/", nil)
+			//		rec := httptest.NewRecorder()
+			//		handler.ServeHTTP(rec, req)
+			//		require.Equal(t, rec.Code, http.StatusSeeOther)
+			//		require.Equal(t, rec.Header().Get("Location"), action.URL)
+			//		// TODO: check the sdk event
+			//	})
+			//
+			//	t.Run("Redirect User", func(t *testing.T) {
+			//		handler, err := NewUserActionHTTPHandler(action, map[string]string{"uid": testlib.RandPrintableUSASCIIString(1, 250)})
+			//		require.NoError(t, err)
+			//		require.NotNil(t, handler)
+			//		// Use the handler
+			//		req := httptest.NewRequest(http.MethodPost, "/", nil)
+			//		rec := httptest.NewRecorder()
+			//		handler.ServeHTTP(rec, req)
+			//		require.Equal(t, rec.Code, http.StatusSeeOther)
+			//		require.Equal(t, rec.Header().Get("Location"), action.URL)
+			//		// TODO: check the sdk event
+			//	})
+			//})
 		})
 	})
 }

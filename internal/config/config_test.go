@@ -98,21 +98,24 @@ func TestUserConfig(t *testing.T) {
 		someValue := testlib.RandUTF8String(2, 30)
 
 		t.Run("Default value", func(t *testing.T) {
-			require.Equal(t, getCfgValue(), defaultValue)
+			disabled, _ := getCfgValue()
+			require.Equal(t, disabled, defaultValue)
 		})
 
 		t.Run("Set through environment variable", func(t *testing.T) {
 			envVar := strings.ToUpper(configEnvPrefix) + "_" + strings.ToUpper(envKey)
 			os.Setenv(envVar, someValue)
 			defer os.Unsetenv(envVar)
-			require.NotEqual(t, getCfgValue(), defaultValue)
+			disabled, _ := getCfgValue()
+			require.NotEqual(t, disabled, defaultValue)
 		})
 
 		t.Run("Set through configuration file", func(t *testing.T) {
 			filename := newCfgFile(t, ".", envKey+`: `+someValue)
 			defer os.Remove(filename)
 			require.NoError(t, cfg.ReadInConfig())
-			require.Equal(t, getCfgValue(), !defaultValue)
+			disabled, _ := getCfgValue()
+			require.Equal(t, disabled, !defaultValue)
 		})
 	})
 

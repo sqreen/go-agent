@@ -78,7 +78,8 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 			goCtx := params[strategy.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
 			ctx := httpprotection.FromContext(goCtx)
 			if ctx == nil {
-				// TODO: log once that nothing found in the context
+				// TODO: log once that nothing found in the context but may also be
+				//        because it is whitelisted.
 				return nil
 			}
 
@@ -149,7 +150,8 @@ func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.Refle
 		})
 		if err != nil {
 			// TODO: if panic: log once
-			
+			//   idea: create sqassert package and switch between panic in dev
+			//         and log once in prod
 		}
 		return
 	}, nil

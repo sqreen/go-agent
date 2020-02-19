@@ -159,8 +159,10 @@ type UserHTTPRequestRecord = UserContext
 //	props := sdk.EventPropertyMap{"key": "value"}
 //	sqUser.TrackEvent("my.event.one").WithProperties(props)
 //
-func (ctx Context) ForUser(id EventUserIdentifiersMap) UserContext {
-	return UserContext{
+func (ctx Context) ForUser(id EventUserIdentifiersMap) *UserContext {
+	// TODO: we can likely return a value instead by changing the method
+	//   receivers below to values instead of pointers.
+	return &UserContext{
 		ctx: ctx,
 		id:  id,
 	}
@@ -273,7 +275,7 @@ func (e *UserEvent) WithProperties(p EventPropertyMap) *UserEvent {
 //
 //	uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //	sqUser := sdk.FromContext(ctx).ForUser(uid)
-//	if _, err := sqUser.Identify(); err != nil {
+//	if err := sqUser.Identify(); err != nil {
 //		// Return now to stop further handling the request and let Sqreen's
 //		// middleware apply the configured security response and abort the
 //		// request. Returning the error may help bubbling up the handler call
@@ -281,9 +283,9 @@ func (e *UserEvent) WithProperties(p EventPropertyMap) *UserEvent {
 //		return err
 //	}
 //
-func (u *UserContext) Identify() (*UserContext, error) {
+func (u *UserContext) Identify() error {
 	err := u.ctx.events.IdentifyUser(u.id)
-	return u, err
+	return err
 }
 
 type disabledEventRecorder struct{}
