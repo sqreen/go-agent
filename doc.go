@@ -2,4 +2,6 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package sdk
+// This package provides Sqreen for Go.
+// Please refer to the SDK package to integrate it into your Go program.
+package agent

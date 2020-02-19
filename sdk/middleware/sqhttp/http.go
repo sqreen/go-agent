@@ -20,13 +20,10 @@ import (
 )
 
 // Middleware is Sqreen's middleware function for `net/http` to monitor and
-// protect received requests. In protection mode, it can block and redirect
-// requests according to its IP address or identified user using `Identify()`
-// and `MatchSecurityResponse()` methods during from the requestImplType handler.
+// protect received requests.
 //
-// SDK methods can be called from requestImplType handlers by using the requestImplType event
-// record. It can be accessed using `sdk.FromContext()` on a requestImplType context.
-// The middleware function stores it into the requestImplType context.
+// SDK methods can be called from request handlers by using the request context.
+// It can be retrieved from the request context using `sdk.FromContext()`.
 //
 // Usage example:
 //
@@ -37,17 +34,17 @@ import (
 //		// Example of sending a custom event.
 //		sqreen.TrackEvent("my.event")
 //
-//		// Example of globally identifying a user and checking if the requestImplType
+//		// Example of globally identifying a user and checking if the request
 //		// should be aborted.
 //		uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
 //		sqUser := sqreen.ForUser(uid)
-//		sqUser.Identify() // Globally associate this user to the current requestImplType
-//		if match, _ := sqUser.MatchSecurityResponse(); match {
-//			// Return to stop further handling the requestImplType and let Sqreen's
-//			// middleware apply and abort the requestImplType.
+//		// Globally associate this user to the current request and check if it got
+//		// blocked.
+//		if err := sqUser.Identify(); err != nil {
+//			// Return to stop further handling the request
 //			return
 //		}
-//		// Not blocked.
+//		// User not blocked
 //		fmt.Fprintf(w, "OK")
 //	}
 //	http.Handle("/foo", sqhttp.Middleware(http.HandlerFunc(fn)))
