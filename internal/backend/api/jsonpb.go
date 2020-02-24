@@ -5,6 +5,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -208,46 +209,64 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 		}
 		kv[k] = v
 	}
-	message, err := LexicographicalOrderJSONMarshalMap(kv)
+	message, err := LexicographicalOrderJSONMarshal(kv)
 	if err != nil {
 		return err
 	}
 	signature.Message = message
-
 	return nil
 }
 
-func LexicographicalOrderJSONMarshal(o interface{}) ([]byte, error) {
-	switch actual := o.(type) {
-	case map[string]interface{}:
-		return LexicographicalOrderJSONMarshalMap(actual)
-	default:
-		return json.Marshal(o)
+func unescapedJSONMarshal(v interface{}) ([]byte, error) {
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	if err := e.Encode(v); err != nil {
+		return nil, err
 	}
+	buf := b.Bytes()
+	if l := len(buf); l >= 1 && buf[l-1] == '\n' {
+		// Cf. json.Encoder doc: it adds a trailing \n :,(
+		buf = buf[:l-1]
+	}
+	return buf, nil
 }
 
-func LexicographicalOrderJSONMarshalMap(o map[string]interface{}) ([]byte, error) {
-	if len(o) == 0 {
-		return []byte(`{}`), nil
-	}
-	// Get the list of keys
-	keys := make([]string, 0, len(o))
-	for k := range o {
-		keys = append(keys, k)
-	}
-	// Sort the list of keys
-	sort.Strings(keys)
-	for i, k := range keys {
-		v, err := LexicographicalOrderJSONMarshal(o[k])
-		if err != nil {
-			return nil, err
+func LexicographicalOrderJSONMarshal(v interface{}) ([]byte, error) {
+	switch actual := v.(type) {
+	default:
+		return unescapedJSONMarshal(v)
+	case map[string]interface{}:
+		if len(actual) == 0 {
+			return []byte(`{}`), nil
 		}
-		jsonKey, err := json.Marshal(k)
-		if err != nil {
-			return nil, sqerrors.Wrap(err, "map string key marshaling")
+		// Get the list of entries
+		entries := make([]string, 0, len(actual))
+		for k := range actual {
+			entries = append(entries, k)
 		}
-		k = string(jsonKey)
-		keys[i] = fmt.Sprintf("%s:%s", k, v)
+		// Sort the list of keys
+		sort.Strings(entries)
+		for i, k := range entries {
+			v, err := LexicographicalOrderJSONMarshal(actual[k])
+			if err != nil {
+				return nil, err
+			}
+			jsonKey, err := unescapedJSONMarshal(k)
+			if err != nil {
+				return nil, sqerrors.Wrap(err, "map string key marshaling")
+			}
+			var s strings.Builder
+			s.Write(jsonKey)
+			s.WriteByte(':')
+			s.Write(v)
+			entries[i] = s.String()
+		}
+
+		var b bytes.Buffer
+		b.WriteRune('{')
+		b.WriteString(strings.Join(entries, ","))
+		b.WriteRune('}')
+		return b.Bytes(), nil
 	}
-	return []byte(fmt.Sprintf("{%s}", strings.Join(keys, ","))), nil
 }

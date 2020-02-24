@@ -147,7 +147,7 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
 		// Verify the signature
-		if err := VerifyRuleSignature(&r, e.publicKey); err != nil && r.Hookpoint.Strategy != "reflected" {
+		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
 			// TODO: implement for reflected callbacks
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
 			continue
