@@ -25,5 +25,10 @@ jobs:
       env:
         GOARCH: $(GOARCH)
     steps:
-      - script: go env
+      - script: |
+          go env
+          go test -v ./... 2>&1 | ./go-junit-report > report.xml
+      - script: go build -v github.com/jstemmer/go-junit-report
+        name: download tools
       - script: go test -v ./...
+        name: go test
