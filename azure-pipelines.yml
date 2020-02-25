@@ -30,7 +30,7 @@ jobs:
       continueOnError: true
       go:
         container: golang
-        versions: [ rc, 1.13, 1.12 ]
+        versions: [ rc-nanoserver, 1.13-nanoserver, 1.12-nanoserver ]
         targets:
           GOARCH: [ amd64, 386 ]
 
