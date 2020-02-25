@@ -39,9 +39,10 @@ jobs:
         inputs:
           version: $(GOVERSION)
       - task: Go@0
+        displayName: go test
         inputs:
-          command: 'custom'
-          customCommand: go test -v ./...
+          command: 'test'
+          arguments: '-v ./...'
 
   - job: MacOS
     pool:
