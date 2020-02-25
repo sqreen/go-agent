@@ -28,7 +28,7 @@ jobs:
       - script: go build -v github.com/jstemmer/go-junit-report
         name: download_tools
         displayName: download tools
-      - script: |
+      - bash: |
           go env
           go test -v ./... 2>&1 | ./go-junit-report > report.xml
         name: go_test
