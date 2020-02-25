@@ -37,3 +37,4 @@ jobs:
         inputs:
           testRunner: JUnit
           testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+          buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
