@@ -43,7 +43,8 @@ jobs:
           clang -v
           go build -v github.com/jstemmer/go-junit-report
           go test -v ./... 2>&1 | ./go-junit-report > report.xml
-        name: go test
+        name: go_test
+        displayName: go test
       - task: PublishTestResults@2
         inputs:
           testRunner: JUnit
