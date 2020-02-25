@@ -29,14 +29,14 @@ jobs:
       - script: go build -v github.com/jstemmer/go-junit-report
         name: download_tools
         displayName: download tools
-      {{ if ${{ parameters.go.junit-report }} }}:
-      - script: |
-          go env
-          go test -v ./... 2>&1 | ./go-junit-report > report.xml
-      {{ if not(${{ parameters.go.junit-report }}) }}:
-      - script: |
-          go env
-          go test -v ./...
+      - ${{ if ${{ parameters.go.junit-report }} }}:
+          - script: |
+              go env
+              go test -v ./... 2>&1 | ./go-junit-report > report.xml
+      - ${{ if not(${{ parameters.go.junit-report }}) }}:
+          - script: |
+              go env
+              go test -v ./...
       name: go_test
       displayName: go test
                      - task: PublishTestResults@2
