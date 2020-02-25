@@ -30,7 +30,7 @@ jobs:
       continueOnError: true
       go:
         container: golang
-        junit-report: false
+        junit: false
         versions: [ rc, 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
