@@ -9,6 +9,7 @@ jobs:
       vmImage: ubuntu-latest
       go:
         container: golang
+        junit: true
         versions: [ rc, 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
@@ -19,6 +20,7 @@ jobs:
       vmImage: ubuntu-latest
       go:
         container: julio/azure-pipelines-golang
+        junit: true
         versions: [ 1.13-alpine, 1.12-alpine ]
         targets:
           GOARCH: [ amd64 ]
