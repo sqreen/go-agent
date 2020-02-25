@@ -25,17 +25,24 @@ jobs:
         targets:
           GOARCH: [ amd64 ]
 
-  - template: tools/azure-pipelines/docker-golang.yml
-    parameters:
-      name: Windows
+  - job: Windows
+    pool:
       vmImage: windows-latest
-      continueOnError: true
-      go:
-        container: golang
-        junit: false
-        versions: [ rc, 1.13, 1.12 ]
-        targets:
-          GOARCH: [ amd64, 386 ]
+    strategy:
+      matrix:
+        go1_13:
+          GOVERSION: 1.13
+        go1_12:
+          GOVERSION: 1.12
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: $(GOVERSION)
+      - task: Go@0
+        inputs:
+          command: 'test'
+          arguments: '-v'
+          workingDirectory: '$(modulePath)'
 
   - job: MacOS
     pool:
