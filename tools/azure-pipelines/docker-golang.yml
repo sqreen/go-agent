@@ -4,6 +4,7 @@ parameters:
   continueOnError: false
   go:
     container: golang
+    junit-report: true
     versions: [ 1.13, 1.12 ]
     targets:
       GOARCH: [ amd64 ]
@@ -28,13 +29,18 @@ jobs:
       - script: go build -v github.com/jstemmer/go-junit-report
         name: download_tools
         displayName: download tools
-      - bash: |
+      {{ if ${{ parameters.go.junit-report }} }}:
+      - script: |
           go env
           go test -v ./... 2>&1 | ./go-junit-report > report.xml
-        name: go_test
-        displayName: go test
-      - task: PublishTestResults@2
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
-          buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
+      {{ if not(${{ parameters.go.junit-report }}) }}:
+      - script: |
+          go env
+          go test -v ./...
+      name: go_test
+      displayName: go test
+                     - task: PublishTestResults@2
+                     inputs:
+                       testRunner: JUnit
+                       testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+                       buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
