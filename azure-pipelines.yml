@@ -40,9 +40,8 @@ jobs:
           version: $(GOVERSION)
       - task: Go@0
         inputs:
-          command: 'test'
-          arguments: '-v'
-          workingDirectory: '$(modulePath)'
+          command: 'custom'
+          customCommand: go test -v ./...
 
   - job: MacOS
     pool:
