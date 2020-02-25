@@ -33,11 +33,13 @@ jobs:
           - script: |
               go env
               go test -v ./... 2>&1 | ./go-junit-report > report.xml
+            name: go_test
+            displayName: go test
           - task: PublishTestResults@2
-              inputs:
-                testRunner: JUnit
-                testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
-                buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
+            inputs:
+              testRunner: JUnit
+              testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+              buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
       - ${{ if not(parameters.go.junit) }}:
           - script: |
               go env
