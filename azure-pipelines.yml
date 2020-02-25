@@ -9,6 +9,7 @@ jobs:
       vmImage: ubuntu-latest
       go:
         container: golang
+        junit: true
         versions: [ rc, 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
@@ -19,35 +20,42 @@ jobs:
       vmImage: ubuntu-latest
       go:
         container: julio/azure-pipelines-golang
+        junit: true
         versions: [ 1.13-alpine, 1.12-alpine ]
         targets:
           GOARCH: [ amd64 ]
 
-  - template: tools/azure-pipelines/docker-golang.yml
-    parameters:
-      name: Windows
+  - job: Windows
+    pool:
       vmImage: windows-latest
-      continueOnError: true
-      go:
-        container: golang
-        versions: [ rc, 1.13, 1.12 ]
-        targets:
-          GOARCH: [ amd64, 386 ]
+    strategy:
+      matrix:
+        go1_13:
+          GOVERSION: 1.13
+        go1_12:
+          GOVERSION: 1.12
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: $(GOVERSION)
+      - task: Go@0
+        displayName: go test
+        inputs:
+          command: 'test'
+          arguments: '-v ./...'
 
-  - job: MacOS_amd64
+  - job: MacOS
     pool:
       vmImage: macOS-latest
     steps:
       - script: |
           go env
           clang -v
-          go test -v ./...
-
-  - job: MacOS_386
-    pool:
-      vmImage: macOS-latest
-    steps:
-      - script: |
-          go env
-          clang -v
-          env GOARCH=386 go test -v ./...
+          go build -v github.com/jstemmer/go-junit-report
+          go test -v ./... 2>&1 | ./go-junit-report > report.xml
+        name: go_test
+        displayName: go test
+      - task: PublishTestResults@2
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
