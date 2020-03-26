@@ -182,7 +182,6 @@ type responseWriterImpl struct {
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 	if !w.closed {
-		w.c.Writer.Flush()
 		w.closed = true
 	}
 	return newObservedResponse(w)
