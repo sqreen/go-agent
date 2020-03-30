@@ -63,39 +63,49 @@ import (
 func Middleware() gingonic.HandlerFunc {
 	internal.Start()
 	return func(c *gingonic.Context) {
-		requestReader := &requestReaderImpl{c: c}
-		responseWriter := &responseWriterImpl{c: c}
+		middlewareHandler(internal.Agent(), c)
+	}
+}
 
-		reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
-		defer cancelHandlerContext()
-
-		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
-		if ctx == nil {
-			c.Next()
-			return
-		}
-
-		defer func() {
-			_ = ctx.Close(responseWriter.closeResponseWriter())
-		}()
-
-		c.Set(protection_context.ContextKey.String, ctx)
-		c.Request = c.Request.WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx))
-
-		if err := ctx.Before(); err != nil {
-			c.Abort()
-			return
-		}
+func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) {
+	if agent == nil {
+		// The agent is disabled or not yet started.
 		c.Next()
-		// Handler-based protection such as user security responses or RASP
-		// protection may lead to aborted requests. Simply
-		if c.IsAborted() {
-			return
-		}
-		if err := ctx.After(); err != nil {
-			c.Abort()
-			return
-		}
+		return
+	}
+
+	requestReader := &requestReaderImpl{c: c}
+	responseWriter := &responseWriterImpl{c: c}
+
+	reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
+	defer cancelHandlerContext()
+
+	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	if ctx == nil {
+		c.Next()
+		return
+	}
+
+	defer func() {
+		_ = ctx.Close(responseWriter.closeResponseWriter())
+	}()
+
+	c.Set(protection_context.ContextKey.String, ctx)
+	c.Request = c.Request.WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx))
+
+	if err := ctx.Before(); err != nil {
+		c.Abort()
+		return
+	}
+	c.Next()
+	// Handler-based protection such as user security responses or RASP
+	// protection may lead to aborted requests.
+	if c.IsAborted() {
+		return
+	}
+	if err := ctx.After(); err != nil {
+		c.Abort()
+		return
 	}
 }
 
@@ -176,13 +186,11 @@ func (r *requestReaderImpl) RemoteAddr() string {
 
 type responseWriterImpl struct {
 	c      *gingonic.Context
-	status int
 	closed bool
 }
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 	if !w.closed {
-		w.c.Writer.Flush()
 		w.closed = true
 	}
 	return newObservedResponse(w)
@@ -213,7 +221,6 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 	if w.closed {
 		return
 	}
-	w.status = statusCode
 	w.c.Writer.WriteHeader(statusCode)
 }
 
@@ -228,6 +235,7 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
 	ct := r.Header().Get("Content-Type")
+
 	// Content-Length is either explicitly set or the amount of written data.
 	cl := int64(r.c.Writer.Size())
 	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
@@ -235,10 +243,13 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 			cl = l
 		}
 	}
+
+	status := r.c.Writer.Status()
+
 	return &observedResponse{
 		contentType:   ct,
 		contentLength: cl,
-		status:        r.status,
+		status:        status,
 	}
 }
 

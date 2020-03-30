@@ -70,8 +70,8 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 }
 
 // Health returns a detailed error when the
-func (e *Engine) Health() error {
-	return e.instrumentationEngine.Health()
+func (e *Engine) Health(expectedVersion string) error {
+	return e.instrumentationEngine.Health(expectedVersion)
 }
 
 // PackID returns the ID of the current pack of rules.
@@ -147,7 +147,7 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
 		// Verify the signature
-		if err := VerifyRuleSignature(&r, e.publicKey); err != nil && r.Hookpoint.Strategy != "reflected" {
+		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
 			// TODO: implement for reflected callbacks
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
 			continue

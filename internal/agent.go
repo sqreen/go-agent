@@ -31,6 +31,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
+	"github.com/sqreen/go-agent/internal/version"
 	"github.com/sqreen/go-libsqreen/waf"
 	"golang.org/x/xerrors"
 )
@@ -43,7 +44,7 @@ func Agent() protectionContext.AgentFace {
 	if agent := agentInstance.get(); agent != nil && agent.isRunning() {
 		return agent
 	}
-	return disabledAgent{}
+	return nil
 }
 
 var agentInstance agentInstanceType
@@ -169,19 +170,6 @@ func (instance *agentInstanceType) start() {
 	})
 }
 
-type disabledAgent struct{}
-
-func (disabledAgent) IsIPWhitelisted(net.IP) bool                                             { return false }
-func (disabledAgent) FindActionByIP(net.IP) (action actor.Action, exists bool, err error)     { return }
-func (disabledAgent) FindActionByUserID(map[string]string) (action actor.Action, exists bool) { return }
-func (disabledAgent) Logger() *plog.Logger                                                    { return nil }
-func (d disabledAgent) Config() protectionContext.ConfigReader                                { return d }
-func (disabledAgent) SendClosedRequestContext(protectionContext.ClosedRequestContextFace) error {
-	return nil
-}
-func (disabledAgent) PrioritizedIPHeader() string       { return "" }
-func (disabledAgent) PrioritizedIPHeaderFormat() string { return "" }
-
 type AgentType struct {
 	logger            *plog.Logger
 	eventMng          *eventManager
@@ -210,7 +198,7 @@ const errorChanBufferLength = 256
 func New(cfg *config.Config) *AgentType {
 	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
 
-	logger.Infof("go agent v%s", version)
+	logger.Infof("go agent v%s", version.Version())
 
 	if disabled, reason := cfg.Disabled(); disabled {
 		logger.Infof("agent disabled: %s", reason)
@@ -229,7 +217,7 @@ func New(cfg *config.Config) *AgentType {
 	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
 	// Early health checking
-	if err := rulesEngine.Health(); err != nil {
+	if err := rulesEngine.Health(version.Version()); err != nil {
 		message := fmt.Sprintf("agent disabled: %s", err)
 		backend.SendAgentMessage(logger, cfg, "error", message)
 		logger.Info(message)

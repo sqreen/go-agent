@@ -5,9 +5,14 @@
 package internal
 
 // Types to sync with the instrumentation tool
-
-type HookTableType = []HookDescriptorFuncType
-type HookDescriptorFuncType = func(*HookDescriptorType)
-type HookDescriptorType = struct {
-	Func, PrologVar interface{}
-}
+type (
+	InstrumentationDescriptorType = struct {
+		Version   string
+		HookTable HookTableType
+	}
+	HookTableType          = []HookDescriptorFuncType
+	HookDescriptorFuncType = func(*HookDescriptorType)
+	HookDescriptorType     = struct {
+		Func, PrologVar interface{}
+	}
+)

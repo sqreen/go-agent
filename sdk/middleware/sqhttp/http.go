@@ -49,37 +49,45 @@ import (
 //	}
 //	http.Handle("/foo", sqhttp.Middleware(http.HandlerFunc(fn)))
 //
-func Middleware(handler http.Handler) http.Handler {
+func Middleware(next http.Handler) http.Handler {
 	internal.Start()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// requestReader is a pointer value in order to change the inner request
-		// pointer with the new one created by http.(*Request).WithContext below
-		requestReader := &requestReaderImpl{Request: r}
-		responseWriter := &responseWriterImpl{ResponseWriter: w}
-
-		reqCtx, cancelHandlerContext := context.WithCancel(r.Context())
-		defer cancelHandlerContext()
-
-		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
-		if ctx == nil {
-			handler.ServeHTTP(w, r)
-			return
-		}
-		defer func() {
-			ctx.Close(responseWriter.closeResponseWriter())
-		}()
-
-		reqCtx = context.WithValue(reqCtx, protection_context.ContextKey, ctx)
-		requestReader.Request = r.WithContext(reqCtx)
-
-		if err := ctx.Before(); err != nil {
-			return
-		}
-		handler.ServeHTTP(w, requestReader.Request)
-		if err := ctx.After(); err != nil {
-			return
-		}
+		middlewareHandler(internal.Agent(), next, w, r)
 	})
+}
+func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w http.ResponseWriter, r *http.Request) {
+	if agent == nil {
+		next.ServeHTTP(w, r)
+		return
+	}
+
+	// requestReader is a pointer value in order to change the inner request
+	// pointer with the new one created by http.(*Request).WithContext below
+	requestReader := &requestReaderImpl{Request: r}
+	responseWriter := &responseWriterImpl{ResponseWriter: w}
+
+	reqCtx, cancelHandlerContext := context.WithCancel(r.Context())
+	defer cancelHandlerContext()
+
+	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	if ctx == nil {
+		next.ServeHTTP(w, r)
+		return
+	}
+	defer func() {
+		ctx.Close(responseWriter.closeResponseWriter())
+	}()
+
+	reqCtx = context.WithValue(reqCtx, protection_context.ContextKey, ctx)
+	requestReader.Request = r.WithContext(reqCtx)
+
+	if err := ctx.Before(); err != nil {
+		return
+	}
+	next.ServeHTTP(responseWriter, requestReader.Request)
+	if err := ctx.After(); err != nil {
+		return
+	}
 }
 
 type requestReaderImpl struct {
@@ -195,9 +203,6 @@ func (r *observedResponse) ContentLength() int64 {
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 	if !w.closed {
-		if flusher, ok := (w.ResponseWriter).(http.Flusher); ok {
-			flusher.Flush()
-		}
 		w.closed = true
 	}
 	return newObservedResponse(w)

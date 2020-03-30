@@ -68,8 +68,8 @@ func _sqreen_atomic_load_pointer(addr *unsafe.Pointer) unsafe.Pointer {
 	return atomic.LoadPointer(addr)
 }
 
-//go:linkname _sqreen_hook_table _sqreen_hook_table
-var _sqreen_hook_table internal.HookTableType
+//go:linkname _sqreen_instrumentation_descriptor _sqreen_instrumentation_descriptor
+var _sqreen_instrumentation_descriptor *internal.InstrumentationDescriptorType
 
 type symbolIndexType map[string]*Hook
 
@@ -127,10 +127,15 @@ func (e Error) Error() string {
 // Static assertion that `Error` implements interface `error`
 var _ error = Error(0)
 
-func Health() error {
-	if len(_sqreen_hook_table) == 0 {
+func Health(expectedVersion string) error {
+	if _sqreen_instrumentation_descriptor == nil || len(_sqreen_instrumentation_descriptor.HookTable) == 0 {
 		return sqerrors.New("the program is not instrumented - please refer to docs.sqreen.com/go/installation in order to instrument your program")
 	}
+
+	if version := _sqreen_instrumentation_descriptor.Version; version != expectedVersion {
+		return sqerrors.Errorf("the program is not properly instrumented: the agent and instrumentation tool versions must be the same - the tool version is `%s` while the agent version is `%s`", version, expectedVersion)
+	}
+
 	return nil
 }
 
@@ -148,7 +153,7 @@ func (t symbolIndexType) find(symbol string) (*Hook, error) {
 		return hook, nil
 	}
 	// Not found in the index: lookup the hook table
-	return hookTableLookup(_sqreen_hook_table, symbol, index)
+	return hookTableLookup(_sqreen_instrumentation_descriptor.HookTable, symbol, index)
 }
 
 func hookTableLookup(table internal.HookTableType, symbol string, index symbolIndexType) (found *Hook, err error) {

@@ -16,11 +16,6 @@ import (
 )
 
 func TestMiddleware(t *testing.T) {
-	t.Run("without agent", func(t *testing.T) {
-		ctx := NewRequestContext(nil, nil, nil, nil)
-		require.Nil(t, ctx)
-	})
-
 	//t.Run("without security response", func(t *testing.T) {
 	//	agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
 	//	sdk.SetAgent(agent)

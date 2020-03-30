@@ -1,4 +1,6 @@
-![Sqreen](https://sqreen-assets.s3-eu-west-1.amazonaws.com/logos/sqreen-logo-264-1.svg)
+<p align="center">
+<img width="40%" src="doc/images/sqreen-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
+</p>
 
 # [Sqreen](https://www.sqreen.com/)'s Application Security Management for Go
 
