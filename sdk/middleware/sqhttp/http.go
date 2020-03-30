@@ -51,6 +51,12 @@ import (
 //
 func Middleware(handler http.Handler) http.Handler {
 	internal.Start()
+	return middleware(handler, internal.Agent())
+}
+func middleware(handler http.Handler, agent protection_context.AgentFace) http.Handler {
+	if agent == nil {
+		return handler
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// requestReader is a pointer value in order to change the inner request
 		// pointer with the new one created by http.(*Request).WithContext below
@@ -60,7 +66,7 @@ func Middleware(handler http.Handler) http.Handler {
 		reqCtx, cancelHandlerContext := context.WithCancel(r.Context())
 		defer cancelHandlerContext()
 
-		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
+		ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
 		if ctx == nil {
 			handler.ServeHTTP(w, r)
 			return
@@ -195,9 +201,6 @@ func (r *observedResponse) ContentLength() int64 {
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 	if !w.closed {
-		if flusher, ok := (w.ResponseWriter).(http.Flusher); ok {
-			flusher.Flush()
-		}
 		w.closed = true
 	}
 	return newObservedResponse(w)

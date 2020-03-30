@@ -1,21 +1,18 @@
-// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Copyright (c) 2016 - 2020 Sqreen. All Rights Reserved.
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
 package sqgin
 
 import (
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sqreen/go-agent/internal/actor"
-	"github.com/sqreen/go-agent/internal/plog"
-	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/sdk"
+	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -295,8 +292,8 @@ func TestMiddleware(t *testing.T) {
 		})
 
 		t.Run("agent enabled", func(t *testing.T) {
-			agent := &agentMockup{}
-			agent.ExpectConfig().Return(&agentConfigMockup{})
+			agent := &mockups.AgentMockup{}
+			agent.ExpectConfig().Return(&mockups.AgentConfigMockup{})
 			agent.ExpectIsIPWhitelisted(mock.Anything).Return(false)
 			agent.ExpectSendClosedRequestContext(mock.Anything).Return(nil)
 			defer agent.AssertExpectations(t)
@@ -368,7 +365,7 @@ func TestMiddleware(t *testing.T) {
 				},
 
 				{
-					name: "sqreen first - next middleware aborts after the handler",
+					name: "issue AGO-29: sqreen first - next middleware aborts after the handler",
 					middlewares: []gin.HandlerFunc{
 						middleware(agent),
 						func(c *gin.Context) {
@@ -496,73 +493,4 @@ func TestMiddleware(t *testing.T) {
 			}
 		})
 	})
-}
-
-type agentMockup struct {
-	mock.Mock
-}
-
-func (a *agentMockup) FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error) {
-	rets := a.Called(ip)
-	if v := rets.Get(0); v != nil {
-		action = v.(actor.Action)
-	}
-	exists = rets.Bool(1)
-	err = rets.Error(2)
-	return
-}
-
-func (a *agentMockup) FindActionByUserID(userID map[string]string) (action actor.Action, exists bool) {
-	rets := a.Called(userID)
-	if v := rets.Get(0); v != nil {
-		action = v.(actor.Action)
-	}
-	exists = rets.Bool(1)
-	return
-}
-
-func (a *agentMockup) Logger() *plog.Logger {
-	if v := a.Called().Get(0); v != nil {
-		return v.(*plog.Logger)
-	}
-	return nil
-}
-
-func (a *agentMockup) Config() protectioncontext.ConfigReader {
-	if v := a.Called().Get(0); v != nil {
-		return v.(protectioncontext.ConfigReader)
-	}
-	return nil
-}
-
-func (a *agentMockup) ExpectConfig() *mock.Call {
-	return a.On("Config")
-}
-
-func (a *agentMockup) SendClosedRequestContext(ctx protectioncontext.ClosedRequestContextFace) error {
-	return a.Called(ctx).Error(0)
-}
-
-func (a *agentMockup) ExpectSendClosedRequestContext(ctx interface{}) *mock.Call {
-	return a.On("SendClosedRequestContext", ctx)
-}
-
-func (a *agentMockup) IsIPWhitelisted(ip net.IP) bool {
-	return a.Called(ip).Bool(0)
-}
-
-func (a *agentMockup) ExpectIsIPWhitelisted(ip interface{}) *mock.Call {
-	return a.On("IsIPWhitelisted", ip)
-}
-
-type agentConfigMockup struct {
-	mock.Mock
-}
-
-func (c *agentConfigMockup) PrioritizedIPHeader() string {
-	return ""
-}
-
-func (a *agentConfigMockup) PrioritizedIPHeaderFormat() string {
-	return ""
 }
