@@ -31,6 +31,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
+	"github.com/sqreen/go-agent/internal/version"
 	"github.com/sqreen/go-libsqreen/waf"
 	"golang.org/x/xerrors"
 )
@@ -197,7 +198,7 @@ const errorChanBufferLength = 256
 func New(cfg *config.Config) *AgentType {
 	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
 
-	logger.Infof("go agent v%s", version)
+	logger.Infof("go agent v%s", version.Version())
 
 	if disabled, reason := cfg.Disabled(); disabled {
 		logger.Infof("agent disabled: %s", reason)
@@ -216,7 +217,7 @@ func New(cfg *config.Config) *AgentType {
 	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
 	// Early health checking
-	if err := rulesEngine.Health(version); err != nil {
+	if err := rulesEngine.Health(version.Version()); err != nil {
 		message := fmt.Sprintf("agent disabled: %s", err)
 		backend.SendAgentMessage(logger, cfg, "error", message)
 		logger.Info(message)

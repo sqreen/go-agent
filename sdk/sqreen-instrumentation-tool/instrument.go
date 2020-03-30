@@ -12,7 +12,7 @@ import (
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/dstutil"
-	"github.com/sqreen/go-agent/internal"
+	"github.com/sqreen/go-agent/internal/version"
 )
 
 type instrumentationVisitor struct {
@@ -216,7 +216,7 @@ type _sqreen_hook_table_hook_descriptor_type = struct {	Func, Prolog interface{}
 		}
 	}
 
-	hookTableVar := fmt.Sprintf(tableFormat, &tableInitList, internal.Version())
+	hookTableVar := fmt.Sprintf(tableFormat, &tableInitList, version.Version())
 	_, err := io.WriteString(w, fmt.Sprintf(fileFormat, &hookDescriptorForwardFuncDecls, hookTableVar))
 	return err
 }
