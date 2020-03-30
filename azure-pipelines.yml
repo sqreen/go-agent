@@ -10,7 +10,7 @@ jobs:
       go:
         container: golang
         junit: true
-        versions: [ rc, 1.13, 1.12 ]
+        versions: [ rc, 1.14, 1.13, 1.12 ]
         targets:
           GOARCH: [ amd64, 386 ]
 
@@ -30,6 +30,8 @@ jobs:
       vmImage: windows-latest
     strategy:
       matrix:
+        go1_14:
+          GOVERSION: 1.14
         go1_13:
           GOVERSION: 1.13
         go1_12:
@@ -40,6 +42,7 @@ jobs:
           version: $(GOVERSION)
       - task: Go@0
         displayName: go test
+        continueOnError: true
         inputs:
           command: 'test'
           arguments: '-v ./...'

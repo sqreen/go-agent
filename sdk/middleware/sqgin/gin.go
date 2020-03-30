@@ -62,6 +62,17 @@ import (
 //
 func Middleware() gingonic.HandlerFunc {
 	internal.Start()
+	return middleware(internal.Agent())
+}
+
+// middleware is factorized out to make it testable without exposing such API.
+func middleware(agent protection_context.AgentFace) gingonic.HandlerFunc {
+	if agent == nil {
+		return func(c *gingonic.Context) {
+			c.Next()
+		}
+	}
+
 	return func(c *gingonic.Context) {
 		requestReader := &requestReaderImpl{c: c}
 		responseWriter := &responseWriterImpl{c: c}
@@ -69,7 +80,7 @@ func Middleware() gingonic.HandlerFunc {
 		reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
 		defer cancelHandlerContext()
 
-		ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
+		ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
 		if ctx == nil {
 			c.Next()
 			return
@@ -88,7 +99,7 @@ func Middleware() gingonic.HandlerFunc {
 		}
 		c.Next()
 		// Handler-based protection such as user security responses or RASP
-		// protection may lead to aborted requests. Simply
+		// protection may lead to aborted requests.
 		if c.IsAborted() {
 			return
 		}
@@ -182,7 +193,6 @@ type responseWriterImpl struct {
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 	if !w.closed {
-		w.c.Writer.Flush()
 		w.closed = true
 	}
 	return newObservedResponse(w)
