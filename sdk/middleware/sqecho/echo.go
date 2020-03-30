@@ -74,52 +74,48 @@ func FromContext(c echo.Context) *sdk.Context {
 //
 func Middleware() echo.MiddlewareFunc {
 	internal.Start()
-	return middleware(internal.Agent())
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return middlewareHandler(internal.Agent(), next, c)
+		}
+	}
 }
 
-func middleware(agent protectioncontext.AgentFace) echo.MiddlewareFunc {
+func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc, c echo.Context) error {
 	if agent == nil {
-		return func(handler echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
-				return handler(c)
-			}
-		}
+		return next(c)
 	}
 
-	return func(handler echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			requestReader := &requestReaderImpl{c: c}
-			responseWriter := &responseWriterImpl{c: c}
+	requestReader := &requestReaderImpl{c: c}
+	responseWriter := &responseWriterImpl{c: c}
 
-			reqCtx, cancelHandlerContext := context.WithCancel(c.Request().Context())
-			defer cancelHandlerContext()
+	reqCtx, cancelHandlerContext := context.WithCancel(c.Request().Context())
+	defer cancelHandlerContext()
 
-			ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
-			if ctx == nil {
-				return handler(c)
-			}
-
-			defer func() {
-				_ = ctx.Close(responseWriter.closeResponseWriter())
-			}()
-
-			c.SetRequest(c.Request().WithContext(context.WithValue(reqCtx, protectioncontext.ContextKey, ctx)))
-
-			if err := ctx.Before(); err != nil {
-				return err
-			}
-			if err := handler(c); err != nil {
-				// Handler-based protection such as user security responses or RASP
-				// protection may lead to aborted requests bubbling up the error that
-				// was returned.
-				return err
-			}
-			if err := ctx.After(); err != nil {
-				return err
-			}
-			return nil
-		}
+	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	if ctx == nil {
+		return next(c)
 	}
+
+	defer func() {
+		_ = ctx.Close(responseWriter.closeResponseWriter())
+	}()
+
+	c.SetRequest(c.Request().WithContext(context.WithValue(reqCtx, protectioncontext.ContextKey, ctx)))
+
+	if err := ctx.Before(); err != nil {
+		return err
+	}
+	if err := next(c); err != nil {
+		// Handler-based protection such as user security responses or RASP
+		// protection may lead to aborted requests bubbling up the error that
+		// was returned.
+		return err
+	}
+	if err := ctx.After(); err != nil {
+		return err
+	}
+	return nil
 }
 
 type requestReaderImpl struct {
@@ -198,7 +194,6 @@ func (r *requestReaderImpl) RemoteAddr() string {
 
 type responseWriterImpl struct {
 	c      echo.Context
-	status int
 	closed bool
 }
 
@@ -234,7 +229,6 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 	if w.closed {
 		return
 	}
-	w.status = statusCode
 	w.c.Response().WriteHeader(statusCode)
 }
 
@@ -249,17 +243,23 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
 	ct := r.Header().Get("Content-Type")
+
+	response := r.c.Response()
+
 	// Content-Length is either explicitly set or the amount of written data.
-	cl := r.c.Response().Size
+	cl := response.Size
 	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
 		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
 			cl = l
 		}
 	}
+
+	status := response.Status
+
 	return &observedResponse{
 		contentType:   ct,
 		contentLength: cl,
-		status:        r.status,
+		status:        status,
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/sqreen/go-agent/tools/testlib"
@@ -365,4 +366,50 @@ func TestMiddleware(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("response observation", func(t *testing.T) {
+		expectedStatusCode := 433
+
+		agent := &mockups.AgentMockup{}
+		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
+		agent.ExpectIsIPWhitelisted(mock.Anything).Return(false).Once()
+		var responseStatusCode int
+		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
+			resp := recorded.Response()
+			responseStatusCode = resp.Status()
+			return true
+		})).Return(nil)
+		defer agent.AssertExpectations(t)
+
+		// Create a route
+		router := echo.New()
+		router.Use(middleware(agent))
+		router.GET("/", func(c echo.Context) error {
+			return c.NoContent(expectedStatusCode)
+		})
+
+		// Perform the request and record the output
+		rec := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		var err error
+		router.HTTPErrorHandler = func(e error, _ echo.Context) {
+			err = e
+		}
+		router.ServeHTTP(rec, req)
+
+		// Check the result
+		require.NoError(t, err)
+		require.Equal(t, expectedStatusCode, responseStatusCode)
+		require.Equal(t, expectedStatusCode, rec.Code)
+	})
+
+
+}
+
+func middleware(agent protectioncontext.AgentFace) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return middlewareHandler(agent, next, c)
+		}
+	}
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/sqreen/go-agent/tools/testlib"
@@ -312,4 +313,41 @@ func TestMiddleware(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("response observation", func(t *testing.T) {
+		expectedStatusCode := 433
+
+		agent := &mockups.AgentMockup{}
+		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
+		agent.ExpectIsIPWhitelisted(mock.Anything).Return(false).Once()
+		var responseStatusCode int
+		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
+			resp := recorded.Response()
+			responseStatusCode = resp.Status()
+			return true
+		})).Return(nil)
+		defer agent.AssertExpectations(t)
+
+		// Create a route
+		router := gin.New()
+		router.Use(middleware(agent))
+		router.GET("/", func(c *gin.Context) {
+			c.Status(expectedStatusCode)
+		})
+
+		// Perform the request and record the output
+		rec := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		router.ServeHTTP(rec, req)
+
+		// Check the result
+		require.Equal(t, expectedStatusCode, responseStatusCode)
+		require.Equal(t, expectedStatusCode, responseStatusCode)
+	})
+}
+
+func middleware(agent protectioncontext.AgentFace) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		middlewareHandler(agent, c)
+	}
 }
