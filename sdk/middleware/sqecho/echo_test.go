@@ -405,3 +405,11 @@ func TestMiddleware(t *testing.T) {
 
 
 }
+
+func middleware(agent protectioncontext.AgentFace) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return middlewareHandler(agent, next, c)
+		}
+	}
+}

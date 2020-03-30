@@ -207,3 +207,9 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, expectedStatusCode, rec.Code)
 	})
 }
+
+func middleware(next http.HandlerFunc, agent protectioncontext.AgentFace) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middlewareHandler(agent, next, w, r)
+	})
+}

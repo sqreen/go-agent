@@ -345,3 +345,9 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, expectedStatusCode, responseStatusCode)
 	})
 }
+
+func middleware(agent protectioncontext.AgentFace) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		middlewareHandler(agent, c)
+	}
+}

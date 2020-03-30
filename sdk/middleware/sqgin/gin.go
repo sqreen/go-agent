@@ -62,51 +62,50 @@ import (
 //
 func Middleware() gingonic.HandlerFunc {
 	internal.Start()
-	return middleware(internal.Agent())
+	return func(c *gingonic.Context) {
+		middlewareHandler(internal.Agent(), c)
+	}
 }
 
-// middleware is factorized out to make it testable without exposing such API.
-func middleware(agent protection_context.AgentFace) gingonic.HandlerFunc {
+func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) {
 	if agent == nil {
-		return func(c *gingonic.Context) {
-			c.Next()
-		}
+		// The agent is disabled or not yet started.
+		c.Next()
+		return
 	}
 
-	return func(c *gingonic.Context) {
-		requestReader := &requestReaderImpl{c: c}
-		responseWriter := &responseWriterImpl{c: c}
+	requestReader := &requestReaderImpl{c: c}
+	responseWriter := &responseWriterImpl{c: c}
 
-		reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
-		defer cancelHandlerContext()
+	reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
+	defer cancelHandlerContext()
 
-		ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
-		if ctx == nil {
-			c.Next()
-			return
-		}
-
-		defer func() {
-			_ = ctx.Close(responseWriter.closeResponseWriter())
-		}()
-
-		c.Set(protection_context.ContextKey.String, ctx)
-		c.Request = c.Request.WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx))
-
-		if err := ctx.Before(); err != nil {
-			c.Abort()
-			return
-		}
+	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	if ctx == nil {
 		c.Next()
-		// Handler-based protection such as user security responses or RASP
-		// protection may lead to aborted requests.
-		if c.IsAborted() {
-			return
-		}
-		if err := ctx.After(); err != nil {
-			c.Abort()
-			return
-		}
+		return
+	}
+
+	defer func() {
+		_ = ctx.Close(responseWriter.closeResponseWriter())
+	}()
+
+	c.Set(protection_context.ContextKey.String, ctx)
+	c.Request = c.Request.WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx))
+
+	if err := ctx.Before(); err != nil {
+		c.Abort()
+		return
+	}
+	c.Next()
+	// Handler-based protection such as user security responses or RASP
+	// protection may lead to aborted requests.
+	if c.IsAborted() {
+		return
+	}
+	if err := ctx.After(); err != nil {
+		c.Abort()
+		return
 	}
 }
 
