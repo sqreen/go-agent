@@ -1,5 +1,5 @@
 <p align="center">
-<img width="auto" src="doc/images/blocking-page-with-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
+<img width="40%" src="doc/images/sqreen-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
 </p>
 
 # [Sqreen](https://www.sqreen.com/)'s Application Security Management for Go
