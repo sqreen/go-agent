@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sqreen/go-agent/internal/version"
 	"golang.org/x/xerrors"
 )
 
@@ -87,7 +88,7 @@ func forwardCommand(args []string) error {
 func printUsage() {
 	const usageFormat = `Usage: go {build,install,get,test} -a -toolexec '%s [-v] [-full]' PACKAGES...
 
-Sqreen's instrumentation tool for Go. It instruments Go source code at
+Sqreen's instrumentation tool for Go v%s. It instruments Go source code at
 compilation time by adding hooks on every instrumented functions. The set of
 instrumented functions is restricted to a few required packages by default but
 can be fully performed on every package by using option -full. Low-level package
@@ -116,7 +117,7 @@ Limitations:
   that debuggers can find the instrumented Go source code into the build
   directory. Better debugging support will be added in the future.
 `
-	_, _ = fmt.Fprintf(os.Stderr, usageFormat, os.Args[0])
+	_, _ = fmt.Fprintf(os.Stderr, usageFormat, os.Args[0], version.Version())
 	os.Exit(2)
 }
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/dstutil"
+	"github.com/sqreen/go-agent/internal/version"
 )
 
 type instrumentationVisitor struct {
@@ -161,8 +162,18 @@ func writeHookTable(w io.Writer, hooks []string) error {
 	const (
 		tableFormat = `var _sqreen_hook_table_array = [...]func(*_sqreen_hook_table_hook_descriptor_type){%s
 }
-//go:linkname _sqreen_hook_table _sqreen_hook_table
-var _sqreen_hook_table = _sqreen_hook_table_array[:]
+
+type _sqreen_hook_table_type = []func(*_sqreen_hook_table_hook_descriptor_type)
+type _sqreen_instrumentation_descriptor_type = struct {
+	Version   string
+	HookTable _sqreen_hook_table_type
+}
+
+//go:linkname _sqreen_instrumentation_descriptor _sqreen_instrumentation_descriptor
+var _sqreen_instrumentation_descriptor = &_sqreen_instrumentation_descriptor_type{
+	Version: %q,
+	HookTable: _sqreen_hook_table_array[:],
+}
 `
 		tableInitListEntryFormat = "\n\t%s,"
 
@@ -205,7 +216,7 @@ type _sqreen_hook_table_hook_descriptor_type = struct {	Func, Prolog interface{}
 		}
 	}
 
-	hookTableVar := fmt.Sprintf(tableFormat, &tableInitList)
+	hookTableVar := fmt.Sprintf(tableFormat, &tableInitList, version.Version())
 	_, err := io.WriteString(w, fmt.Sprintf(fileFormat, &hookDescriptorForwardFuncDecls, hookTableVar))
 	return err
 }

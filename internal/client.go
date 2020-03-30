@@ -24,6 +24,7 @@ import (
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
+	"github.com/sqreen/go-agent/internal/version"
 )
 
 const (
@@ -68,7 +69,7 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace((*appInfoAPIAdapter)(appInfo)),
 		BundleSignature: bundleSignature,
 		AgentType:       "golang",
-		AgentVersion:    version,
+		AgentVersion:    version.Version(),
 		OsType:          app.GoBuildTarget(),
 		Hostname:        appInfo.Hostname(),
 		RuntimeVersion:  app.GoVersion(),

@@ -21,8 +21,8 @@ import (
 
 // Mock the instrumentation tool
 
-//go:linkname _sqreen_hook_table _sqreen_hook_table
-var _sqreen_hook_table = internal.HookTableType{}
+//go:linkname _sqreen_instrumentation_descriptor _sqreen_instrumentation_descriptor
+var _sqreen_instrumentation_descriptor *internal.InstrumentationDescriptorType
 
 var MyMethodProlog *func(*example) (func(), error)
 var MyExportedMethodProlog *func(*example) (func(), error)
@@ -93,9 +93,12 @@ var expectedSymbols = map[string]internal.HookDescriptorFuncType{
 }
 
 func init() {
-	_sqreen_hook_table = make(internal.HookTableType, len(sortedSymbols))
+	_sqreen_instrumentation_descriptor = &internal.InstrumentationDescriptorType{
+		Version:   "1.2.3",
+		HookTable: make(internal.HookTableType, len(sortedSymbols)),
+	}
 	for i, sym := range sortedSymbols {
-		_sqreen_hook_table[i] = expectedSymbols[sym]
+		_sqreen_instrumentation_descriptor.HookTable[i] = expectedSymbols[sym]
 	}
 }
 
@@ -343,4 +346,10 @@ func TestStringer(t *testing.T) {
 func TestError(t *testing.T) {
 	err := sqhook.AbortError
 	require.NotEmpty(t, err.Error())
+}
+
+func TestHealth(t *testing.T) {
+	require.NoError(t, sqhook.Health("1.2.3"))
+	require.Error(t, sqhook.Health(""))
+	require.Error(t, sqhook.Health("1.2.4"))
 }
