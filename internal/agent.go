@@ -216,7 +216,7 @@ func New(cfg *config.Config) *AgentType {
 	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
 	// Early health checking
-	if err := rulesEngine.Health(); err != nil {
+	if err := rulesEngine.Health(version); err != nil {
 		message := fmt.Sprintf("agent disabled: %s", err)
 		backend.SendAgentMessage(logger, cfg, "error", message)
 		logger.Info(message)

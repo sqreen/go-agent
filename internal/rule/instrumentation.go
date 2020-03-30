@@ -14,7 +14,7 @@ import (
 
 type InstrumentationFace interface {
 	Find(symbol string) (HookFace, error)
-	Health() error
+	Health(expectedVersion string) error
 }
 
 type HookFace interface {
@@ -26,8 +26,8 @@ type defaultInstrumentationImpl struct{}
 
 var defaultInstrumentationEngine defaultInstrumentationImpl
 
-func (defaultInstrumentationImpl) Health() error {
-	return sqhook.Health()
+func (defaultInstrumentationImpl) Health(expectedVersion string) error {
+	return sqhook.Health(expectedVersion)
 }
 
 func (defaultInstrumentationImpl) Find(symbol string) (HookFace, error) {

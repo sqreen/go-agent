@@ -28,8 +28,8 @@ import (
 
 type instrumentationMockup struct{ mock.Mock }
 
-func (i *instrumentationMockup) Health() error {
-	return i.Mock.Called().Error(0)
+func (i *instrumentationMockup) Health(expectedVersion string) error {
+	return i.Mock.Called(expectedVersion).Error(0)
 }
 
 type hookMockup struct{ mock.Mock }

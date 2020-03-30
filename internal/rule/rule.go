@@ -70,8 +70,8 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 }
 
 // Health returns a detailed error when the
-func (e *Engine) Health() error {
-	return e.instrumentationEngine.Health()
+func (e *Engine) Health(expectedVersion string) error {
+	return e.instrumentationEngine.Health(expectedVersion)
 }
 
 // PackID returns the ID of the current pack of rules.
