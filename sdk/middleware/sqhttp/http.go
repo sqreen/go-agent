@@ -81,7 +81,7 @@ func middleware(handler http.Handler, agent protection_context.AgentFace) http.H
 		if err := ctx.Before(); err != nil {
 			return
 		}
-		handler.ServeHTTP(w, requestReader.Request)
+		handler.ServeHTTP(responseWriter, requestReader.Request)
 		if err := ctx.After(); err != nil {
 			return
 		}

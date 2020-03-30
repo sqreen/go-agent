@@ -187,7 +187,6 @@ func (r *requestReaderImpl) RemoteAddr() string {
 
 type responseWriterImpl struct {
 	c      *gingonic.Context
-	status int
 	closed bool
 }
 
@@ -223,7 +222,6 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 	if w.closed {
 		return
 	}
-	w.status = statusCode
 	w.c.Writer.WriteHeader(statusCode)
 }
 
@@ -238,6 +236,7 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
 	ct := r.Header().Get("Content-Type")
+
 	// Content-Length is either explicitly set or the amount of written data.
 	cl := int64(r.c.Writer.Size())
 	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
@@ -245,10 +244,13 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 			cl = l
 		}
 	}
+
+	status := r.c.Writer.Status()
+
 	return &observedResponse{
 		contentType:   ct,
 		contentLength: cl,
-		status:        r.status,
+		status:        status,
 	}
 }
 

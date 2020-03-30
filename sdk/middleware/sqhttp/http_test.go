@@ -12,6 +12,7 @@ import (
 	"time"
 
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/sqreen/go-agent/tools/testlib"
@@ -36,10 +37,10 @@ func TestMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 		router.Handle("/", subrouter)
-		// Perform the requestImplType and record the output
+		// Perform the request and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		// Check the requestImplType was performed as expected
+		// Check the request was performed as expected
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, body, rec.Body.String())
 	})
@@ -60,10 +61,10 @@ func TestMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})))
 		router.Handle("/", subrouter)
-		// Perform the requestImplType and record the output
+		// Perform the request and record the output
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		// Check the requestImplType was performed as expected
+		// Check the request was performed as expected
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, body, rec.Body.String())
 	})
@@ -175,5 +176,34 @@ func TestMiddleware(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("response observation", func(t *testing.T) {
+		expectedStatusCode := 433
+
+		agent := &mockups.AgentMockup{}
+		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
+		agent.ExpectIsIPWhitelisted(mock.Anything).Return(false).Once()
+		var responseStatusCode int
+		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
+			resp := recorded.Response()
+			responseStatusCode = resp.Status()
+			return true
+		})).Return(nil)
+		defer agent.AssertExpectations(t)
+
+		req, _ := http.NewRequest("GET", "/", nil)
+		// Create a router
+		router := http.NewServeMux()
+		router.Handle("/", middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(expectedStatusCode)
+		}), agent))
+		// Perform the request and record the output
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		// Check the request was performed as expected
+		require.Equal(t, expectedStatusCode, responseStatusCode)
+		require.Equal(t, expectedStatusCode, rec.Code)
 	})
 }

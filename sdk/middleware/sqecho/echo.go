@@ -198,7 +198,6 @@ func (r *requestReaderImpl) RemoteAddr() string {
 
 type responseWriterImpl struct {
 	c      echo.Context
-	status int
 	closed bool
 }
 
@@ -234,7 +233,6 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 	if w.closed {
 		return
 	}
-	w.status = statusCode
 	w.c.Response().WriteHeader(statusCode)
 }
 
@@ -249,17 +247,23 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
 	ct := r.Header().Get("Content-Type")
+
+	response := r.c.Response()
+
 	// Content-Length is either explicitly set or the amount of written data.
-	cl := r.c.Response().Size
+	cl := response.Size
 	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
 		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
 			cl = l
 		}
 	}
+
+	status := response.Status
+
 	return &observedResponse{
 		contentType:   ct,
 		contentLength: cl,
-		status:        r.status,
+		status:        status,
 	}
 }
 
