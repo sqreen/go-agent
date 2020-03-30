@@ -81,9 +81,6 @@ func FromContext(ctx context.Context) *RequestContext {
 }
 
 func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWriter, r types.RequestReader, cancelHandlerContextFunc context.CancelFunc) *RequestContext {
-	if agent == nil {
-		return nil
-	}
 	if r.ClientIP() == nil {
 		cfg := agent.Config()
 		r = requestReader{
