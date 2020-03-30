@@ -15,7 +15,7 @@ import (
 
 	"github.com/labstack/echo"
 	"github.com/sqreen/go-agent/internal"
-	protection_context "github.com/sqreen/go-agent/internal/protection/context"
+	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk"
@@ -74,6 +74,18 @@ func FromContext(c echo.Context) *sdk.Context {
 //
 func Middleware() echo.MiddlewareFunc {
 	internal.Start()
+	return middleware(internal.Agent())
+}
+
+func middleware(agent protectioncontext.AgentFace) echo.MiddlewareFunc {
+	if agent == nil {
+		return func(handler echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				return handler(c)
+			}
+		}
+	}
+
 	return func(handler echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			requestReader := &requestReaderImpl{c: c}
@@ -82,7 +94,7 @@ func Middleware() echo.MiddlewareFunc {
 			reqCtx, cancelHandlerContext := context.WithCancel(c.Request().Context())
 			defer cancelHandlerContext()
 
-			ctx := http_protection.NewRequestContext(internal.Agent(), responseWriter, requestReader, cancelHandlerContext)
+			ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
 			if ctx == nil {
 				return handler(c)
 			}
@@ -91,7 +103,7 @@ func Middleware() echo.MiddlewareFunc {
 				_ = ctx.Close(responseWriter.closeResponseWriter())
 			}()
 
-			c.SetRequest(c.Request().WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx)))
+			c.SetRequest(c.Request().WithContext(context.WithValue(reqCtx, protectioncontext.ContextKey, ctx)))
 
 			if err := ctx.Before(); err != nil {
 				return err
@@ -192,7 +204,6 @@ type responseWriterImpl struct {
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
 	if !w.closed {
-		w.c.Response().Flush()
 		w.closed = true
 	}
 	return newObservedResponse(w)
