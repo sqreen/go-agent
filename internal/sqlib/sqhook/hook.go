@@ -133,7 +133,7 @@ func Health(expectedVersion string) error {
 	}
 
 	if version := _sqreen_instrumentation_descriptor.Version; version != expectedVersion {
-		return sqerrors.Errorf("the program is not properly instrumented: the agent and instrumentation tool versions must be the same - the tool version is `%s` while the agent version is `%s`)", version, expectedVersion)
+		return sqerrors.Errorf("the program is not properly instrumented: the agent and instrumentation tool versions must be the same - the tool version is `%s` while the agent version is `%s`", version, expectedVersion)
 	}
 
 	return nil
