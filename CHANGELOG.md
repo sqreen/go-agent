@@ -1,3 +1,17 @@
+# v0.9.1
+
+## Fixes
+
+- (#99) Fix mistakenly enforced HTTP status code `200` when Sqreen's middleware
+  function is not the first in the request handling chain. This issue appeared
+  when not adding Sqreen's middleware function as the root HTTP middleware.
+
+- (#100) Fix the monitoring of HTTP response codes mistakenly considered `200`
+  when set by the request handlers.
+
+- (#101) Prevent starting the agent when the instrumentation tool and agent
+  versions are not the same.
+
 # v0.9.0
 
 This new major version says farewell to the `beta` and adds SQL-injection
