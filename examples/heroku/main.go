@@ -4,8 +4,18 @@
 
 package main
 
-import "github.com/sqreen/go-agent/examples/hellohttp"
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/sqreen/go-agent/examples/hellohttp"
+)
 
 func main() {
-	hellohttp.ListenAndServe()
+	port := os.Getenv("PORT")
+	if port == "" {
+		log.Fatalln("unexpected empty port number from environment variable `PORT`")
+	}
+	hellohttp.ListenAndServe(fmt.Sprintf(":%s", port))
 }
