@@ -12,10 +12,10 @@ import (
 	"github.com/sqreen/go-agent/sdk/middleware/sqhttp"
 )
 
-func ListenAndServe() {
+func ListenAndServe(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", http.HandlerFunc(helloHandler))
-	if err := http.ListenAndServe(":8080", sqhttp.Middleware(mux)); err != nil {
+	if err := http.ListenAndServe(addr, sqhttp.Middleware(mux)); err != nil {
 		log.Fatalln(err)
 	}
 }
