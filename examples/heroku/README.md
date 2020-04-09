@@ -16,7 +16,7 @@ Click the following Heroku Button to directly deploy it to Heroku:
 Please read the following instructions in order to add Sqreen to your Heroku Go
 app:
 
-1. Add Sqreen's buildpack `https://github.com/heroku/heroku-buildpack-go` before the official `heroku-buildpack-go`:
+1. Add Sqreen's buildpack `https://github.com/sqreen/heroku-buildpack-go` before the official `heroku-buildpack-go`:
 
 <p align="center">
 <img width="50%" src="../../doc/images/heroku-multi-buildpack-order.png" />
