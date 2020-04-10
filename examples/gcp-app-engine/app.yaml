@@ -1,0 +1,7 @@
+env: flex
+service: sqreen-go-hello-http
+env_variables:
+  # Sqreen credentials passed as environment variables to the docker container.
+  # Note this is an unsafe credential storage technique.
+  SQREEN_TOKEN: my sqreen token
+  SQREEN_APP_NAME: my sqreen app name

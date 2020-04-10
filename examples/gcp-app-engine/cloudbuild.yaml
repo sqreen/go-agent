@@ -1,0 +1,8 @@
+# Cloud Build example building the docker image and pushing it to
+# Google Container Registry.
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '--tag=gcr.io/$PROJECT_ID/sqreen-go-hello-http', '.']
+
+# Push the image to Container Registry
+images: ['gcr.io/$PROJECT_ID/sqreen-go-hello-http']
