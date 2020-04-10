@@ -14,7 +14,7 @@ Sqreen.
 
 ### Building the image examples
 
-#### Debian docker image example
+#### Building the debian docker image example
 
 The Dockerfile of this example can be found in the `debian/` subdirectory.
 It shows how to produce a debian docker image with the Go web server
@@ -26,7 +26,7 @@ Build the docker image and tag it with the image name `hello-sqreen` by doing:
 examples/docker $ docker build -t hello-sqreen:debian -f debian/Dockerfile .
 ```
 
-#### Alpine image
+#### Building the Alpine docker image example
 
 The Dockerfile of this example can be found in the `alpine/` subdirectory.
 It shows how to produce an alpine docker image with the Go web server
@@ -38,7 +38,7 @@ Build the docker image and tag it with the image name `hello-sqreen` by doing:
 examples/docker $ docker build -t hello-sqreen -f alpine/Dockerfile .
 ```
 
-#### Scratch image
+#### Building the scratch docker image example
 
 The Dockerfile of this example can be found in the `scratch/` subdirectory.
 It shows how to produce a docker from scratch with the Go web server protected
@@ -50,7 +50,7 @@ Build the docker image and tag it with the image name `hello-sqreen` by doing:
 examples/docker $ docker build -t hello-sqreen -f alpine/Dockerfile .
 ```
 
-### Running the build docker image with Sqreen
+### Running the docker image
 
 Once you have built your `hello-sqreen` docker image by following one of the
 previous docker build examples, you can then run it.
