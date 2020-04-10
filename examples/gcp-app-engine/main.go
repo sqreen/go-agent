@@ -7,5 +7,5 @@ package main
 import "github.com/sqreen/go-agent/examples/hellohttp"
 
 func main() {
-	hellohttp.ListenAndServe()
+	hellohttp.ListenAndServe(":8080")
 }

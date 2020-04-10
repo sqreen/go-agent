@@ -82,6 +82,8 @@ github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DM
 github.com/sqreen/go-agent v0.9.1-0.20200408125512-449176577d6f/go.mod h1:SEUa1N4VNMlz3hicIaZcZXjZucvVfQ6HBykq6Ey1zJI=
 github.com/sqreen/go-agent v0.9.1-0.20200408130009-af04c3f3b005 h1:2COskTu2uQm4xj6Pl1PjujZY53+gehkTTEYa25jVZY0=
 github.com/sqreen/go-agent v0.9.1-0.20200408130009-af04c3f3b005/go.mod h1:SEUa1N4VNMlz3hicIaZcZXjZucvVfQ6HBykq6Ey1zJI=
+github.com/sqreen/go-agent v0.9.1-0.20200410144647-ee5305296d74 h1:YaIbz/YifbiEmzFEkBm+FnpoHHaHJuGlC3TLcM4YbGY=
+github.com/sqreen/go-agent v0.9.1-0.20200410144647-ee5305296d74/go.mod h1:SEUa1N4VNMlz3hicIaZcZXjZucvVfQ6HBykq6Ey1zJI=
 github.com/sqreen/go-agent v0.9.2 h1:l2vOCHbw4NkTT5pETTE0pozuvUOaqj2y7h054Y1gIOE=
 github.com/sqreen/go-agent v0.9.2/go.mod h1:SEUa1N4VNMlz3hicIaZcZXjZucvVfQ6HBykq6Ey1zJI=
 github.com/sqreen/go-agent/examples/hellohttp v0.0.0-20200408125512-449176577d6f/go.mod h1:dII3DXw7Y4mZQm9f1u1A3K+Go0qeBQU4NO/q31n2qSQ=
