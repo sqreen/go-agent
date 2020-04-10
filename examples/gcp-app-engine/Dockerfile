@@ -12,7 +12,7 @@ RUN go build -v github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool
 # Compile the app with the previously built tool.
 RUN go build -v -a -toolexec $PWD/sqreen-instrumentation-tool -o app .
 
-# Application image with Sqreen
+# Final application image
 FROM gcr.io/distroless/base:latest
 COPY --from=build /app/app /usr/local/bin/app
 EXPOSE 8080

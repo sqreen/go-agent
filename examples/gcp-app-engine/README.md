@@ -25,5 +25,9 @@ executing `export PROJECT_ID=my-project` prior to running the below commands.
 You can then hit the URL returned by that command to see the `Hello HTTP!` web
 service response, now protected by Sqreen!
 
+<p align="center">
+<img width="60%" src="../../doc/images/blocking-page-with-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
+</p>
+
 Don't forget to tear down your App Engine deployment to avoid billing charges
 for a running service.

@@ -28,7 +28,8 @@ app:
 
 4. Deploy your Go app to Heroku.
 
-Congratulations, your app is now protected by Sqreen!
+You can then hit the app URL to see the `Hello HTTP!` web server response, now
+protected by Sqreen!
 
 <p align="center">
 <img width="60%" src="../../doc/images/blocking-page-with-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
