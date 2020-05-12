@@ -45,10 +45,10 @@ type transformationFunc func(ctx Context, valueIn interface{}, maxDepth, maxElem
 
 // Maximum binding accessor execution depth. The binding accessor execution
 // traverses Go values. It cannot go deeper than this value.
-const maxExecutionDepth = 10
+const MaxExecutionDepth = 10
 
 // ErrMaxExecutionDepth is returned by the BindingAccessorFunc when the
-// binding accessor execution reached the maximum depth `maxExecutionDepth`.
+// binding accessor execution reached the maximum depth `MaxExecutionDepth`.
 var ErrMaxExecutionDepth = errors.New("maximum binding accessor execution depth reached")
 
 // Compile returns the compiled binding accessor expression function.
@@ -70,7 +70,7 @@ func Compile(expr string) (program BindingAccessorFunc, err error) {
 		// We need to catch any panic and return it as an error.
 		err = sqsafe.Call(func() error {
 			var err error
-			value, err = exprFn(ctx, maxExecutionDepth)
+			value, err = exprFn(ctx, MaxExecutionDepth)
 			return err
 		})
 		if err != nil {
@@ -116,7 +116,7 @@ func compileExpr(expr string) (valueFunc, error) {
 
 const (
 	newValueMaxDepth    = 10
-	newValueMaxElements = 150
+	NewValueMaxElements = 150
 )
 
 func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
@@ -132,7 +132,7 @@ func compileTransformations(valueFn valueFunc, buf string) (valueFunc, error) {
 			if err != nil {
 				return nil, err
 			}
-			return trFn(ctx, v, newValueMaxDepth, newValueMaxElements), nil
+			return trFn(ctx, v, newValueMaxDepth, NewValueMaxElements), nil
 		}
 	}
 	return valueFn, nil

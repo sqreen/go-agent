@@ -34,7 +34,7 @@ func NewWAFCallback(rule RuleFace) (sqhook.PrologCallback, error) {
 		return nil, sqerrors.New("could not generate a uuid")
 	}
 
-	wafRule, err := waf.NewRule(id.String(), cfg.WAFRules)
+	wafRule, err := waf.NewRule(id.String(), cfg.WAFRules, bindingaccessor.NewValueMaxElements, bindingaccessor.MaxExecutionDepth)
 	if err != nil {
 		return nil, sqerrors.Wrap(err, "could not instantiate the in-app waf rule")
 	}
