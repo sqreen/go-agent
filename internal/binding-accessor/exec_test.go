@@ -35,18 +35,18 @@ func TestFlatKeys(t *testing.T) {
 
 		t.Run("empty slice", func(t *testing.T) {
 			v := []mytype{}
-			out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Nil(t, out)
 		})
 
 		t.Run("empty map", func(t *testing.T) {
 			v := map[string]mytype{}
-			out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Nil(t, out)
 		})
 
 		t.Run("nil value", func(t *testing.T) {
-			out := execFlatKeys(context.Background(), nil, newValueMaxDepth, newValueMaxElements)
+			out := execFlatKeys(context.Background(), nil, newValueMaxDepth, NewValueMaxElements)
 			require.Nil(t, out)
 		})
 
@@ -56,13 +56,13 @@ func TestFlatKeys(t *testing.T) {
 				{},
 				{},
 			}
-			out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedKeys(3), out)
 		})
 
 		t.Run("array", func(t *testing.T) {
 			v := [4]mytype{}
-			out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedKeys(4), out)
 		})
 
@@ -71,7 +71,7 @@ func TestFlatKeys(t *testing.T) {
 				"k1": {},
 				"k2": {},
 			}
-			out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			expected := append(expectedKeys(2), "k1", "k2")
 			UnorderedEqual(t, expected, out)
 		})
@@ -108,7 +108,7 @@ func TestFlatKeys(t *testing.T) {
 				"F4": {},
 			},
 		}
-		out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+		out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 		UnorderedEqual(t, expectedKeys(11), out)
 	})
 
@@ -119,7 +119,7 @@ func TestFlatKeys(t *testing.T) {
 			f3 bool
 			f4 int
 		}{}
-		out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+		out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 		require.Nil(t, out)
 	})
 
@@ -137,7 +137,7 @@ func TestFlatKeys(t *testing.T) {
 			F4: 33,
 		}
 		v := struct{ f1, F2, f3, F4 mytype }{w, w, w, w}
-		out := execFlatKeys(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+		out := execFlatKeys(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 		UnorderedEqual(t, []interface{}{"F2", "F2", "F2", "F4", "F4", "F4"}, out)
 	})
 
@@ -146,7 +146,7 @@ func TestFlatKeys(t *testing.T) {
 		allKeys := []interface{}{"", "both", "empty", "orphan", "prio", "z"}
 
 		t.Run("less than max elements and max depth", func(t *testing.T) {
-			out := execFlatKeys(context.Background(), in, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), in, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, out, allKeys)
 		})
 
@@ -175,7 +175,7 @@ func TestFlatKeys(t *testing.T) {
 				"k12": nil,
 				"k13": nil,
 			}
-			out := execFlatKeys(context.Background(), in, 1, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), in, 1, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, out, []interface{}{"k11", "k12", "k13"})
 		})
 
@@ -226,13 +226,13 @@ func TestFlatKeys(t *testing.T) {
 		t.Run("more than max depth", func(t *testing.T) {
 			in := url.Values{"": []string{"nokey"}, "both": []string{"y"}, "empty": []string{""}, "orphan": []string{""}, "prio": []string{"2"}, "z": []string{"post"}}
 			maxDepth := 2
-			out := execFlatKeys(context.Background(), in, maxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), in, maxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, allKeys, out)
 		})
 
 		t.Run("more than max depth", func(t *testing.T) {
 			var in [1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1]struct{ F1 string }
-			out := execFlatKeys(context.Background(), in, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatKeys(context.Background(), in, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Nil(t, out)
 		})
 
@@ -268,7 +268,7 @@ func TestFlatKeys(t *testing.T) {
 			for maxDepth := 1; maxDepth <= 3; maxDepth++ {
 				maxDepth := maxDepth
 				t.Run(fmt.Sprintf("%d", maxDepth), func(t *testing.T) {
-					out := execFlatKeys(context.Background(), in, maxDepth, newValueMaxElements).([]interface{})
+					out := execFlatKeys(context.Background(), in, maxDepth, NewValueMaxElements).([]interface{})
 					UnorderedEqual(t, expectedKeys(maxDepth), out)
 				})
 			}
@@ -341,36 +341,36 @@ func TestFlatValues(t *testing.T) {
 	t.Run("basic values", func(t *testing.T) {
 		t.Run("empty slice", func(t *testing.T) {
 			v := []mytype{}
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Nil(t, out)
 		})
 
 		t.Run("empty map", func(t *testing.T) {
 			v := map[string]mytype{}
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Nil(t, out)
 		})
 
 		t.Run("nil value", func(t *testing.T) {
-			out := execFlatValues(context.Background(), nil, newValueMaxDepth, newValueMaxElements)
+			out := execFlatValues(context.Background(), nil, newValueMaxDepth, NewValueMaxElements)
 			require.Nil(t, out)
 		})
 
 		t.Run("zero value", func(t *testing.T) {
 			v := mytype{}
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedZeroValues(1), out)
 		})
 
 		t.Run("pointer", func(t *testing.T) {
 			v := &myValue
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedValues(1), out)
 		})
 
 		t.Run("nil pointer", func(t *testing.T) {
 			var v *mytype
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Equal(t, []interface{}{(*mytype)(nil)}, out)
 		})
 
@@ -380,7 +380,7 @@ func TestFlatValues(t *testing.T) {
 				myValue,
 				myValue,
 			}
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedValues(3), out)
 		})
 
@@ -391,7 +391,7 @@ func TestFlatValues(t *testing.T) {
 				myValue,
 				myValue,
 			}
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedValues(4), out)
 		})
 
@@ -402,7 +402,7 @@ func TestFlatValues(t *testing.T) {
 				testlib.RandPrintableUSASCIIString(): myValue,
 				testlib.RandPrintableUSASCIIString(): myValue,
 			}
-			out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, expectedValues(4), out)
 		})
 	})
@@ -439,7 +439,7 @@ func TestFlatValues(t *testing.T) {
 				testlib.RandPrintableUSASCIIString(): myValue,
 			},
 		}
-		out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+		out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 		UnorderedEqual(t, append(expectedValues(9), expectedZeroValues(2)...), out)
 	})
 
@@ -450,7 +450,7 @@ func TestFlatValues(t *testing.T) {
 			f3 bool
 			f4 int
 		}{}
-		out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+		out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 		require.Nil(t, out)
 	})
 
@@ -468,7 +468,7 @@ func TestFlatValues(t *testing.T) {
 			F4: 33,
 		}
 		v := struct{ f1, F2, f3, F4 mytype }{w, w, w, w}
-		out := execFlatValues(context.Background(), v, newValueMaxDepth, newValueMaxElements).([]interface{})
+		out := execFlatValues(context.Background(), v, newValueMaxDepth, NewValueMaxElements).([]interface{})
 		UnorderedEqual(t, []interface{}{"sqreen", 33, "sqreen", 33}, out)
 	})
 
@@ -507,7 +507,7 @@ func TestFlatValues(t *testing.T) {
 		allExpectedValues := append(expectedValues(9), expectedZeroValues(2)...)
 
 		t.Run("less than max elements and max depth", func(t *testing.T) {
-			out := execFlatValues(context.Background(), in, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), in, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			UnorderedEqual(t, allExpectedValues, out)
 		})
 
@@ -545,7 +545,7 @@ func TestFlatValues(t *testing.T) {
 
 			t.Run("more than max elements", func(t *testing.T) {
 				maxDepth := 1
-				out := execFlatValues(context.Background(), in, maxDepth, newValueMaxElements).([]interface{})
+				out := execFlatValues(context.Background(), in, maxDepth, NewValueMaxElements).([]interface{})
 				require.Nil(t, out)
 			})
 		})
@@ -573,15 +573,15 @@ func TestFlatValues(t *testing.T) {
 
 		t.Run("more than max depth", func(t *testing.T) {
 			maxDepth := 2
-			out := execFlatValues(context.Background(), in, maxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), in, maxDepth, NewValueMaxElements).([]interface{})
 			require.Less(t, len(out), len(allExpectedValues))
-			require.Less(t, len(out), newValueMaxElements)
+			require.Less(t, len(out), NewValueMaxElements)
 			SliceContains(t, allExpectedValues, out)
 		})
 
 		t.Run("more than max depth", func(t *testing.T) {
 			var in [1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1][1]struct{ F1 string }
-			out := execFlatValues(context.Background(), in, newValueMaxDepth, newValueMaxElements).([]interface{})
+			out := execFlatValues(context.Background(), in, newValueMaxDepth, NewValueMaxElements).([]interface{})
 			require.Nil(t, out)
 		})
 
@@ -615,7 +615,7 @@ func TestFlatValues(t *testing.T) {
 			for maxDepth := 1; maxDepth <= 3; maxDepth++ {
 				maxDepth := maxDepth
 				t.Run(fmt.Sprintf("%d", maxDepth), func(t *testing.T) {
-					out := execFlatValues(context.Background(), in, maxDepth, newValueMaxElements).([]interface{})
+					out := execFlatValues(context.Background(), in, maxDepth, NewValueMaxElements).([]interface{})
 					UnorderedEqual(t, expectedValues(maxDepth), out)
 				})
 			}
