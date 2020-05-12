@@ -160,3 +160,14 @@ loop:
 	}
 	return info
 }
+
+// Timestamp returns the error timestamp created with the function
+// `WithTimestamp()` and the `ok` return value set to true. Otherwise, the
+// default time's zero value is returned and `ok` is false.
+// false and the
+func Timestamp(err error) (t time.Time, ok bool) {
+	if t, ok := err.(Timestamper); ok {
+		return t.Timestamp(), true
+	}
+	return time.Time{}, false
+}

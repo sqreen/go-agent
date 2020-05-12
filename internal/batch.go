@@ -27,8 +27,8 @@ func NewExceptionEvent(err error, rulespackID string) *ExceptionEvent {
 }
 
 func (e *ExceptionEvent) GetTime() time.Time {
-	if t, ok := e.err.(sqerrors.Timestamper); ok {
-		return t.Timestamp()
+	if t, ok := sqerrors.Timestamp(e.err); ok {
+		return t
 	}
 	return time.Now()
 }
@@ -76,8 +76,8 @@ func (f apiStackFrame) GetFile() string {
 	return sqerrors.Frame(f).File()
 }
 
-func (f apiStackFrame) GetLineNumber() uint32 {
-	return uint32(sqerrors.Frame(f).Line())
+func (f apiStackFrame) GetLineNumber() int {
+	return sqerrors.Frame(f).Line()
 }
 
 type closedHTTPRequestContextEvent struct {

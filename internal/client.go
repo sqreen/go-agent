@@ -55,7 +55,7 @@ func (e LoginError) Unwrap() error {
 
 // Login to the backend. When the API request fails, retry for ever and after
 // sleeping some time.
-func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, token string, appName string, appInfo *app.Info) (*api.AppLoginResponse, error) {
+func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, token string, appName string, appInfo *app.Info, useSignalBackend bool) (*api.AppLoginResponse, error) {
 	if err := ValidateCredentialsConfiguration(token, appName); err != nil {
 		return nil, NewLoginError(err)
 	}
@@ -83,7 +83,7 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			appLoginRes, err = client.AppLogin(&appLoginReq, token, appName)
+			appLoginRes, err = client.AppLogin(&appLoginReq, token, appName, useSignalBackend)
 			if err == nil && appLoginRes.Status {
 				return appLoginRes, nil
 			}
@@ -92,7 +92,7 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 				return nil, NewLoginError(errors.New(appLoginRes.Error))
 			}
 
-			logger.Infof("could not login into sqreen: %s", err)
+			logger.Infof("could not login to sqreen: %s", err)
 			appLoginRes = nil
 			d, max := backoff.Next()
 			if max {

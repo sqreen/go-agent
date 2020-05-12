@@ -12,28 +12,28 @@ import (
 )
 
 type AppLoginRequest struct {
-	BundleSignature  string                       `protobuf:"bytes,1,opt,name=bundle_signature,json=bundleSignature,proto3" json:"bundle_signature"`
-	VariousInfos     AppLoginRequest_VariousInfos `protobuf:"bytes,2,opt,name=various_infos,json=variousInfos,proto3" json:"various_infos"`
-	AgentType        string                       `protobuf:"bytes,3,opt,name=agent_type,json=agentType,proto3" json:"agent_type"`
-	AgentVersion     string                       `protobuf:"bytes,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version"`
-	OsType           string                       `protobuf:"bytes,5,opt,name=os_type,json=osType,proto3" json:"os_type"`
-	Hostname         string                       `protobuf:"bytes,6,opt,name=hostname,proto3" json:"hostname"`
-	RuntimeType      string                       `protobuf:"bytes,7,opt,name=runtime_type,json=runtimeType,proto3" json:"runtime_type"`
-	RuntimeVersion   string                       `protobuf:"bytes,8,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version"`
-	FrameworkType    string                       `protobuf:"bytes,9,opt,name=framework_type,json=frameworkType,proto3" json:"framework_type"`
-	FrameworkVersion string                       `protobuf:"bytes,10,opt,name=framework_version,json=frameworkVersion,proto3" json:"framework_version"`
-	Environment      string                       `protobuf:"bytes,11,opt,name=environment,proto3" json:"environment"`
+	BundleSignature  string                       `json:"bundle_signature"`
+	VariousInfos     AppLoginRequest_VariousInfos `json:"various_infos"`
+	AgentType        string                       `json:"agent_type"`
+	AgentVersion     string                       `json:"agent_version"`
+	OsType           string                       `json:"os_type"`
+	Hostname         string                       `json:"hostname"`
+	RuntimeType      string                       `json:"runtime_type"`
+	RuntimeVersion   string                       `json:"runtime_version"`
+	FrameworkType    string                       `json:"framework_type"`
+	FrameworkVersion string                       `json:"framework_version"`
+	Environment      string                       `json:"environment"`
 }
 
 type AppLoginRequest_VariousInfos struct {
-	Time             time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-	Pid              uint32    `protobuf:"varint,3,opt,name=pid,proto3" json:"pid"`
-	Ppid             uint32    `protobuf:"varint,4,opt,name=ppid,proto3" json:"ppid"`
-	Euid             uint32    `protobuf:"varint,5,opt,name=euid,proto3" json:"euid"`
-	Egid             uint32    `protobuf:"varint,6,opt,name=egid,proto3" json:"egid"`
-	Uid              uint32    `protobuf:"varint,7,opt,name=uid,proto3" json:"uid"`
-	Gid              uint32    `protobuf:"varint,8,opt,name=gid,proto3" json:"gid"`
-	Name             string    `protobuf:"bytes,9,opt,name=name,proto3" json:"name"`
+	Time             time.Time `json:"time"`
+	Pid              uint32    `json:"pid"`
+	Ppid             uint32    `json:"ppid"`
+	Euid             uint32    `json:"euid"`
+	Egid             uint32    `json:"egid"`
+	Uid              uint32    `json:"uid"`
+	Gid              uint32    `json:"gid"`
+	Name             string    `json:"name"`
 	LibSqreenVersion *string   `json:"libsqreen_version"`
 	HasDependencies  bool      `json:"has_dependencies"`
 	HasLibsqreen     bool      `json:"has_libsqreen"`
@@ -41,17 +41,18 @@ type AppLoginRequest_VariousInfos struct {
 
 type AppLoginResponse struct {
 	Error     string                   `json:"error"`
-	SessionId string                   `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id"`
-	Status    bool                     `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
-	Commands  []CommandRequest         `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands"`
-	Features  AppLoginResponse_Feature `protobuf:"bytes,4,opt,name=features,proto3" json:"features"`
-	PackId    string                   `protobuf:"bytes,5,opt,name=pack_id,json=packId,proto3" json:"pack_id"`
+	SessionId string                   `json:"session_id"`
+	Status    bool                     `json:"status"`
+	Commands  []CommandRequest         `json:"commands"`
+	Features  AppLoginResponse_Feature `json:"features"`
+	PackId    string                   `json:"pack_id"`
 }
 
 type AppLoginResponse_Feature struct {
-	BatchSize      uint32 `protobuf:"varint,1,opt,name=batch_size,json=batchSize,proto3" json:"batch_size"`
-	MaxStaleness   uint32 `protobuf:"varint,2,opt,name=max_staleness,json=maxStaleness,proto3" json:"max_staleness"`
-	HeartbeatDelay uint32 `protobuf:"varint,3,opt,name=heartbeat_delay,json=heartbeatDelay,proto3" json:"heartbeat_delay"`
+	BatchSize      uint32 `json:"batch_size"`
+	MaxStaleness   uint32 `json:"max_staleness"`
+	HeartbeatDelay uint32 `json:"heartbeat_delay"`
+	UseSignals     bool   `json:"use_signals"`
 }
 
 type CommandRequest struct {
@@ -62,15 +63,15 @@ type CommandRequest struct {
 }
 
 type CommandResult struct {
-	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output"`
-	Status bool   `protobuf:"varint,2,opt,name=status,proto3" json:"status"`
+	Output string `json:"output"`
+	Status bool   `json:"status"`
 }
 
 type MetricResponse struct {
-	Name        string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
-	Start       time.Time `protobuf:"bytes,2,opt,name=start,proto3,stdtime" json:"start"`
-	Finish      time.Time `protobuf:"bytes,3,opt,name=finish,proto3,stdtime" json:"finish"`
-	Observation Struct    `protobuf:"bytes,4,opt,name=observation,proto3,customtype=Struct" json:"observation"`
+	Name        string    `json:"name"`
+	Start       time.Time `json:"start"`
+	Finish      time.Time `json:"finish"`
+	Observation Struct    `json:"observation"`
 }
 
 type AppBeatRequest struct {
@@ -149,13 +150,13 @@ func NewExceptionContextFromFace(c ExceptionContextFace) *ExceptionContext {
 type StackFrame struct {
 	Method     string `json:"method"`
 	File       string `json:"file"`
-	LineNumber uint32 `json:"line_number"`
+	LineNumber int    `json:"line_number"`
 }
 
 type StackFrameFace interface {
 	GetMethod() string
 	GetFile() string
-	GetLineNumber() uint32
+	GetLineNumber() int
 }
 
 func NewStackFrameFromFace(e StackFrameFace) *StackFrame {
@@ -166,8 +167,8 @@ func NewStackFrameFromFace(e StackFrameFace) *StackFrame {
 }
 
 type BatchRequest_Event struct {
-	EventType string `protobuf:"bytes,1,opt,name=event_type,json=eventType,proto3" json:"event_type"`
-	Event     Struct `protobuf:"bytes,2,opt,name=event,proto3,customtype=Struct" json:"event"`
+	EventType string `json:"event_type"`
+	Event     Struct `json:"event"`
 }
 
 type Rule struct {
@@ -180,6 +181,7 @@ type Rule struct {
 	Callbacks  RuleCallbacks      `json:"callbacks"`
 	Test       bool               `json:"test"`
 	Block      bool               `json:"block"`
+	Beta       bool               `json:"beta"`
 }
 
 type RuleConditions struct{}
@@ -276,24 +278,24 @@ type ReflectedCallbackConfig struct {
 }
 
 type Dependency struct {
-	Name     string             `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
-	Version  string             `protobuf:"bytes,2,opt,name=version,proto3" json:"version"`
-	Homepage string             `protobuf:"bytes,3,opt,name=homepage,proto3" json:"homepage"`
-	Source   *Dependency_Source `protobuf:"bytes,4,opt,name=source,proto3" json:"source"`
+	Name     string             `json:"name"`
+	Version  string             `json:"version"`
+	Homepage string             `json:"homepage"`
+	Source   *Dependency_Source `json:"source"`
 }
 
 type Dependency_Source struct {
-	Name    string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
-	Remotes []string `protobuf:"bytes,2,rep,name=remotes,proto3" json:"remotes"`
+	Name    string   `json:"name"`
+	Remotes []string `json:"remotes"`
 }
 
 type RequestRecord struct {
-	Version     string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version"`
-	RulespackId string                 `protobuf:"bytes,2,opt,name=rulespack_id,json=rulespackId,proto3" json:"rulespack_id"`
-	ClientIp    string                 `protobuf:"bytes,3,opt,name=client_ip,json=clientIp,proto3" json:"client_ip"`
-	Request     RequestRecord_Request  `protobuf:"bytes,4,opt,name=request,proto3" json:"request"`
-	Response    RequestRecord_Response `protobuf:"bytes,5,opt,name=response,proto3" json:"response"`
-	Observed    RequestRecord_Observed `protobuf:"bytes,6,opt,name=observed,proto3" json:"observed"`
+	Version     string                 `json:"version"`
+	RulespackId string                 `json:"rulespack_id"`
+	ClientIp    string                 `json:"client_ip"`
+	Request     RequestRecord_Request  `json:"request"`
+	Response    RequestRecord_Response `json:"response"`
+	Observed    RequestRecord_Observed `json:"observed"`
 }
 
 func (rr *RequestRecord) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
@@ -336,8 +338,8 @@ type RequestRecord_Request struct {
 }
 
 type RequestRecord_Request_Header struct {
-	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key"`
-	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type RequestRecord_Request_Parameters struct {
@@ -349,26 +351,24 @@ type RequestRecord_Request_Parameters struct {
 }
 
 type RequestRecord_Response struct {
-	Status        uint32 `protobuf:"varint,1,opt,name=status,proto3" json:"status"`
-	ContentLength uint32 `protobuf:"varint,2,opt,name=content_length,json=contentLength,proto3" json:"content_length"`
-	ContentType   string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type"`
+	Status        int    `json:"status"`
+	ContentLength int64  `json:"content_length"`
+	ContentType   string `json:"content_type"`
 }
 
 type RequestRecord_Observed struct {
-	Attacks          []*RequestRecord_Observed_Attack      `protobuf:"bytes,1,rep,name=attacks,proto3" json:"attacks,omitempty"`
-	Sdk              []*RequestRecord_Observed_SDKEvent    `protobuf:"bytes,2,rep,name=sdk,proto3" json:"sdk,omitempty"`
-	SqreenExceptions []*RequestRecord_Observed_Exception   `protobuf:"bytes,3,rep,name=sqreen_exceptions,json=sqreenExceptions,proto3" json:"sqreen_exceptions,omitempty"`
-	Observations     []*RequestRecord_Observed_Observation `protobuf:"bytes,4,rep,name=observations,proto3" json:"observations,omitempty"`
-	DataPoints       []*RequestRecord_Observed_DataPoint   `protobuf:"bytes,5,rep,name=data_points,json=dataPoints,proto3" json:"data_points,omitempty"`
+	Attacks []*RequestRecord_Observed_Attack   `json:"attacks,omitempty"`
+	Sdk     []*RequestRecord_Observed_SDKEvent `json:"sdk,omitempty"`
 }
 
 type RequestRecord_Observed_Attack struct {
-	RuleName  string       `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
-	Test      bool         `protobuf:"varint,2,opt,name=test,proto3" json:"test"`
-	Info      interface{}  `protobuf:"bytes,3,opt,name=infos,proto3" json:"infos"`
-	Time      time.Time    `protobuf:"bytes,5,opt,name=time,proto3,stdtime" json:"time"`
-	Block     bool         `protobuf:"varint,6,opt,name=block,proto3" json:"block"`
+	RuleName  string       `json:"rule_name"`
+	Test      bool         `json:"test"`
+	Info      interface{}  `json:"infos"`
+	Time      time.Time    `json:"time"`
+	Block     bool         `json:"block"`
 	Backtrace []StackFrame `json:"backtrace,omitempty"`
+	Beta      bool         `json:"beta"`
 }
 
 type WAFAttackInfo struct {
@@ -433,9 +433,9 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 }
 
 type RequestRecord_Observed_SDKEvent struct {
-	Time time.Time                            `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-	Name string                               `protobuf:"bytes,2,opt,name=name,proto3" json:"name"`
-	Args RequestRecord_Observed_SDKEvent_Args `protobuf:"bytes,3,opt,name=args,proto3" json:"args"`
+	Time time.Time                            `json:"time"`
+	Name string                               `json:"name"`
+	Args RequestRecord_Observed_SDKEvent_Args `json:"args"`
 }
 
 // Helper message type to disable the face extension only on it and not in
@@ -444,7 +444,7 @@ type RequestRecord_Observed_SDKEvent_Args struct {
 	// Types that are valid to be assigned to Args:
 	//	*RequestRecord_Observed_SDKEvent_Args_Track_
 	//	*RequestRecord_Observed_SDKEvent_Args_Identify_
-	Args isRequestRecord_Observed_SDKEvent_Args_Args `protobuf_oneof:"args"`
+	Args isRequestRecord_Observed_SDKEvent_Args_Args
 }
 
 type isRequestRecord_Observed_SDKEvent_Args_Args interface {
@@ -452,10 +452,10 @@ type isRequestRecord_Observed_SDKEvent_Args_Args interface {
 }
 
 type RequestRecord_Observed_SDKEvent_Args_Track_ struct {
-	Track *RequestRecord_Observed_SDKEvent_Args_Track `protobuf:"bytes,1,opt,name=track,proto3,oneof"`
+	Track *RequestRecord_Observed_SDKEvent_Args_Track
 }
 type RequestRecord_Observed_SDKEvent_Args_Identify_ struct {
-	Identify *RequestRecord_Observed_SDKEvent_Args_Identify `protobuf:"bytes,2,opt,name=identify,proto3,oneof"`
+	Identify *RequestRecord_Observed_SDKEvent_Args_Identify
 }
 
 func (*RequestRecord_Observed_SDKEvent_Args_Track_) isRequestRecord_Observed_SDKEvent_Args_Args()    {}
@@ -470,43 +470,43 @@ func (*RequestRecord_Observed_SDKEvent_Args_Identify_) isRequestRecord_Observed_
 //   }
 // ]
 type RequestRecord_Observed_SDKEvent_Args_Track struct {
-	Event   string                                              `protobuf:"bytes,1,opt,name=event,proto3" json:"event"`
-	Options *RequestRecord_Observed_SDKEvent_Args_Track_Options `protobuf:"bytes,2,opt,name=options,proto3" json:"options"`
+	Event   string                                              `json:"event"`
+	Options *RequestRecord_Observed_SDKEvent_Args_Track_Options `json:"options"`
 }
 
 type RequestRecord_Observed_SDKEvent_Args_Track_Options struct {
-	Properties      *Struct `protobuf:"bytes,1,opt,name=properties,proto3,customtype=Struct" json:"properties,omitempty"`
-	UserIdentifiers *Struct `protobuf:"bytes,2,opt,name=user_identifiers,json=userIdentifiers,proto3,customtype=Struct" json:"user_identifiers,omitempty"`
+	Properties      *Struct           `json:"properties,omitempty"`
+	UserIdentifiers map[string]string `json:"user_identifiers,omitempty"`
 }
 
 // Serialized into:
 // [ <user_identifiers> ]
 type RequestRecord_Observed_SDKEvent_Args_Identify struct {
-	UserIdentifiers *Struct `protobuf:"bytes,1,opt,name=user_identifiers,json=userIdentifiers,proto3,customtype=Struct" json:"user_identifiers"`
+	UserIdentifiers map[string]string `json:"user_identifiers"`
 }
 
 type RequestRecord_Observed_Exception struct {
-	Message   string    `protobuf:"bytes,1,opt,name=message,proto3" json:"message"`
-	Klass     string    `protobuf:"bytes,2,opt,name=klass,proto3" json:"klass"`
-	RuleName  string    `protobuf:"bytes,3,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
-	Test      bool      `protobuf:"varint,4,opt,name=test,proto3" json:"test"`
-	Infos     string    `protobuf:"bytes,5,opt,name=infos,proto3" json:"infos"`
-	Backtrace []string  `protobuf:"bytes,6,rep,name=backtrace,proto3" json:"backtrace"`
-	Time      time.Time `protobuf:"bytes,7,opt,name=time,proto3,stdtime" json:"time"`
+	Message   string    `json:"message"`
+	Klass     string    `json:"klass"`
+	RuleName  string    `json:"rule_name"`
+	Test      bool      `json:"test"`
+	Infos     string    `json:"infos"`
+	Backtrace []string  `json:"backtrace"`
+	Time      time.Time `json:"time"`
 }
 
 type RequestRecord_Observed_Observation struct {
-	Category string    `protobuf:"bytes,1,opt,name=category,proto3" json:"category"`
-	Key      string    `protobuf:"bytes,2,opt,name=key,proto3" json:"key"`
-	Value    string    `protobuf:"bytes,3,opt,name=value,proto3" json:"value"`
-	Time     time.Time `protobuf:"bytes,4,opt,name=time,proto3,stdtime" json:"time"`
+	Category string    `json:"category"`
+	Key      string    `json:"key"`
+	Value    string    `json:"value"`
+	Time     time.Time `json:"time"`
 }
 
 type RequestRecord_Observed_DataPoint struct {
-	RulespackId string    `protobuf:"bytes,1,opt,name=rulespack_id,json=rulespackId,proto3" json:"rulespack_id"`
-	RuleName    string    `protobuf:"bytes,2,opt,name=rule_name,json=ruleName,proto3" json:"rule_name"`
-	Time        time.Time `protobuf:"bytes,3,opt,name=time,proto3,stdtime" json:"time"`
-	Infos       string    `protobuf:"bytes,4,opt,name=infos,proto3" json:"infos"`
+	RulespackId string    `json:"rulespack_id"`
+	RuleName    string    `json:"rule_name"`
+	Time        time.Time `json:"time"`
+	Infos       string    `json:"infos"`
 }
 
 type AppLoginRequestFace interface {
@@ -521,22 +521,6 @@ type AppLoginRequestFace interface {
 	GetFrameworkType() string
 	GetFrameworkVersion() string
 	GetEnvironment() string
-}
-
-func NewAppLoginRequestFromFace(that AppLoginRequestFace) *AppLoginRequest {
-	this := &AppLoginRequest{}
-	this.BundleSignature = that.GetBundleSignature()
-	this.VariousInfos = that.GetVariousInfos()
-	this.AgentType = that.GetAgentType()
-	this.AgentVersion = that.GetAgentVersion()
-	this.OsType = that.GetOsType()
-	this.Hostname = that.GetHostname()
-	this.RuntimeType = that.GetRuntimeType()
-	this.RuntimeVersion = that.GetRuntimeVersion()
-	this.FrameworkType = that.GetFrameworkType()
-	this.FrameworkVersion = that.GetFrameworkVersion()
-	this.Environment = that.GetEnvironment()
-	return this
 }
 
 type AppLoginRequest_VariousInfosFace interface {
@@ -577,16 +561,6 @@ type AppLoginResponseFace interface {
 	GetPackId() string
 }
 
-func NewAppLoginResponseFromFace(that AppLoginResponseFace) *AppLoginResponse {
-	this := &AppLoginResponse{}
-	this.SessionId = that.GetSessionId()
-	this.Status = that.GetStatus()
-	this.Commands = that.GetCommands()
-	this.Features = that.GetFeatures()
-	this.PackId = that.GetPackId()
-	return this
-}
-
 type AppLoginResponse_FeatureFace interface {
 	GetBatchSize() uint32
 	GetMaxStaleness() uint32
@@ -620,25 +594,9 @@ type MetricResponseFace interface {
 	GetObservation() Struct
 }
 
-func NewMetricResponseFromFace(that MetricResponseFace) *MetricResponse {
-	this := &MetricResponse{}
-	this.Name = that.GetName()
-	this.Start = that.GetStart()
-	this.Finish = that.GetFinish()
-	this.Observation = that.GetObservation()
-	return this
-}
-
 type AppBeatRequestFace interface {
 	GetCommandResults() map[string]CommandResult
 	GetMetrics() []MetricResponse
-}
-
-func NewAppBeatRequestFromFace(that AppBeatRequestFace) *AppBeatRequest {
-	this := &AppBeatRequest{}
-	this.CommandResults = that.GetCommandResults()
-	this.Metrics = that.GetMetrics()
-	return this
 }
 
 type AppBeatResponseFace interface {
@@ -646,21 +604,8 @@ type AppBeatResponseFace interface {
 	GetStatus() bool
 }
 
-func NewAppBeatResponseFromFace(that AppBeatResponseFace) *AppBeatResponse {
-	this := &AppBeatResponse{}
-	this.Commands = that.GetCommands()
-	this.Status = that.GetStatus()
-	return this
-}
-
 type BatchRequestFace interface {
 	GetBatch() []BatchRequest_Event
-}
-
-func NewBatchRequestFromFace(that BatchRequestFace) *BatchRequest {
-	this := &BatchRequest{}
-	this.Batch = that.GetBatch()
-	return this
 }
 
 type BatchRequest_EventFace interface {
@@ -682,25 +627,9 @@ type DependencyFace interface {
 	GetSource() *Dependency_Source
 }
 
-func NewDependencyFromFace(that DependencyFace) *Dependency {
-	this := &Dependency{}
-	this.Name = that.GetName()
-	this.Version = that.GetVersion()
-	this.Homepage = that.GetHomepage()
-	this.Source = that.GetSource()
-	return this
-}
-
 type Dependency_SourceFace interface {
 	GetName() string
 	GetRemotes() []string
-}
-
-func NewDependency_SourceFromFace(that Dependency_SourceFace) *Dependency_Source {
-	this := &Dependency_Source{}
-	this.Name = that.GetName()
-	this.Remotes = that.GetRemotes()
-	return this
 }
 
 type RequestRecordFace interface {
@@ -762,16 +691,9 @@ type RequestRecord_Request_HeaderFace interface {
 	GetValue() string
 }
 
-func NewRequestRecord_Request_HeaderFromFace(that RequestRecord_Request_HeaderFace) *RequestRecord_Request_Header {
-	this := &RequestRecord_Request_Header{}
-	this.Key = that.GetKey()
-	this.Value = that.GetValue()
-	return this
-}
-
 type RequestRecord_ResponseFace interface {
-	GetStatus() uint32
-	GetContentLength() uint32
+	GetStatus() int
+	GetContentLength() int64
 	GetContentType() string
 }
 
@@ -795,9 +717,6 @@ func NewRequestRecord_ObservedFromFace(that RequestRecord_ObservedFace) *Request
 	this := &RequestRecord_Observed{}
 	this.Attacks = that.GetAttacks()
 	this.Sdk = that.GetSdk()
-	this.SqreenExceptions = that.GetSqreenExceptions()
-	this.Observations = that.GetObservations()
-	this.DataPoints = that.GetDataPoints()
 	return this
 }
 
@@ -849,7 +768,7 @@ func NewRequestRecord_Observed_SDKEvent_Args_TrackFromFace(that RequestRecord_Ob
 
 type RequestRecord_Observed_SDKEvent_Args_Track_OptionsFace interface {
 	GetProperties() *Struct
-	GetUserIdentifiers() *Struct
+	GetUserIdentifiers() map[string]string
 }
 
 func NewRequestRecord_Observed_SDKEvent_Args_Track_OptionsFromFace(that RequestRecord_Observed_SDKEvent_Args_Track_OptionsFace) *RequestRecord_Observed_SDKEvent_Args_Track_Options {
@@ -860,7 +779,7 @@ func NewRequestRecord_Observed_SDKEvent_Args_Track_OptionsFromFace(that RequestR
 }
 
 type RequestRecord_Observed_SDKEvent_Args_IdentifyFace interface {
-	GetUserIdentifiers() *Struct
+	GetUserIdentifiers() map[string]string
 }
 
 func NewRequestRecord_Observed_SDKEvent_Args_IdentifyFromFace(that RequestRecord_Observed_SDKEvent_Args_IdentifyFace) *RequestRecord_Observed_SDKEvent_Args_Identify {
@@ -869,85 +788,31 @@ func NewRequestRecord_Observed_SDKEvent_Args_IdentifyFromFace(that RequestRecord
 	return this
 }
 
-type RequestRecord_Observed_ExceptionFace interface {
-	GetMessage() string
-	GetKlass() string
-	GetRuleName() string
-	GetTest() bool
-	GetInfos() string
-	GetBacktrace() []string
-	GetTime() time.Time
-}
-
-func NewRequestRecord_Observed_ExceptionFromFace(that RequestRecord_Observed_ExceptionFace) *RequestRecord_Observed_Exception {
-	this := &RequestRecord_Observed_Exception{}
-	this.Message = that.GetMessage()
-	this.Klass = that.GetKlass()
-	this.RuleName = that.GetRuleName()
-	this.Test = that.GetTest()
-	this.Infos = that.GetInfos()
-	this.Backtrace = that.GetBacktrace()
-	this.Time = that.GetTime()
-	return this
-}
-
-type RequestRecord_Observed_ObservationFace interface {
-	GetCategory() string
-	GetKey() string
-	GetValue() string
-	GetTime() time.Time
-}
-
-func NewRequestRecord_Observed_ObservationFromFace(that RequestRecord_Observed_ObservationFace) *RequestRecord_Observed_Observation {
-	this := &RequestRecord_Observed_Observation{}
-	this.Category = that.GetCategory()
-	this.Key = that.GetKey()
-	this.Value = that.GetValue()
-	this.Time = that.GetTime()
-	return this
-}
-
-type RequestRecord_Observed_DataPointFace interface {
-	GetRulespackId() string
-	GetRuleName() string
-	GetTime() time.Time
-	GetInfos() string
-}
-
-func NewRequestRecord_Observed_DataPointFromFace(that RequestRecord_Observed_DataPointFace) *RequestRecord_Observed_DataPoint {
-	this := &RequestRecord_Observed_DataPoint{}
-	this.RulespackId = that.GetRulespackId()
-	this.RuleName = that.GetRuleName()
-	this.Time = that.GetTime()
-	this.Infos = that.GetInfos()
-	return this
-}
-
 type ActionsPackResponse struct {
-	Actions []ActionsPackResponse_Action `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions"`
+	Actions []ActionsPackResponse_Action `json:"actions"`
 }
 
 type ActionsPackResponse_Action struct {
-	ActionId     string                            `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id"`
-	Action       string                            `protobuf:"bytes,2,opt,name=action,proto3" json:"action"`
+	ActionId     string                            `json:"action_id"`
+	Action       string                            `json:"action"`
 	Duration     float64                           `json:"duration"`
-	SendResponse bool                              `protobuf:"varint,4,opt,name=send_response,json=sendResponse,proto3" json:"send_response"`
-	Parameters   ActionsPackResponse_Action_Params `protobuf:"bytes,5,opt,name=parameters,proto3" json:"parameters"`
+	SendResponse bool                              `json:"send_response"`
+	Parameters   ActionsPackResponse_Action_Params `json:"parameters"`
 }
 
 type ActionsPackResponse_Action_Params struct {
-	Url    string              `protobuf:"bytes,1,opt,name=url,proto3" json:"url"`
-	Users  []map[string]string `proto3" json:"users"`
-	IpCidr []string            `protobuf:"bytes,3,rep,name=ip_cidr,json=ipCidr,proto3" json:"ip_cidr"`
+	Url    string              `json:"url"`
+	Users  []map[string]string `json:"users"`
+	IpCidr []string            `json:"ip_cidr"`
 }
 
 type BlockedIPEventProperties struct {
-	ActionId string                          `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
-	Output   BlockedIPEventProperties_Output `protobuf:"bytes,2,opt,name=output,proto3" json:"output"`
+	ActionId string                          `json:"action_id,omitempty"`
+	Output   BlockedIPEventProperties_Output `json:"output"`
 }
 
 type BlockedIPEventProperties_Output struct {
-	IpAddress string `protobuf:"bytes,1,opt,name=ip_address,json=ipAddress,proto3" json:"ip_address,omitempty"`
+	IpAddress string `json:"ip_address,omitempty"`
 }
 
 func NewBlockedIPEventPropertiesFromFace(that BlockedIPEventPropertiesFace) *BlockedIPEventProperties {

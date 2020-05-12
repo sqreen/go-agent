@@ -198,7 +198,8 @@ const errorChanBufferLength = 256
 func New(cfg *config.Config) *AgentType {
 	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
 
-	logger.Infof("go agent v%s", version.Version())
+	agentVersion := version.Version()
+	logger.Infof("go agent v%s", agentVersion)
 
 	if disabled, reason := cfg.Disabled(); disabled {
 		logger.Infof("agent disabled: %s", reason)
@@ -217,16 +218,16 @@ func New(cfg *config.Config) *AgentType {
 	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
 
 	// Early health checking
-	if err := rulesEngine.Health(version.Version()); err != nil {
+	if err := rulesEngine.Health(agentVersion); err != nil {
 		message := fmt.Sprintf("agent disabled: %s", err)
-		backend.SendAgentMessage(logger, cfg, "error", message)
+		backend.SendAgentMessage(logger, cfg, message)
 		logger.Info(message)
 		return nil
 	}
 	// TODO: agent.Health() + waf.Health()
 	if waf.Version() == nil {
 		message := fmt.Sprintf("in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf")
-		backend.SendAgentMessage(logger, cfg, "error", message)
+		backend.SendAgentMessage(logger, cfg, message)
 		logger.Info("agent: ", message)
 	}
 
@@ -346,7 +347,7 @@ func (a *AgentType) Serve() error {
 
 	token := a.config.BackendHTTPAPIToken()
 	appName := a.config.AppName()
-	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo)
+	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.UseSignalBackend())
 	if err != nil {
 		if xerrors.Is(err, context.Canceled) {
 			a.logger.Debug(err)
@@ -403,7 +404,7 @@ func (a *AgentType) Serve() error {
 				CommandResults: commandResults,
 			}
 
-			appBeatRes, err := a.client.AppBeat(&appBeatReq)
+			appBeatRes, err := a.client.AppBeat(a.ctx, &appBeatReq)
 			if err != nil {
 				a.logger.Error(sqerrors.Wrap(err, "heartbeat failed"))
 				continue
@@ -431,7 +432,11 @@ func (a *AgentType) Serve() error {
 		case err := <-a.logger.ErrChan():
 			// Logged errors.
 			if xerrors.As(err, &withNotificationError{}) {
-				_ = a.client.SendAgentMessage(err.Error())
+				t, ok := sqerrors.Timestamp(err)
+				if !ok {
+					t = time.Now()
+				}
+				_ = a.client.SendAgentMessage(a.ctx, t, err.Error(), nil)
 			}
 			a.addExceptionEvent(NewExceptionEvent(err, a.RulespackID()))
 		}
@@ -575,7 +580,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 
 		case <-stalenessChan:
 			m.agent.logger.Debug("event batch data staleness reached")
-			m.sendBatch(client, batch)
+			m.sendBatch(ctx, client, batch)
 			batch = batch[0:0]
 			stalenessChan = nil
 
@@ -593,7 +598,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 			case batchLen >= m.count:
 				// No more room in the batch
 				m.agent.logger.Debugf("sending the batch of %d events", batchLen)
-				m.sendBatch(client, batch)
+				m.sendBatch(ctx, client, batch)
 				batch = batch[0:0]
 				stalenessChan = nil
 				stopTimer(stalenessTimer)
@@ -602,7 +607,7 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	}
 }
 
-func (m *eventManager) sendBatch(client *backend.Client, batch []Event) {
+func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, batch []Event) {
 	req := api.BatchRequest{
 		Batch: make([]api.BatchRequest_Event, 0, len(batch)),
 	}
@@ -628,7 +633,7 @@ func (m *eventManager) sendBatch(client *backend.Client, batch []Event) {
 	}
 
 	// Send the batch.
-	if err := client.Batch(&req); err != nil {
+	if err := client.Batch(ctx, &req); err != nil {
 		// Log the error and drop the batch
 		m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
 	}
