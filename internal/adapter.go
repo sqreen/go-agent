@@ -154,12 +154,12 @@ type httpResponseAPIAdapter struct {
 	adaptee types.ResponseFace
 }
 
-func (a httpResponseAPIAdapter) GetStatus() uint32 {
-	return uint32(a.adaptee.Status())
+func (a httpResponseAPIAdapter) GetStatus() int {
+	return a.adaptee.Status()
 }
 
-func (a httpResponseAPIAdapter) GetContentLength() uint32 {
-	return uint32(a.adaptee.ContentLength())
+func (a httpResponseAPIAdapter) GetContentLength() int64 {
+	return a.adaptee.ContentLength()
 }
 
 func (a httpResponseAPIAdapter) GetContentType() string {
@@ -231,9 +231,9 @@ func (a *customEventAPIAdapter) GetProperties() *api.Struct {
 	return nil
 }
 
-func (a *customEventAPIAdapter) GetUserIdentifiers() *api.Struct {
+func (a *customEventAPIAdapter) GetUserIdentifiers() map[string]string {
 	if userID := a.unwrap().UserID; len(userID) != 0 {
-		return &api.Struct{userID}
+		return userID
 	}
 	return nil
 }
@@ -300,7 +300,7 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*me
 	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
 		metricsArray = make([]api.MetricResponse, 0, len(readyMetrics))
 		for name, values := range readyMetrics {
-			observations := make(map[string]uint64, len(values.Metrics()))
+			observations := make(map[string]int64, len(values.Metrics()))
 			for k, v := range values.Metrics() {
 				jsonKey, err := json.Marshal(k)
 				if err != nil {

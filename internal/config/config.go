@@ -233,6 +233,7 @@ const (
 	configKeyRules                    = `rules`
 	configKeySDKMetricsPeriod         = `sdk_metrics_period`
 	configKeyMaxMetricsStoreLength    = `max_metrics_store_length`
+	configKeyUseSignalBackend         = `use_signal_backend`
 )
 
 // User configuration's default values.
@@ -268,6 +269,7 @@ func New(logger *plog.Logger) *Config {
 		{key: configKeyRules, defaultValue: "", hidden: true},
 		{key: configKeySDKMetricsPeriod, defaultValue: configDefaultSDKMetricsPeriod, hidden: true},
 		{key: configKeyMaxMetricsStoreLength, defaultValue: configDefaultMaxMetricsStoreLength, hidden: true},
+		{key: configKeyUseSignalBackend, defaultValue: "", hidden: true},
 	}
 	for _, p := range parameters {
 		manager.SetDefault(p.key, p.defaultValue)
@@ -403,6 +405,14 @@ func (c *Config) MaxMetricsStoreLength() uint {
 		n = 0
 	}
 	return uint(n)
+}
+
+// UseSignalBackend returns true to force the agent to use the signal backend
+// no matter the feature flag. When false, the app-login feature flag tells
+// whether or not to use the signal backend.
+func (c *Config) UseSignalBackend() bool {
+	strip := sanitizeString(c.GetString(configKeyUseSignalBackend))
+	return strip != ""
 }
 
 func sanitizeString(s string) string {

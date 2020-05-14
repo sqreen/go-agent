@@ -5,6 +5,7 @@
 package backend_test
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"testing"
@@ -53,7 +54,7 @@ func TestClient(t *testing.T) {
 
 		client := backend.NewClient(server.URL(), cfg, logger)
 
-		res, err := client.AppLogin(request, token, appName)
+		res, err := client.AppLogin(request, token, appName, false)
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -73,7 +74,7 @@ func TestClient(t *testing.T) {
 		client, server := initFakeServerSession(endpointCfg, request, response, statusCode, nil)
 		defer server.Close()
 
-		res, err := client.AppBeat(request)
+		res, err := client.AppBeat(context.Background(), request)
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -93,7 +94,7 @@ func TestClient(t *testing.T) {
 		client, server := initFakeServerSession(endpointCfg, request, nil, statusCode, nil)
 		defer server.Close()
 
-		err := client.Batch(request)
+		err := client.Batch(context.Background(), request)
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -188,7 +189,7 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 
 	token := testlib.RandHTTPHeaderValue(2, 50)
 	appName := testlib.RandHTTPHeaderValue(2, 50)
-	_, err := client.AppLogin(loginReq, token, appName)
+	_, err := client.AppLogin(loginReq, token, appName, false)
 	if err != nil {
 		panic(err)
 	}
@@ -219,12 +220,6 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 	server.AppendHandlers(ghttp.CombineHandlers(handlers...))
 
 	return client, server
-}
-
-func copyHeader(src http.Header, dst http.Header) {
-	for key, value := range src {
-		dst[key] = value
-	}
 }
 
 func TestProxy(t *testing.T) {
@@ -268,7 +263,7 @@ func testProxy(t *testing.T, envVar string) {
 	client := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger)
 	// Perform a request that should go through the proxy.
 	request := NewRandomAppLoginRequest()
-	_, err := client.AppLogin(request, "my-token", "my-app")
+	_, err := client.AppLogin(request, "my-token", "my-app", false)
 	require.NoError(t, err)
 	// A request has been received:
 	//require.NotEqual(t, len(back.ReceivedRequests()), 0, "0 request received")

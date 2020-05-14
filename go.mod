@@ -9,7 +9,6 @@ require (
 	github.com/dave/dst v0.23.1
 	github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7 // indirect
 	github.com/gin-gonic/gin v1.3.0
-	github.com/gogo/protobuf v1.2.0
 	github.com/google/gofuzz v1.0.0
 	github.com/google/uuid v1.1.1
 	github.com/json-iterator/go v1.1.9 // indirect
@@ -28,7 +27,8 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.3.2
 	github.com/sqreen/go-libsqreen v0.6.1
-	github.com/stretchr/testify v1.4.0
+	github.com/sqreen/go-sdk/signal v1.0.0
+	github.com/stretchr/testify v1.5.1
 	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20191015211201-9c6d90b5a7d0 // indirect
@@ -38,5 +38,4 @@ require (
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 	gopkg.in/readline.v1 v1.0.0-20160726135117-62c6fe619375
 	gopkg.in/sourcemap.v1 v1.0.5
-	gopkg.in/yaml.v2 v2.2.7 // indirect
 )

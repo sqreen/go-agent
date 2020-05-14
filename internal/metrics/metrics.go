@@ -123,8 +123,8 @@ type Store struct {
 	maxLen uint
 }
 
-type StoreMap map[interface{}]*uint64
-type ReadyStoreMap map[interface{}]uint64
+type StoreMap map[interface{}]*int64
+type ReadyStoreMap map[interface{}]int64
 
 func newStore(period time.Duration, maxLen uint) *Store {
 	return &Store{
@@ -145,7 +145,7 @@ func (e MaxMetricsStoreLengthError) Error() string {
 // Add delta to the given key, inserting it if it doesn't exist. This method
 // is thread-safe and optimized for updating existing key which is lock-free
 // when not concurrently retrieving (method `Flush()`) or inserting a new key.
-func (s *Store) Add(key interface{}, delta uint64) error {
+func (s *Store) Add(key interface{}, delta int64) error {
 	// Avoid panic-ing by checking the key type is not nil and comparable.
 	if key == nil {
 		return sqerrors.New("unexpected key value `nil`")
@@ -162,7 +162,7 @@ func (s *Store) Add(key interface{}, delta uint64) error {
 		// The key already exists.
 		// Atomically update the value.
 		// This update operation can be therefore done concurrently.
-		atomic.AddUint64(value, delta)
+		atomic.AddInt64(value, delta)
 		// It is important to do it in this write-safe section that is mutually
 		// exclusive with Flush() which replaces the store's map using Lock().
 	}

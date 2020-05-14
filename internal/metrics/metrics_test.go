@@ -256,7 +256,7 @@ func TestUsage(t *testing.T) {
 		for n := 0; n < nbWrites; n++ {
 			v, exists := results[n]
 			require.True(t, exists)
-			require.Equal(t, uint64(nbWriters), v)
+			require.Equal(t, int64(nbWriters), v)
 		}
 	})
 

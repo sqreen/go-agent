@@ -48,6 +48,7 @@ type AttackEvent struct {
 	Timestamp  time.Time
 	Info       interface{}
 	StackTrace errors.StackTrace
+	Beta       bool
 }
 
 func (r *Record) AddAttackEvent(attack *AttackEvent) {
