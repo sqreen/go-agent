@@ -408,6 +408,43 @@ func TestValidateCredentialsConfiguration(t *testing.T) {
 			AppName:    "ok",
 			ShouldFail: true,
 		},
+
+
+		{
+			Name:       "invalid credentials with valid org token but empty app-name",
+			Token:      "env_org_ok",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "env_org_ok",
+			AppName:    "ko\nko",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "env_org_ok",
+			AppName:    "koko\x00\x01\x02ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "env_org_ok",
+			AppName:    "koko\tok",
+			ShouldFail: true,
+		},
+		{
+			Name:    "valid credentials with a space in app-name",
+			Token:   "env_org_ok",
+			AppName: "ok ok ok",
+		},
+		{
+			Name:       "invalid credentials with invalid token character",
+			Token:      "env_org_ok\nko",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
 	} {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
