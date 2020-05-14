@@ -78,7 +78,7 @@ var (
 	// Header name of the App name.
 	BackendHTTPAPIHeaderAppName = "X-App-Name"
 
-	BackendHTTPAPIOrganizationTokenPrefix = "org_"
+	BackendHTTPAPIOrganizationTokenSubstr = "org_"
 
 	// BackendHTTPAPIRequestRetryPeriod is the time period to retry failed backend
 	// HTTP requests.

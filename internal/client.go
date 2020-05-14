@@ -126,7 +126,7 @@ func ValidateCredentialsConfiguration(token, appName string) (err error) {
 	if token == "" {
 		return sqerrors.New("missing token")
 	}
-	if strings.HasPrefix(token, config.BackendHTTPAPIOrganizationTokenPrefix) && appName == "" {
+	if strings.Contains(token, config.BackendHTTPAPIOrganizationTokenSubstr) && appName == "" {
 		return sqerrors.New("missing application name")
 	}
 
