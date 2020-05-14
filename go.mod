@@ -9,7 +9,6 @@ require (
 	github.com/dave/dst v0.23.1
 	github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7 // indirect
 	github.com/gin-gonic/gin v1.3.0
-	github.com/gogo/protobuf v1.2.0
 	github.com/google/gofuzz v1.0.0
 	github.com/google/uuid v1.1.1
 	github.com/json-iterator/go v1.1.9 // indirect
@@ -39,5 +38,4 @@ require (
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 	gopkg.in/readline.v1 v1.0.0-20160726135117-62c6fe619375
 	gopkg.in/sourcemap.v1 v1.0.5
-	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
