@@ -19,7 +19,8 @@ import (
 
 func TestUserConfig(t *testing.T) {
 	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
-	cfg := New(logger)
+	cfg, unset := newTestConfig(t, logger)
+	defer unset()
 
 	stringValueTests := []struct {
 		Name         string
@@ -34,12 +35,6 @@ func TestUserConfig(t *testing.T) {
 			ConfigKey:    configKeyBackendHTTPAPIBaseURL,
 			DefaultValue: configDefaultBackendHTTPAPIBaseURL,
 			SomeValue:    testlib.RandUTF8String(2, 50),
-		},
-		{
-			Name:        "Backend HTTP API Token",
-			GetCfgValue: cfg.BackendHTTPAPIToken,
-			ConfigKey:   configKeyBackendHTTPAPIToken,
-			SomeValue:   testlib.RandUTF8String(2, 30),
 		},
 		{
 			Name:        "App Name",
@@ -81,80 +76,119 @@ func TestUserConfig(t *testing.T) {
 			CfgValue:      testlib.RandUTF8String(1, 30),
 			ExpectedValue: true,
 		},
+		{
+			Name:          "Disable the agent",
+			GetCfgValue:   cfg.Disabled,
+			ConfigKey:     configKeyDisable,
+			DefaultValue:  false,
+			CfgValue:      testlib.RandUTF8String(1, 30),
+			ExpectedValue: true,
+		},
 	}
 	for _, tc := range boolValueTests {
 		testBoolValue(t, cfg, tc.Name, tc.GetCfgValue, tc.ConfigKey, tc.DefaultValue, tc.CfgValue, tc.ExpectedValue)
 	}
+}
 
-	// The disable which is a special config case which also depends on the sqreen
-	// token value.
-	t.Run("Disable", func(t *testing.T) {
-		os.Setenv("SQREEN_TOKEN", testlib.RandUTF8String(2, 30))
-		defer os.Unsetenv("SQREEN_TOKEN")
+func TestConfigValidation(t *testing.T) {
+	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
 
-		getCfgValue := cfg.Disabled
-		defaultValue := false
-		envKey := configKeyDisable
-		someValue := testlib.RandUTF8String(2, 30)
-
-		t.Run("Default value", func(t *testing.T) {
-			disabled, _ := getCfgValue()
-			require.Equal(t, disabled, defaultValue)
-		})
-
-		t.Run("Set through environment variable", func(t *testing.T) {
-			envVar := strings.ToUpper(configEnvPrefix) + "_" + strings.ToUpper(envKey)
-			os.Setenv(envVar, someValue)
-			defer os.Unsetenv(envVar)
-			disabled, _ := getCfgValue()
-			require.NotEqual(t, disabled, defaultValue)
-		})
-
-		t.Run("Set through configuration file", func(t *testing.T) {
-			filename := newCfgFile(t, ".", envKey+`: `+someValue)
-			defer os.Remove(filename)
-			require.NoError(t, cfg.ReadInConfig())
-			disabled, _ := getCfgValue()
-			require.Equal(t, disabled, !defaultValue)
-		})
+	t.Run("no token", func(t *testing.T) {
+		cfg, err := New(logger)
+		require.Error(t, err)
+		require.Nil(t, cfg)
 	})
 
-	t.Run("File location", func(t *testing.T) {
-		require := require.New(t)
-
-		execFile, err := os.Executable()
-		require.NoError(err)
-		binDir := filepath.Dir(execFile)
-		binDirToken := "exec-token"
-		binDirFile := newCfgFile(t, binDir, `token: `+binDirToken)
-		defer os.Remove(binDirFile)
-
-		cfg := New(logger)
-		token := cfg.BackendHTTPAPIToken()
-		require.Equal(binDirToken, token)
-
-		cwdToken := "cwd-token"
-		cwdFile := newCfgFile(t, ".", `token: `+cwdToken)
+	t.Run("non-org token only is a valid config", func(t *testing.T) {
+		cwdFile := newCfgFile(t, ".", `token: mytoken`)
 		defer os.Remove(cwdFile)
-
-		cfg = New(logger)
-		token = cfg.BackendHTTPAPIToken()
-		require.Equal(cwdToken, token)
-
-		tmpToken := "tmp-token"
-		tmpDir := "./" + testlib.RandPrintableUSASCIIString(4)
-		tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
-		defer os.Remove(tmpFile)
-		os.Setenv("SQREEN_CONFIG_FILE", tmpFile)
-		cfg = New(logger)
-		token = cfg.BackendHTTPAPIToken()
-		require.Equal(tmpToken, token)
-
-		os.Unsetenv("SQREEN_CONFIG_FILE")
-		cfg = New(logger)
-		token = cfg.BackendHTTPAPIToken()
-		require.Equal(cwdToken, token)
+		cfg, err := New(logger)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
 	})
+
+	t.Run("org token without app name", func(t *testing.T) {
+		cwdFile := newCfgFile(t, ".", `token: env_org_mytoken`)
+		defer os.Remove(cwdFile)
+		cfg, err := New(logger)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+	})
+
+	t.Run("bad sanitization key regexp", func(t *testing.T) {
+		cwdFile := newCfgFile(t, ".", `token: mytoken
+`+configKeyStripSensitiveKeyRegexp+`: oo(ps`)
+		defer os.Remove(cwdFile)
+		cfg, err := New(logger)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+	})
+
+	t.Run("bad sanitization value regexp", func(t *testing.T) {
+		cwdFile := newCfgFile(t, ".", `token: mytoken
+`+configKeyStripSensitiveValueRegexp+`: oo(ps`)
+		defer os.Remove(cwdFile)
+		cfg, err := New(logger)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+	})
+}
+
+func TestFileLocation(t *testing.T) {
+	execFile, err := os.Executable()
+	require.NoError(t, err)
+	binDir := filepath.Dir(execFile)
+	binDirToken := "exec-token"
+	binDirFile := newCfgFile(t, binDir, `token: `+binDirToken)
+	defer os.Remove(binDirFile)
+
+	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	cfg, err := New(logger)
+	require.NoError(t, err)
+
+	token := cfg.BackendHTTPAPIToken()
+	require.Equal(t, binDirToken, token)
+
+	cwdToken := "cwd-token"
+	cwdFile := newCfgFile(t, ".", `token: `+cwdToken)
+	defer os.Remove(cwdFile)
+
+	cfg, err = New(logger)
+	require.NoError(t, err)
+
+	token = cfg.BackendHTTPAPIToken()
+	require.Equal(t, cwdToken, token)
+
+	tmpToken := "tmp-token"
+	tmpDir := "./" + testlib.RandPrintableUSASCIIString(4)
+	tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
+	defer os.RemoveAll(tmpDir)
+	os.Setenv("SQREEN_CONFIG_FILE", tmpFile)
+
+	cfg, err = New(logger)
+	require.NoError(t, err)
+
+	token = cfg.BackendHTTPAPIToken()
+	require.Equal(t, tmpToken, token)
+
+	os.Unsetenv("SQREEN_CONFIG_FILE")
+
+	cfg, err = New(logger)
+	require.NoError(t, err)
+
+	token = cfg.BackendHTTPAPIToken()
+	require.Equal(t, cwdToken, token)
+}
+
+// Helper function return a valid default configuration
+func newTestConfig(t *testing.T, logger *plog.Logger) (*Config, func()) {
+	envVar := strings.ToUpper(configEnvPrefix) + "_" + strings.ToUpper(configKeyBackendHTTPAPIToken)
+	os.Setenv(envVar, testlib.RandPrintableUSASCIIString(2, 30))
+	cfg, err := New(logger)
+	require.NoError(t, err)
+	return cfg, func() {
+		os.Unsetenv(envVar)
+	}
 }
 
 func testStringValue(t *testing.T, cfg *Config, name string, getCfgValue func() string, envKey, defaultValue, someValue string) {
@@ -211,9 +245,20 @@ func newCfgFile(t *testing.T, path string, content string) string {
 	return cfg.Name()
 }
 
-func TestDefaultConfiguration(t *testing.T) {
+func TestStripRegexp(t *testing.T) {
 	t.Run("pii scrubbing default config", func(t *testing.T) {
-		scrubber, err := sqsanitize.NewScrubber(ScrubberKeyRegexp, ScrubberValueRegexp, ScrubberRedactedString)
+		cwdFile := newCfgFile(t, ".", `token: mytoken`)
+		defer os.Remove(cwdFile)
+
+		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+		cfg, err := New(logger)
+
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		require.NotNil(t, cfg.StripSensitiveKeyRegexp())
+		require.NotNil(t, cfg.StripSensitiveValueRegexp())
+
+		scrubber, err := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), ScrubberRedactedString)
 		require.NoError(t, err)
 
 		t.Run("the key regexp should match", func(t *testing.T) {
@@ -249,4 +294,143 @@ func TestDefaultConfiguration(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("pii scrubbing disabled", func(t *testing.T) {
+		cwdFile := newCfgFile(t, ".", `token: mytoken
+`+configKeyStripSensitiveKeyRegexp+`: ""
+`+configKeyStripSensitiveValueRegexp+`: ""`)
+		defer os.Remove(cwdFile)
+
+		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+		cfg, err := New(logger)
+
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		require.Nil(t, cfg.StripSensitiveKeyRegexp())
+		require.Nil(t, cfg.StripSensitiveValueRegexp())
+	})
+}
+
+func TestDefaultConfiguration(t *testing.T) {
+	cwdFile := newCfgFile(t, ".", `token: mytoken`)
+	defer os.Remove(cwdFile)
+
+	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	cfg, err := New(logger)
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.StripSensitiveKeyRegexp())
+	require.NotNil(t, cfg.StripSensitiveValueRegexp())
+}
+
+func TestValidateAppCredentialsConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		Name, Token, AppName string
+		ShouldFail           bool
+	}{
+		{
+			Name:    "valid org token strings",
+			Token:   "org_ok",
+			AppName: "ok",
+		},
+		{
+			Name:  "valid non-org",
+			Token: "ok",
+		},
+		{
+			Name:       "invalid credentials with empty strings",
+			Token:      "",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with empty token and non-empty app-name",
+			Token:      "",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with valid org token but empty app-name",
+			Token:      "org_ok",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "ko\nko",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "koko\x00\x01\x02ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "org_ok",
+			AppName:    "koko\tok",
+			ShouldFail: true,
+		},
+		{
+			Name:    "valid credentials with a space in app-name",
+			Token:   "org_ok",
+			AppName: "ok ok ok",
+		},
+		{
+			Name:       "invalid credentials with invalid token character",
+			Token:      "org_ok\nko",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+
+
+		{
+			Name:       "invalid credentials with valid org token but empty app-name",
+			Token:      "env_org_ok",
+			AppName:    "",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "env_org_ok",
+			AppName:    "ko\nko",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "env_org_ok",
+			AppName:    "koko\x00\x01\x02ok",
+			ShouldFail: true,
+		},
+		{
+			Name:       "invalid credentials with token ok but invalid app-name",
+			Token:      "env_org_ok",
+			AppName:    "koko\tok",
+			ShouldFail: true,
+		},
+		{
+			Name:    "valid credentials with a space in app-name",
+			Token:   "env_org_ok",
+			AppName: "ok ok ok",
+		},
+		{
+			Name:       "invalid credentials with invalid token character",
+			Token:      "env_org_ok\nko",
+			AppName:    "ok",
+			ShouldFail: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			err := validateAppCredentials(tc.Token, tc.AppName)
+			if tc.ShouldFail {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

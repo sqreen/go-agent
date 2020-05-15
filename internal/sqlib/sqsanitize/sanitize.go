@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"regexp"
 
-	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
 
@@ -20,10 +19,10 @@ import (
 type Scrubber struct {
 	// keyRegexp is the regular expression matching keys that need to be
 	// scrubbed. Their values are completely replaced by `redactedValueMask`.
-	keyRegexp regex
+	keyRegexp *regexp.Regexp
 	// valueRegexp is the regular expression matching values that need to be
 	// scrubbed. Only the matching part is replaced by `redactedValueMask`
-	valueRegexp regex
+	valueRegexp *regexp.Regexp
 	// redactValueMask is the string replacing a scrubbed value.
 	redactedValueMask string
 	// scrubEveryString is true when every string of a value must be scrubbed.
@@ -49,20 +48,10 @@ type CustomScrubber interface {
 //     scrubbed regardless of `valueRegexp` - any string in the associated
 //     value is replaced by `redactedValue`.
 // An error can be returned if the regular expressions cannot be compiled.
-func NewScrubber(keyRegexp, valueRegexp, redactedValueMask string) (*Scrubber, error) {
-	keyRE, err := compile(keyRegexp)
-	if err != nil {
-		return nil, err
-	}
-
-	valueRE, err := compile(valueRegexp)
-	if err != nil {
-		return nil, err
-	}
-
+func NewScrubber(keyRegexp, valueRegexp *regexp.Regexp, redactedValueMask string) (*Scrubber, error) {
 	return &Scrubber{
-		keyRegexp:         keyRE,
-		valueRegexp:       valueRE,
+		keyRegexp:         keyRegexp,
+		valueRegexp:       valueRegexp,
 		redactedValueMask: redactedValueMask,
 	}, nil
 }
@@ -186,7 +175,7 @@ func (s *Scrubber) scrubString(v reflect.Value, info Info) (scrubbed bool) {
 		scrubbed = true
 	} else {
 		// Scrub the substrings matching the value regular expression
-		redacted := s.valueRegexp.ReplaceAllString(str, s.redactedValueMask)
+		redacted := replaceAllString(s.valueRegexp, str, s.redactedValueMask)
 		if str == redacted {
 			return false
 		}
@@ -233,7 +222,7 @@ func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
 		// When it does, every string sub-value must be scrubbed regardless of the
 		// value regular expression.
 		key := iter.Key()
-		if hasStringKeyType && !s.scrubEveryString && s.keyRegexp.MatchString(key.String()) {
+		if hasStringKeyType && !s.scrubEveryString && matchString(s.keyRegexp, key.String()) {
 			scrubber = new(Scrubber)
 			*scrubber = *s
 			scrubber.scrubEveryString = true
@@ -276,7 +265,7 @@ func (s *Scrubber) scrubStruct(v reflect.Value, info Info) (scrubbed bool) {
 		}
 
 		scrubber := s
-		if !s.scrubEveryString && s.keyRegexp.MatchString(ft.Name) {
+		if !s.scrubEveryString && matchString(s.keyRegexp, ft.Name) {
 			scrubber = new(Scrubber)
 			*scrubber = *s
 			scrubber.scrubEveryString = true
@@ -325,36 +314,18 @@ func isUnexportedField(f *reflect.StructField) bool {
 	return f.PkgPath != ""
 }
 
-// regex is a helper structure wrapping a regexp and handling when the regexp is
-// disabled by matching nothing.
-type regex struct {
-	re *regexp.Regexp
-}
-
-func compile(r string) (regex, error) {
-	if r == "" {
-		return regex{}, nil
-	}
-
-	re, err := regexp.Compile(r)
-	if err != nil {
-		return regex{}, sqerrors.Wrapf(err, "could not compile regular expression `%q`", r)
-	}
-	return regex{re: re}, nil
-}
-
-func (r regex) MatchString(s string) bool {
-	if r.re == nil {
+func matchString(re *regexp.Regexp, s string) bool {
+	if re == nil {
 		return false
 	}
-	return r.re.MatchString(s)
+	return re.MatchString(s)
 }
 
-func (r regex) ReplaceAllString(src, repl string) string {
-	if r.re == nil {
+func replaceAllString(re *regexp.Regexp, src, repl string) string {
+	if re == nil {
 		return src
 	}
-	return r.re.ReplaceAllString(src, repl)
+	return re.ReplaceAllString(src, repl)
 }
 
 type Info map[string]struct{}

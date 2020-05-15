@@ -6,6 +6,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -110,7 +111,7 @@ func TestJSON(t *testing.T) {
 
 func TestCustomScrubber(t *testing.T) {
 	expectedMask := "scrubbed"
-	scrubber, err := sqsanitize.NewScrubber("password", "forbidden", expectedMask)
+	scrubber, err := sqsanitize.NewScrubber(regexp.MustCompile("password"), regexp.MustCompile("forbidden"), expectedMask)
 	require.NoError(t, err)
 
 	t.Run("without attack", func(t *testing.T) {

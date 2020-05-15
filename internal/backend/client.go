@@ -39,9 +39,9 @@ type Client struct {
 	infra        *signal.AgentInfra
 }
 
-func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Client {
+func NewClient(backendURL string, proxy string, logger *plog.Logger) *Client {
 	var transport *http.Transport
-	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
+	if proxy == "" {
 		// No user settings. The default transport uses standard global proxy
 		// settings *_PROXY environment variables.
 		dummyReq, _ := http.NewRequest("GET", backendURL, nil)
@@ -51,9 +51,9 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Clie
 		transport = (http.DefaultTransport).(*http.Transport)
 	} else {
 		// Use the settings.
-		logger.Infof("client: using configured https proxy `%s`", proxySettings)
+		logger.Infof("client: using configured https proxy `%s`", proxy)
 		proxyCfg := httpproxy.Config{
-			HTTPSProxy: proxySettings,
+			HTTPSProxy: proxy,
 		}
 		proxyURL := proxyCfg.ProxyFunc()
 		proxy := func(req *http.Request) (*url.URL, error) {

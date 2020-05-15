@@ -15,8 +15,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
@@ -109,20 +111,6 @@ const (
 	// be sent per heartbeat. The bigger, the more memory it uses to batch the
 	// events.
 	EventBatchMaxEventsPerHeartbeat = 1000
-)
-
-// Data sanitization configuration.
-const (
-	// ScrubberKeyRegexp is the scrubber key regular expression (cf. scrubber doc
-	// for usage). It is a case-insensitive regexp matching passwd, password,
-	// passphrase, secret, authorization, api_key, apikey, accesstoken,
-	// access_token and token.
-	ScrubberKeyRegexp = `(?i)(passw(((or)?d))|(phrase))|(secret)|(authorization)|(api_?key)|((access_?)?token)`
-	// ScrubberValueRegexp is the scrubber value regular expression (cf. scrubber
-	// doc for usage). It matches credit card numbers with space, dash or no
-	// number separators.
-	ScrubberValueRegexp    = `(?:\d[ -]*?){13,16}`
-	ScrubberRedactedString = `<Redacted by Sqreen>`
 )
 
 var (
@@ -221,19 +209,21 @@ const (
 const (
 	configEnvKeyConfigFile = `config_file`
 
-	configKeyBackendHTTPAPIBaseURL    = `url`
-	configKeyBackendHTTPAPIToken      = `token`
-	configKeyLogLevel                 = `log_level`
-	configKeyAppName                  = `app_name`
-	configKeyHTTPClientIPHeader       = `ip_header`
-	configKeyHTTPClientIPHeaderFormat = `ip_header_format`
-	configKeyBackendHTTPAPIProxy      = `proxy`
-	configKeyDisable                  = `disable`
-	configKeyStripHTTPReferer         = `strip_http_referer`
-	configKeyRules                    = `rules`
-	configKeySDKMetricsPeriod         = `sdk_metrics_period`
-	configKeyMaxMetricsStoreLength    = `max_metrics_store_length`
-	configKeyUseSignalBackend         = `use_signal_backend`
+	configKeyBackendHTTPAPIBaseURL     = `url`
+	configKeyBackendHTTPAPIToken       = `token`
+	configKeyLogLevel                  = `log_level`
+	configKeyAppName                   = `app_name`
+	configKeyHTTPClientIPHeader        = `ip_header`
+	configKeyHTTPClientIPHeaderFormat  = `ip_header_format`
+	configKeyBackendHTTPAPIProxy       = `proxy`
+	configKeyDisable                   = `disable`
+	configKeyStripHTTPReferer          = `strip_http_referer`
+	configKeyRules                     = `rules`
+	configKeySDKMetricsPeriod          = `sdk_metrics_period`
+	configKeyMaxMetricsStoreLength     = `max_metrics_store_length`
+	configKeyUseSignalBackend          = `use_signal_backend`
+	configKeyStripSensitiveKeyRegexp   = `strip_sensitive_key_regexp`
+	configKeyStripSensitiveValueRegexp = `strip_sensitive_value_regexp`
 )
 
 // User configuration's default values.
@@ -242,9 +232,20 @@ const (
 	configDefaultLogLevel              = `info`
 	configDefaultSDKMetricsPeriod      = 60
 	configDefaultMaxMetricsStoreLength = 100 * 1024 * 1024
+
+	// configDefaultStripSensitiveKeyRegexp is the scrubber key regular expression (cf. scrubber doc
+	// for usage). It is a case-insensitive regexp matching passwd, password,
+	// passphrase, secret, authorization, api_key, apikey, accesstoken,
+	// access_token and token.
+	configDefaultStripSensitiveKeyRegexp = `(?i)(passw(((or)?d))|(phrase))|(secret)|(authorization)|(api_?key)|((access_?)?token)`
+	// configDefaultStripSensitiveValueRegexp is the scrubber value regular expression (cf. scrubber
+	// doc for usage). It matches credit card numbers with space, dash or no
+	// number separators.
+	configDefaultStripSensitiveValueRegexp = `(?:\d[ -]*?){13,16}`
+	ScrubberRedactedString                 = `<Redacted by Sqreen>`
 )
 
-func New(logger *plog.Logger) *Config {
+func New(logger *plog.Logger) (*Config, error) {
 	manager := viper.New()
 	manager.SetEnvPrefix(configEnvPrefix)
 	manager.AutomaticEnv()
@@ -259,7 +260,7 @@ func New(logger *plog.Logger) *Config {
 	}{
 		{key: configKeyBackendHTTPAPIBaseURL, defaultValue: configDefaultBackendHTTPAPIBaseURL},
 		{key: configKeyLogLevel, defaultValue: configDefaultLogLevel},
-		{key: configKeyBackendHTTPAPIToken, defaultValue: "", secretFromChar: 6},
+		{key: configKeyBackendHTTPAPIToken, defaultValue: "", secretFromChar: len(BackendHTTPAPIOrganizationTokenSubstr) + 3},
 		{key: configKeyAppName, defaultValue: ""},
 		{key: configKeyHTTPClientIPHeader, defaultValue: ""},
 		{key: configKeyHTTPClientIPHeaderFormat, defaultValue: ""},
@@ -270,6 +271,8 @@ func New(logger *plog.Logger) *Config {
 		{key: configKeySDKMetricsPeriod, defaultValue: configDefaultSDKMetricsPeriod, hidden: true},
 		{key: configKeyMaxMetricsStoreLength, defaultValue: configDefaultMaxMetricsStoreLength, hidden: true},
 		{key: configKeyUseSignalBackend, defaultValue: "", hidden: true},
+		{key: configKeyStripSensitiveKeyRegexp, defaultValue: configDefaultStripSensitiveKeyRegexp},
+		{key: configKeyStripSensitiveValueRegexp, defaultValue: configDefaultStripSensitiveValueRegexp},
 	}
 	for _, p := range parameters {
 		manager.SetDefault(p.key, p.defaultValue)
@@ -305,13 +308,13 @@ func New(logger *plog.Logger) *Config {
 		logger.Infof("config: reading configuration settings from environment variables")
 	}
 
-	cfg := &Config{manager}
+	cfg := &Config{Viper: manager}
 	if cfg.LogLevel() == plog.Debug {
 		logger.Infof("config: setting: %s = %q", configFileEnvVar, configFile)
 		for _, p := range parameters {
 			if !p.hidden {
 				v := cfg.GetString(p.key)
-				if p.secretFromChar > 0 && len(v) > 0 {
+				if p.secretFromChar > 0 && len(v) > 0 && len(v) >= p.secretFromChar {
 					secret := make([]byte, 0, len(v))
 					secret = append(secret, v[:p.secretFromChar]...)
 					for range v[p.secretFromChar:] {
@@ -323,7 +326,12 @@ func New(logger *plog.Logger) *Config {
 			}
 		}
 	}
-	return cfg
+
+	if err := cfg.health(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
 }
 
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
@@ -362,15 +370,9 @@ func (c *Config) BackendHTTPAPIProxy() string {
 }
 
 // Disable returns true when the agent should be disabled, false otherwise.
-func (c *Config) Disabled() (disabled bool, reason string) {
+func (c *Config) Disabled() bool {
 	disable := sanitizeString(c.GetString(configKeyDisable))
-	if disable != "" {
-		return true, fmt.Sprintf("configuration entry `%s` set to true", configKeyDisable)
-	}
-	if c.BackendHTTPAPIToken() == "" {
-		return true, "empty token value"
-	}
-	return false, ""
+	return disable != ""
 }
 
 // Disable returns true when the agent should be strip the `Referer` HTTP
@@ -415,6 +417,81 @@ func (c *Config) UseSignalBackend() bool {
 	return strip != ""
 }
 
+// StripSensitiveKeyRegexp returns the regular expression to use to strip
+// sensitive data having keys matching the given regular expression.
+func (c *Config) StripSensitiveKeyRegexp() *regexp.Regexp {
+	// The regular expression is checked by health() so this function doesn't
+	// need to return an error.
+	re, _ := c.stripSensitiveKeyRegexp()
+	return re
+}
+
+func (c *Config) stripSensitiveKeyRegexp() (*regexp.Regexp, error) {
+	expr := c.GetString(configKeyStripSensitiveKeyRegexp)
+	if expr == "" {
+		// Stripping disabled
+		return nil, nil
+	}
+	return regexp.Compile(expr)
+}
+
+// StripSensitiveValueRegexp returns the regular expression to use to strip
+// sensitive data having values matching the given regular expression.
+func (c *Config) StripSensitiveValueRegexp() *regexp.Regexp {
+	// The regular expression is checked by health() so this function doesn't
+	// need to return an error.
+	re, _ := c.stripSensitiveValueRegexp()
+	return re
+}
+
+func (c *Config) stripSensitiveValueRegexp() (*regexp.Regexp, error) {
+	expr := c.GetString(configKeyStripSensitiveValueRegexp)
+	if expr == "" {
+		// Stripping disabled
+		return nil, nil
+	}
+	return regexp.Compile(expr)
+}
+
 func sanitizeString(s string) string {
 	return strings.TrimSpace(s)
+}
+
+func (c *Config) health() error {
+	if err := validateAppCredentials(c.BackendHTTPAPIToken(), c.AppName()); err != nil {
+		return sqerrors.Wrap(err, "config: invalid application credentials")
+	}
+
+	if _, err := c.stripSensitiveKeyRegexp(); err != nil {
+		return sqerrors.Wrapf(err, "config: invalid regular expression for sensitive keys")
+	}
+
+	if _, err := c.stripSensitiveValueRegexp(); err != nil {
+		return sqerrors.Wrapf(err, "config: invalid regular expression for sensitive values")
+	}
+
+	return nil
+}
+
+func validateAppCredentials(token, appName string) (err error) {
+	if token == "" {
+		return sqerrors.New("missing token")
+	}
+	if strings.Contains(token, BackendHTTPAPIOrganizationTokenSubstr) && appName == "" {
+		return sqerrors.New("missing application name")
+	}
+
+	for _, r := range appName {
+		if !unicode.IsPrint(r) {
+			return sqerrors.Errorf("forbidden non-printable character `%q` in the application name `%q`", r, appName)
+		}
+	}
+
+	for _, r := range token {
+		if !unicode.IsPrint(r) {
+			return sqerrors.Errorf("forbidden non-printable character `%q` in the token `%q`", r, token)
+		}
+	}
+
+	return nil
 }
