@@ -12,9 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/app"
@@ -56,10 +54,6 @@ func (e LoginError) Unwrap() error {
 // Login to the backend. When the API request fails, retry for ever and after
 // sleeping some time.
 func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, token string, appName string, appInfo *app.Info, useSignalBackend bool) (*api.AppLoginResponse, error) {
-	if err := ValidateCredentialsConfiguration(token, appName); err != nil {
-		return nil, NewLoginError(err)
-	}
-
 	_, bundleSignature, err := appInfo.Dependencies()
 	if err != nil {
 		logger.Error(withNotificationError{sqerrors.Wrap(err, "could not retrieve the program dependencies")})
@@ -102,47 +96,6 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 			time.Sleep(d)
 		}
 	}
-}
-
-type InvalidCredentialsConfiguration struct {
-	error
-}
-
-func (e InvalidCredentialsConfiguration) Unwrap() error {
-	return e.error
-}
-
-func (e InvalidCredentialsConfiguration) Cause() error {
-	return e.error
-}
-
-func ValidateCredentialsConfiguration(token, appName string) (err error) {
-	defer func() {
-		if err != nil {
-			err = InvalidCredentialsConfiguration{err}
-		}
-	}()
-
-	if token == "" {
-		return sqerrors.New("missing token")
-	}
-	if strings.Contains(token, config.BackendHTTPAPIOrganizationTokenSubstr) && appName == "" {
-		return sqerrors.New("missing application name")
-	}
-
-	for _, r := range appName {
-		if !unicode.IsPrint(r) {
-			return sqerrors.Errorf("forbidden non-printable character `%q` in the application name `%q`", r, appName)
-		}
-	}
-
-	for _, r := range token {
-		if !unicode.IsPrint(r) {
-			return sqerrors.Errorf("forbidden non-printable character `%q` in the token `%q`", r, token)
-		}
-	}
-
-	return nil
 }
 
 // TrySendAppException is a special client function allowing to send app-level

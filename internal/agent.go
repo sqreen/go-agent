@@ -114,7 +114,11 @@ func (instance *agentInstanceType) start() {
 					//   - the agent initialization.
 					// Any panics from these would stop the execution and would be returned
 					// to the outer level.
-					cfg := config.New(logger)
+					cfg, err := config.New(logger)
+					if err != nil {
+						logger.Error(sqerrors.Wrap(err, "agent disabled"))
+						return nil
+					}
 					agent := New(cfg)
 					if agent == nil {
 						return nil
@@ -123,7 +127,7 @@ func (instance *agentInstanceType) start() {
 					}
 
 					// Level 3 returns unhandled agent errors or panics
-					err := sqsafe.Call(agent.Serve)
+					err = sqsafe.Call(agent.Serve)
 					if err == nil {
 						return nil
 					}
@@ -201,8 +205,8 @@ func New(cfg *config.Config) *AgentType {
 	agentVersion := version.Version()
 	logger.Infof("go agent v%s", agentVersion)
 
-	if disabled, reason := cfg.Disabled(); disabled {
-		logger.Infof("agent disabled: %s", reason)
+	if cfg.Disabled() {
+		logger.Infof("agent disabled by the configuration")
 		return nil
 	}
 
@@ -236,7 +240,7 @@ func New(cfg *config.Config) *AgentType {
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
 	logger.Debugf("agent: using sdk metrics store time period of %s", sdkMetricsPeriod)
 
-	piiScrubber, err := sqsanitize.NewScrubber(config.ScrubberKeyRegexp, config.ScrubberValueRegexp, config.ScrubberRedactedString)
+	piiScrubber, err := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), config.ScrubberRedactedString)
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
 		return nil
@@ -259,7 +263,7 @@ func New(cfg *config.Config) *AgentType {
 		cancel:      cancel,
 		config:      cfg,
 		appInfo:     app.NewInfo(logger),
-		client:      backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg, logger),
+		client:      backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg.BackendHTTPAPIProxy(), logger),
 		actors:      actor.NewStore(logger),
 		rules:       rulesEngine,
 		piiScrubber: piiScrubber,

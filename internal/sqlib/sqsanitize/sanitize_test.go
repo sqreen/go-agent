@@ -67,8 +67,8 @@ func TestScrubber(t *testing.T) {
 
 	t.Run("NewScrubber", func(t *testing.T) {
 		type args struct {
-			keyRegexp         string
-			valueRegexp       string
+			keyRegexp         *regexp.Regexp
+			valueRegexp       *regexp.Regexp
 			redactedValueMask string
 		}
 		tests := []struct {
@@ -78,44 +78,26 @@ func TestScrubber(t *testing.T) {
 			wantErr bool
 		}{
 			{
-				name: "key regexp should not compile",
-				args: args{
-					keyRegexp:         "o(ops",
-					valueRegexp:       "",
-					redactedValueMask: expectedMask,
-				},
-				wantErr: true,
-			},
-			{
-				name: "value regexp should not compile",
-				args: args{
-					keyRegexp:         "",
-					valueRegexp:       "o(ops",
-					redactedValueMask: expectedMask,
-				},
-				wantErr: true,
-			},
-			{
 				name: "no regexps",
 				args: args{
-					keyRegexp:         "",
-					valueRegexp:       "",
+					keyRegexp:         nil,
+					valueRegexp:       nil,
 					redactedValueMask: expectedMask,
 				},
 			},
 			{
 				name: "key regexp only",
 				args: args{
-					keyRegexp:         "ok",
-					valueRegexp:       "",
+					keyRegexp:         regexp.MustCompile("ok"),
+					valueRegexp:       nil,
 					redactedValueMask: expectedMask,
 				},
 			},
 			{
 				name: "value regexp only",
 				args: args{
-					keyRegexp:         "",
-					valueRegexp:       "ok",
+					keyRegexp:         nil,
+					valueRegexp:       regexp.MustCompile("ok"),
 					redactedValueMask: expectedMask,
 				},
 			},
@@ -181,7 +163,12 @@ func TestScrubber(t *testing.T) {
 		for _, tc := range tests {
 			tc := tc
 			t.Run(tc.name, func(t *testing.T) {
-				s, err := sqsanitize.NewScrubber(testlib.RandUTF8String(), tc.valueRegexp, expectedMask)
+				var valueRE *regexp.Regexp
+				if tc.valueRegexp != "" {
+					valueRE = regexp.MustCompile(tc.valueRegexp)
+				}
+
+				s, err := sqsanitize.NewScrubber(regexp.MustCompile(testlib.RandUTF8String()), valueRE, expectedMask)
 				require.NoError(t, err)
 				info := sqsanitize.Info{}
 				scrubbed, err := s.Scrub(&tc.value, info)
@@ -1091,7 +1078,15 @@ func TestScrubber(t *testing.T) {
 					}
 					name := fmt.Sprintf("with value regular expression %s", state)
 					t.Run(name, func(t *testing.T) {
-						s, err := sqsanitize.NewScrubber(keyRE, valueRE, expectedMask)
+						var keyRegex, valRegex *regexp.Regexp
+						if keyRE != "" {
+							keyRegex = regexp.MustCompile(keyRE)
+						}
+						if valueRE != "" {
+							valRegex = regexp.MustCompile(valueRE)
+						}
+
+						s, err := sqsanitize.NewScrubber(keyRegex, valRegex, expectedMask)
 						require.NoError(t, err)
 
 						for _, tc := range tests {
@@ -1155,7 +1150,7 @@ func TestScrubber(t *testing.T) {
 	})
 
 	t.Run("Usage", func(t *testing.T) {
-		s, err := sqsanitize.NewScrubber("(?i)password", "forbidden", expectedMask)
+		s, err := sqsanitize.NewScrubber(regexp.MustCompile("(?i)password"), regexp.MustCompile("forbidden"), expectedMask)
 		require.NoError(t, err)
 
 		t.Run("URL Values", func(t *testing.T) {
@@ -1189,7 +1184,7 @@ func TestScrubber(t *testing.T) {
 		})
 
 		t.Run("HTTP Request", func(t *testing.T) {
-			s, err := sqsanitize.NewScrubber(`(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`, `(?:\d[ -]*?){13,16}`, expectedMask)
+			s, err := sqsanitize.NewScrubber(regexp.MustCompile(`(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`), regexp.MustCompile(`(?:\d[ -]*?){13,16}`), expectedMask)
 			require.NoError(t, err)
 
 			t.Run("zero value", func(t *testing.T) {
