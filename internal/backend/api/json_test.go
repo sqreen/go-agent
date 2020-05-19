@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
 
 	. "github.com/onsi/ginkgo"
@@ -433,6 +434,12 @@ func (this *BatchRequest) GetBatch() []api.BatchRequest_Event {
 
 var fuzzer = fuzz.New().Funcs(FuzzStruct)
 
+func TestAPI(t *testing.T) {
+	// TODO: translate into simpler testify tests
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "API Suite")
+}
+
 var _ = Describe("API", func() {
 
 	Describe("Batch", func() {
@@ -464,6 +471,25 @@ var _ = Describe("API", func() {
 					buf, err := json.Marshal(pb)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(string(buf)).To(Equal(`["my key","my value"]`))
+				})
+
+				It("should marshal a header with json characters", func() {
+					pb := &api.RequestRecord_Request_Header{
+						Key:   `my " key`,
+						Value: `my " value`,
+					}
+					buf, err := json.Marshal(pb)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(string(buf)).To(Equal(`["my \" key","my \" value"]`))
+				})
+
+				It("should marshal any input", func() {
+					pb := &api.RequestRecord_Request_Header{
+						Key:   testlib.RandUTF8String(50),
+						Value: testlib.RandUTF8String(50),
+					}
+					_, err := json.Marshal(pb)
+					Expect(err).NotTo(HaveOccurred())
 				})
 			})
 		})
@@ -516,7 +542,7 @@ var _ = Describe("API", func() {
 
 					Context("user identifiers", func() {
 						BeforeEach(func() {
-							expected = `["my event",{"user_identifiers":{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}}]`
+							expected = `["my event",{"user_identifiers":{"key 1":"33","key 2":"value 2","key 3":"1, 2, 3","key 4":"A B"}}]`
 							pb = &api.RequestRecord_Observed_SDKEvent_Args{
 								Args: &api.RequestRecord_Observed_SDKEvent_Args_Track_{
 									Track: &api.RequestRecord_Observed_SDKEvent_Args_Track{
@@ -576,7 +602,7 @@ var _ = Describe("API", func() {
 
 						buf, err := json.Marshal(pb)
 						Expect(err).NotTo(HaveOccurred())
-						Expect(string(buf)).To(Equal(`[{"key 1":33,"key 2":"value 2","key 3":[1,2,3],"key 4":{"A":16,"B":22}}]`))
+						Expect(string(buf)).To(Equal(`[{"key 1":"33","key 2":"value 2","key 3":"1, 2, 3","key 4":"A, B"}]`))
 					})
 				})
 			})
