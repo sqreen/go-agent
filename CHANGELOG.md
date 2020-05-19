@@ -1,3 +1,27 @@
+# v0.10.0
+
+## New Features
+
+- (#109) Make the PII sanitizer configurable with two new configuration entries
+  allowing to control the regular expressions used to sanitize everything sent
+  to Sqreen. The agent doesn't start in case of an invalid regular expression.
+  Read more at [TODO: link to doc].
+
+- (#110) `net/http` middleware: include URL segments in the request paramters.
+  It increases the coverage we have on frameworks compatible with this
+  middleware such as `gorilla` or `beego`. 
+
+## Internal Changes
+
+- (#107) Backend API: integrate the security signal HTTP API.
+
+## Fixes
+
+- (#108) Update the token validation to correctly handle the new token format.
+
+- (#111) Fix a possible JSON injection in the JSON serialization function of
+  HTTP headers recorded by the agent (the list can be found [here](https://github.com/sqreen/go-agent/blob/baec489f126e928afef404c07fc5763755a4fbcb/internal/config/config.go#L117-L141). 
+
 # v0.9.1
 
 ## Fixes

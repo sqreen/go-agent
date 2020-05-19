@@ -107,12 +107,3 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
    you would like to track (eg. password changes).
 
 Find out more about the agent setup at https://docs.sqreen.com/go/installation/
-
-# Licensing
-
-Sqreen for Go is free-to-use, proprietary software.
-
-# Terms
-
-Copyright (c) 2019 Sqreen. All Rights Reserved. Please refer to our terms for
-more information: https://www.sqreen.com/terms.html
