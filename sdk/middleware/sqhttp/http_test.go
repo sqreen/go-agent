@@ -213,3 +213,27 @@ func middleware(next http.HandlerFunc, agent protectioncontext.AgentFace) http.H
 		middlewareHandler(agent, next, w, r)
 	})
 }
+
+func TestRequestReaderImpl(t *testing.T) {
+	t.Run("framework params", func(t *testing.T) {
+		t.Run("empty", func(t *testing.T) {
+			req, err := http.NewRequest("GET", "/", nil)
+			require.NoError(t, err)
+			reqReader := requestReaderImpl{req}
+
+			frameworkParams := reqReader.FrameworkParams()
+			require.Empty(t, frameworkParams)
+		})
+
+		t.Run("url segments", func(t *testing.T) {
+			req, err := http.NewRequest("GET", `/a/bb/cc/%2Ffoo//bar///zyz/"\"\\"\\\"/`, nil)
+			require.NoError(t, err)
+			reqReader := requestReaderImpl{req}
+
+			frameworkParams := reqReader.FrameworkParams()
+			require.NotEmpty(t, frameworkParams)
+
+			require.Equal(t, []string{`a`, `bb`, `cc`, `foo`, `bar`, `zyz`, `"\"\\"\\\"`}, frameworkParams[urlSegmentsFrameworkParamsKey])
+		})
+	})
+}
