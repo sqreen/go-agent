@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/sqreen/go-agent/internal"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
@@ -106,8 +107,21 @@ func (r *requestReaderImpl) Header(h string) (value *string) {
 	return &v[0]
 }
 
+// FrameworkParams makes its best to return framework parameters, often
+// taken from the URL path (eg. a parametrized endpoint `/posts/:id`),
+// by returning the list of non-empty elements in the URL path, split by
+// character '/'. This allows to better cover frameworks using this `net/http`
+// middleware, such as Gorilla and Beego.
 func (r *requestReaderImpl) FrameworkParams() url.Values {
-	return nil // none using net/http
+	reqURL := r.URL()
+	urlParams := strings.FieldsFunc(reqURL.Path, func(c rune) bool {
+		return c == '/'
+	})
+	paths := strings.Split(reqURL.Path, "/")
+	if len(paths) > 0 && paths[0] == "" {
+		paths = paths[1:]
+	}
+	return url.Values{"URL Path Params": urlParams}
 }
 
 func (r *requestReaderImpl) ClientIP() net.IP {

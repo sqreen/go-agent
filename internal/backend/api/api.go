@@ -348,6 +348,8 @@ type RequestRecord_Request_Parameters struct {
 	// application/x-www-form-urlencoded or multipart/form-data parameters
 	Form      map[string][]string `json:"form,omitempty"`
 	Framework map[string][]string `json:"framework,omitempty"`
+	// Path values
+	URLPath map[string][]string `json:"path,omitempty"`
 }
 
 type RequestRecord_Response struct {
