@@ -18,23 +18,11 @@ import (
 	http_trace "github.com/sqreen/go-sdk/signal/http"
 )
 
-type AgentMessage api.Point
-
 func FormatAgentSource(agentVersion string) string {
 	var source strings.Builder
 	source.WriteString("sqreen:agent:golang:")
 	source.WriteString(agentVersion)
 	return source.String()
-}
-
-func NewAgentMessage(t time.Time, id, hash, message string, infra *AgentInfra, infos map[string]interface{}) (*AgentMessage, error) {
-	var name strings.Builder
-	name.WriteString("sq.agent.message.")
-	name.WriteString(id)
-
-	source := FormatAgentSource(infra.AgentVersion)
-
-	return (*AgentMessage)(api.NewPoint(name.String(), source, t, nil, nil, infra, nil, nil, newAgentMessagePayload(hash, message, infos))), nil
 }
 
 type AgentMessagePayload struct {

@@ -1,3 +1,42 @@
+# v0.10.0
+
+## New Features
+
+- (#109) Make the PII sanitizer configurable with two new configuration entries
+  allowing to control the regular expressions used to sanitize everything sent
+  to Sqreen. The agent doesn't start in case of an invalid regular expression.
+  More details can be found on the [configuration's documentation page](https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing).
+
+- (#110) The `net/http` middleware now includes URL segments in the request
+  parameters to increase the coverage we have on frameworks compatible with it,
+  such as `gorilla` or `beego`.
+
+## Internal Changes
+
+- (#107) Backend API: integrate the security signal HTTP API.
+
+## Fixes
+
+- (#108) Update the token validation to correctly handle the new token format.
+
+- (#111) Fix the JSON serialization function of HTTP headers monitored by the
+  agent that could fail depending on the header values. Note that the JSON
+  serialization of the parent data structure safely catches any JSON injection
+  attempt.
+
+## Documentation
+
+- Add quick start examples for common build and deployment environments such as
+  docker images, heroku and google app engine.
+
+- Document Heroku installation at <https://docs.sqreen.com/go/installation/heroku>.
+
+- Document Google App Engine installation at <https://docs.sqreen.com/go/installation/google-app-engine>.
+
+- Document Docker image installation at <https://docs.sqreen.com/go/installation/docker>.
+
+- Document PII scrubbing configuration at <https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing>.
+
 # v0.9.1
 
 ## Fixes

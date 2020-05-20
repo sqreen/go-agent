@@ -25,7 +25,6 @@ import (
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-sdk/signal/client"
-	signal_api "github.com/sqreen/go-sdk/signal/client/api"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/xerrors"
 )
@@ -289,30 +288,18 @@ func (c *Client) SendAgentMessage(ctx context.Context, t time.Time, message stri
 	hash := sha1.Sum([]byte(message))
 	id := hex.EncodeToString(hash[:])
 
-	if c.signalClient == nil {
-		httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AgentMessage)
-		if err != nil {
-			return err
-		}
-		httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
-
-		payload := api.AgentMessage{
-			Id:      id,
-			Kind:    "error",
-			Message: message,
-		}
-		return c.Do(httpReq, payload)
-	}
-
-	msg, err := signal.NewAgentMessage(t, id, id, message, c.infra, infos)
+	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AgentMessage)
 	if err != nil {
 		return err
 	}
-	err = c.signalClient.SignalService().SendSignal(ctx, (*signal_api.Signal)(msg))
-	if err != nil {
-		return sqerrors.Wrap(err, "could not send the agent message")
+	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
+
+	payload := api.AgentMessage{
+		Id:      id,
+		Kind:    "error",
+		Message: message,
 	}
-	return nil
+	return c.Do(httpReq, payload)
 }
 
 // SendAgentMessage is a special client function allowing to send app-level

@@ -4,8 +4,8 @@ This example allows to create a docker image of Go web server with Sqreen.
 
 ## Examples
 
-The following Dockerfile examples show-case multi-stage docker builds in order
-to separate the build environment and the tools it needs from the end
+The following Dockerfile examples show-case multi-stage docker images in order
+to separate the build environment and the tools it needs, from the production
 application image.
 
 They all use the official [golang docker image](https://hub.docker.com/_/golang)
@@ -55,12 +55,12 @@ examples/docker $ docker build -t hello-sqreen -f alpine/Dockerfile .
 Once you have built your `hello-sqreen` docker image by following one of the
 previous docker build examples, you can then run it.
 
-1. Get your Sqreen credentials from our dashboard at https://my.sqreen.com/new-application#golang-agent
+1. Create the application on our dashboard and get its credentials at <https://my.sqreen.com/new-application>
 
 1. Run the docker image with Sqreen by at least passing the Sqreen application
    token:
    ```console
-   examples/docker $ docker run -t -p 8080:8080 -e SQREEN_TOKEN="oh my token" --rm hello-sqreen
+   examples/docker $ docker run -t -p 8080:8080 -e SQREEN_TOKEN="your token" -e SQREEN_APP_NAME="you app name" --rm hello-sqreen
    ```
    See the [configuration](https://docs.sqreen.com/go/configuration/) for the
    full list of configuration options.
