@@ -25,7 +25,7 @@
   attempt.
 
 ## Documentation
-****
+
 - Add quick start examples for common build and deployment environments such as
   docker images, heroku and google app engine.
 
