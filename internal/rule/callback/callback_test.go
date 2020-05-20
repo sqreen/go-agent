@@ -90,7 +90,7 @@ func (m *RuleContextMockup) ExpectBlockingMode() *mock.Call {
 func (mockup *RuleContextMockup) Error(err error) {
 }
 
-func (r *RuleContextMockup) PushMetricsValue(key interface{}, value uint64) error {
+func (r *RuleContextMockup) PushMetricsValue(key interface{}, value int64) error {
 	return r.Called(key, value).Error(0)
 }
 

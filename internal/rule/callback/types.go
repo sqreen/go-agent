@@ -21,7 +21,7 @@ type RuleFace interface {
 	//   closed by checking the metrics stored in the event record and
 	//   pushing them. But the current metrics store interface doesn't allow
 	//   to pass a time (to pass the time of the observation).
-	PushMetricsValue(key interface{}, value uint64) error
+	PushMetricsValue(key interface{}, value int64) error
 	Config() Config
 	// TODO: variadic options api
 	NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent

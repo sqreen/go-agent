@@ -2,10 +2,10 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package version
+package main
 
-const version = "0.10.0"
+import "github.com/sqreen/go-agent/examples/hellohttp"
 
-func Version() string {
-	return version
+func main() {
+	hellohttp.ListenAndServe(":8080")
 }

@@ -6,6 +6,7 @@ package backend
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -16,25 +17,30 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/sqreen/go-agent/internal/backend/api"
+	"github.com/sqreen/go-agent/internal/backend/api/signal"
 	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-sdk/signal/client"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/xerrors"
 )
 
 type Client struct {
-	client     *http.Client
-	backendURL string
-	logger     *plog.Logger
-	session    string
+	client       *http.Client
+	backendURL   string
+	logger       *plog.Logger
+	session      string
+	signalClient *client.Client
+	infra        *signal.AgentInfra
 }
 
-func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Client {
+func NewClient(backendURL string, proxy string, logger *plog.Logger) *Client {
 	var transport *http.Transport
-	if proxySettings := cfg.BackendHTTPAPIProxy(); proxySettings == "" {
+	if proxy == "" {
 		// No user settings. The default transport uses standard global proxy
 		// settings *_PROXY environment variables.
 		dummyReq, _ := http.NewRequest("GET", backendURL, nil)
@@ -44,9 +50,9 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Clie
 		transport = (http.DefaultTransport).(*http.Transport)
 	} else {
 		// Use the settings.
-		logger.Infof("client: using configured https proxy `%s`", proxySettings)
+		logger.Infof("client: using configured https proxy `%s`", proxy)
 		proxyCfg := httpproxy.Config{
-			HTTPSProxy: proxySettings,
+			HTTPSProxy: proxy,
 		}
 		proxyURL := proxyCfg.ProxyFunc()
 		proxy := func(req *http.Request) (*url.URL, error) {
@@ -70,7 +76,7 @@ func NewClient(backendURL string, cfg *config.Config, logger *plog.Logger) *Clie
 	return client
 }
 
-func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string) (*api.AppLoginResponse, error) {
+func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string, useSignalBackend bool) (*api.AppLoginResponse, error) {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogin)
 	if err != nil {
 		return nil, err
@@ -91,10 +97,30 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 
 	c.session = res.SessionId
 
+	if useSignalBackend || res.Features.UseSignals {
+		c.signalClient = client.NewClient(c.client, c.session)
+		c.signalClient.Logger = c.logger
+		c.infra = signal.NewAgentInfra(req.AgentVersion, req.OsType, req.Hostname, req.RuntimeVersion)
+	}
+
 	return res, nil
 }
 
-func (c *Client) AppBeat(req *api.AppBeatRequest) (*api.AppBeatResponse, error) {
+func (c *Client) AppBeat(ctx context.Context, req *api.AppBeatRequest) (*api.AppBeatResponse, error) {
+	if legacyMetrics := req.Metrics; c.signalClient != nil && len(legacyMetrics) > 0 {
+		metrics := signal.FromLegacyMetrics(legacyMetrics, c.infra.AgentVersion, c.logger)
+		if err := c.signalClient.SignalService().SendBatch(ctx, metrics); err != nil {
+			c.logger.Error(sqerrors.Wrap(err, "could not send the batch of metric signals"))
+			// The request failed but since we still have the legacy AppBeat request
+			// following, we can try again through it by not removing the metrics from
+			// the legacy AppBeat request.
+		} else {
+			// The batch was successfully sent, don't do it again through the
+			// following AppBeat request.
+			req.Metrics = nil
+		}
+	}
+
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppBeat)
 	if err != nil {
 		return nil, err
@@ -105,6 +131,7 @@ func (c *Client) AppBeat(req *api.AppBeatRequest) (*api.AppBeatResponse, error) 
 		return nil, err
 	}
 	return res, nil
+
 }
 
 func (c *Client) AppLogout() error {
@@ -119,16 +146,21 @@ func (c *Client) AppLogout() error {
 	return nil
 }
 
-func (c *Client) Batch(req *api.BatchRequest) error {
-	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.Batch)
-	if err != nil {
-		return err
+func (c *Client) Batch(ctx context.Context, req *api.BatchRequest) error {
+	if c.signalClient == nil {
+		httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.Batch)
+		if err != nil {
+			return err
+		}
+		httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
+		if err := c.Do(httpReq, req); err != nil {
+			return err
+		}
+		return nil
 	}
-	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
-	if err := c.Do(httpReq, req); err != nil {
-		return err
-	}
-	return nil
+
+	batch := signal.FromLegacyBatch(req.Batch, c.infra, c.logger)
+	return c.signalClient.SignalService().SendBatch(ctx, batch)
 }
 
 func (c *Client) ActionsPack() (*api.ActionsPackResponse, error) {
@@ -252,15 +284,18 @@ func (c *Client) newRequest(descriptor *config.HTTPAPIEndpoint) (*http.Request, 
 	return req, nil
 }
 
-func (c *Client) SendAgentMessage(message string) error {
+func (c *Client) SendAgentMessage(ctx context.Context, t time.Time, message string, infos map[string]interface{}) error {
+	hash := sha1.Sum([]byte(message))
+	id := hex.EncodeToString(hash[:])
+
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AgentMessage)
 	if err != nil {
 		return err
 	}
 	httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
-	id := sha1.Sum([]byte(message))
+
 	payload := api.AgentMessage{
-		Id:      hex.EncodeToString(id[:]),
+		Id:      id,
 		Kind:    "error",
 		Message: message,
 	}
@@ -269,7 +304,7 @@ func (c *Client) SendAgentMessage(message string) error {
 
 // SendAgentMessage is a special client function allowing to send app-level
 // messages when the instance is not logged in yet and will not.
-func SendAgentMessage(logger plog.DebugLogger, cfg *config.Config, kind, message string) {
+func SendAgentMessage(logger plog.DebugLogger, cfg *config.Config, message string) {
 	b := new(bytes.Buffer)
 	id := sha1.Sum([]byte(message))
 	payload := api.AgentMessage{

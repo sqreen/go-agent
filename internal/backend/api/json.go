@@ -17,10 +17,11 @@ import (
 var RequestRecordVersion = "20171208"
 
 func (h *RequestRecord_Request_Header) MarshalJSON() ([]byte, error) {
-	if h == nil {
-		return []byte("[]"), nil
+	var kv []string
+	if h != nil {
+		kv = []string{h.Key, h.Value}
 	}
-	return []byte(`["` + h.Key + `", "` + h.Value + `"]`), nil
+	return json.Marshal(kv)
 }
 
 type ListValue []interface{}
