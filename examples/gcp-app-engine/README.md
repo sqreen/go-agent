@@ -14,7 +14,7 @@ executing `export PROJECT_ID=my-project` prior to running the below commands.
    $ gcloud builds submit --config=cloudbuild.yaml .
    ```
 
-1. Get your Sqreen credentials from our dashboard at https://my.sqreen.com/new-application#golang-agent
+1. Create the application on our dashboard and get its credentials at <https://my.sqreen.com/new-application>
 
 1. Deploy the previously built docker image to Google App Engine flexible
    environment:
