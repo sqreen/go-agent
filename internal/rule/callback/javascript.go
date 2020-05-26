@@ -11,150 +11,215 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/dop251/goja"
 	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/internal/backend/api"
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
-	"github.com/sqreen/go-agent/internal/sqlib/sqjs"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
 
-type GenericCallbackConfig interface {
-	Config
-	BindingAccessors() []string
-	JSCallbacks(string) string
-}
-
-func NewJSExecCallback(rule RuleFace, prologFuncType reflect.Type) (sqhook.ReflectedPrologCallback, error) {
-	cfg, ok := rule.Config().(GenericCallbackConfig)
-	if !ok {
-		return nil, sqerrors.Errorf("unexpected configuration type `%T`", rule.Config())
-	}
-
-	// todo: newVMPool()
-	vm := sqjs.New()
-	{
-		if src := cfg.JSCallbacks("pre"); src != "" {
-			_, err := vm.Run(src)
-			if err != nil {
-				return nil, sqerrors.New("could not ")
-			}
-			if v, err := vm.Run("pre"); err != nil || !v.IsObject() {
-				return nil, sqerrors.New("could not get the pre object value")
-			}
-		}
-
-		if src := cfg.JSCallbacks("post"); src != "" {
-			_, err := vm.Run(src)
-			if err != nil {
-				return nil, sqerrors.New("could not ")
-			}
-			if v, err := vm.Run("post"); err != nil || !v.IsObject() {
-				return nil, sqerrors.New("could not post object value")
-			}
-		}
-	}
-	pool := sync.Pool{
-		New: func() interface{} {
-			return vm.Copy()
-		},
-	}
-
-	bindingAccessors := cfg.BindingAccessors()
-	args := make([]bindingaccessor.BindingAccessorFunc, len(bindingAccessors))
-	for i, expr := range bindingAccessors {
-		ba, err := bindingaccessor.Compile(expr)
-		if err != nil {
-			return nil, sqerrors.Wrapf(err, "binding accessor compilation of argument %d", i)
-		}
-		args[i] = ba
-	}
-
+func NewJSExecCallback(rule RuleFace, cfg ReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
+	pool := newVMPool(cfg)
+	sqassert.NotNil(pool)
 	strategy := cfg.Strategy()
+	sqassert.NotNil(strategy)
 
 	return func(params []reflect.Value) (epilogFunc sqhook.ReflectedEpilogCallback, prologErr error) {
 		err := sqsafe.Call(func() error {
-			goCtx := params[strategy.Protection.Context.ArgIndex].Elem().Interface().(context.Context)
-			ctx := httpprotection.FromContext(goCtx)
+			ctx := getProtectionContext(strategy.Protection, params)
 			if ctx == nil {
-				// TODO: log once that nothing found in the context but may also be
-				//        because it is whitelisted.
 				return nil
 			}
+
+			vm := pool.get()
+			defer pool.put(vm)
 
 			// Make benefit from the fact this is a protection callback to also get the request reader
 			baCtx, err := NewCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, nil, ctx.RequestReader)
 			if err != nil {
 				return err
 			}
-			jsArgs := make([]interface{}, len(args))
-			for i, a := range args {
-				v, err := a(baCtx)
+
+			// TODO: post callback as soon as it's needed by a protection
+			//if vm.hasPost() {
+			//}
+
+			if vm.hasPre() {
+				result, err := vm.callPre(baCtx)
 				if err != nil {
-					return err
+					// TODO: api adding more information to the error such as the
+					//   rule name, etc.
+					ctx.Logger().Error(err)
+					return nil
 				}
-				if v == nil {
-					v = struct{}{}
+
+				raise := result.Status == "raise"
+				if !raise {
+					return nil
 				}
-				jsArgs[i] = v
+
+				// Create the attack event
+				blocking := cfg.BlockingMode()
+				metadata := result.Record
+				abortErr := abortError{}
+				st := sqerrors.StackTrace(errors.WithStack(abortErr))
+				ctx.AddAttackEvent(rule.NewAttackEvent(blocking, noScrub(metadata), st))
+
+				// If not in blocking mode, return here and don't block the request
+				if !blocking {
+					return nil
+				}
+
+				// Abort the request handler context
+				defer ctx.CancelHandlerContext()
+
+				// Write the blocking response
+				ctx.WriteDefaultBlockingResponse()
+
+				// Abort the function call according to the blocking strategy
+				epilogFunc = func(results []reflect.Value) {
+					errorIndex := strategy.Protection.BlockStrategy.RetIndex
+					results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
+				}
+				prologErr = sqhook.AbortError
 			}
 
-			vm := pool.Get().(*sqjs.Otto)
-			defer pool.Put(vm)
-			// TODO: how to use Object instead?
-			pre, err := vm.Run("pre")
-			if err != nil {
-				return err
-			}
-
-			r, err := pre.Call(sqjs.NullValue(), jsArgs...)
-			if err != nil {
-				return err
-			}
-
-			if !r.IsObject() {
-				return nil
-			}
-			exported, err := r.Export()
-			if err != nil {
-				return err
-			}
-
-			result := exported.(map[string]interface{})
-			var raise bool
-			if status, exists := result["status"]; exists && status.(string) == "raise" {
-				raise = true
-			}
-			if !raise {
-				return nil
-			}
-
-			blocking := cfg.BlockingMode()
-			metadata := result["record"].(map[string]interface{})
-			abortErr := abortError{}
-			st := sqerrors.StackTrace(errors.WithStack(abortErr))
-			ctx.AddAttackEvent(rule.NewAttackEvent(blocking, noScrub(metadata), st))
-			if !blocking {
-				return nil
-			}
-
-			defer ctx.CancelHandlerContext()
-			ctx.WriteDefaultBlockingResponse()
-			epilogFunc = func(results []reflect.Value) {
-				errorIndex := strategy.Protection.BlockStrategy.RetIndex
-				results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
-			}
-			prologErr = sqhook.AbortError
 			return nil
 		})
 		if err != nil {
-			// TODO: if panic: log once
-			//   idea: create sqassert package and switch between panic in dev
-			//         and log once in prod
+			// TODO: log this error
 		}
 		return
 	}, nil
+}
+
+type vmPool sync.Pool
+
+type runtime struct {
+	vm        *goja.Runtime
+	pre, post *jsCallbackFunc
+}
+
+type jsCallbackFunc struct {
+	callback       goja.Callable
+	funcCallParams []bindingaccessor.BindingAccessorFunc
+}
+
+func newVMPool(cfg ReflectedCallbackConfig) *vmPool {
+	preFuncDecl, preFuncCallParams := cfg.Pre()
+	postFuncDecl, postFuncCallParams := cfg.Post()
+	sqassert.True(preFuncDecl != nil || postFuncDecl != nil)
+
+	return (*vmPool)(&sync.Pool{
+		New: func() interface{} {
+			var pre, post goja.Callable
+
+			vm := goja.New()
+			vm.SetFieldNameMapper(goja.TagFieldNameMapper("goja", false))
+
+			if preFuncDecl != nil {
+				_, err := vm.RunProgram(preFuncDecl)
+				sqassert.NoError(err)
+				if err := vm.ExportTo(vm.Get("pre"), &pre); err != nil {
+					return sqerrors.Wrap(err, "retrieving `pre` function")
+				}
+			}
+
+			if postFuncDecl != nil {
+				v, err := vm.RunProgram(postFuncDecl)
+				sqassert.NoError(err)
+				//if err := vm.ExportTo(r.vm.Get("pre"), &pre); err != nil {
+				if err := vm.ExportTo(v, &post); err != nil {
+					return sqerrors.Wrap(err, "retrieving `post` function")
+				}
+			}
+
+			return &runtime{
+				vm: vm,
+				pre: &jsCallbackFunc{
+					callback:       pre,
+					funcCallParams: preFuncCallParams,
+				},
+				post: &jsCallbackFunc{
+					callback:       post,
+					funcCallParams: postFuncCallParams,
+				},
+			}
+		},
+	})
+}
+
+func (vm *vmPool) unwrap() *sync.Pool {
+	return (*sync.Pool)(vm)
+}
+
+func (vm *vmPool) get() *runtime {
+	return vm.unwrap().Get().(*runtime)
+}
+
+func (vm *vmPool) put(r *runtime) {
+	vm.unwrap().Put(r)
+}
+
+func (r *runtime) hasPre() bool {
+	return r.pre != nil
+}
+
+func (r *runtime) hasPost() bool {
+	return r.post != nil
+}
+
+type jsCallbackResult struct {
+	Status string                 `goja:"status"`
+	Record map[string]interface{} `goja:"record"`
+}
+
+func (r *runtime) callPre(baCtx bindingaccessor.Context) (*jsCallbackResult, error) {
+	sqassert.True(r.hasPre())
+	result := &jsCallbackResult{}
+
+	if err := call(r.vm, r.pre, baCtx, result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func call(vm *goja.Runtime, descr *jsCallbackFunc, baCtx bindingaccessor.Context, result interface{}) error {
+	jsParams := make([]goja.Value, len(descr.funcCallParams))
+	for i, ba := range descr.funcCallParams {
+		v, err := ba(baCtx)
+		if err != nil {
+			return err
+		}
+
+		var jsVal goja.Value
+		if v == nil {
+			jsVal = vm.NewObject()
+		} else {
+			jsVal = vm.ToValue(v)
+		}
+
+		jsParams[i] = jsVal
+	}
+
+	v, err := descr.callback(goja.Undefined(), jsParams...)
+	if err != nil {
+		return err
+	}
+
+	return vm.ExportTo(v, result)
+}
+
+func getProtectionContext(protection *api.ReflectedCallbackProtectionConfig, params []reflect.Value) *httpprotection.RequestContext {
+	// Get the HTTP protection context out of the Go context taken from the
+	// function call arguments according to the strategy definition.
+	goCtx := params[protection.Context.ArgIndex].Elem().Interface().(context.Context)
+	return httpprotection.FromContext(goCtx)
 }
 
 type noScrub map[string]interface{}

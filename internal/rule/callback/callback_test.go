@@ -27,6 +27,7 @@ type ValidTestCase struct {
 	Rule                       *RuleContextMockup
 	TestCallback               func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback)
 	ExpectAbortedCallbackChain bool
+	Config                     callback.NativeCallbackConfig
 }
 
 type callbackConfig struct {
@@ -50,7 +51,7 @@ func RunCallbackTest(t *testing.T, config TestConfig) {
 		data := data
 		t.Run("with incorrect data", func(t *testing.T) {
 			cbCfg := callbackConfig{data}
-			prolog, err := config.CallbacksCtor(&RuleContextMockup{config: cbCfg})
+			prolog, err := config.CallbacksCtor(&RuleContextMockup{}, cbCfg)
 			require.Error(t, err)
 			require.Nil(t, prolog)
 		})
@@ -60,7 +61,7 @@ func RunCallbackTest(t *testing.T, config TestConfig) {
 		tc := tc
 		t.Run("with correct data", func(t *testing.T) {
 			// Instantiate the callback with the given correct rule data
-			prolog, err := config.CallbacksCtor(tc.Rule)
+			prolog, err := config.CallbacksCtor(tc.Rule, tc.Config)
 			require.NoError(t, err)
 			checkCallbacksValues(t, config, prolog)
 			tc.TestCallback(t, tc.Rule, prolog)
@@ -75,7 +76,6 @@ func checkCallbacksValues(t *testing.T, config TestConfig, prolog sqhook.PrologC
 }
 
 type RuleContextMockup struct {
-	config interface{}
 	mock.Mock
 }
 
@@ -92,10 +92,6 @@ func (mockup *RuleContextMockup) Error(err error) {
 
 func (r *RuleContextMockup) PushMetricsValue(key interface{}, value int64) error {
 	return r.Called(key, value).Error(0)
-}
-
-func (r *RuleContextMockup) Config() callback.Config {
-	return callbackConfig{data: r.config}
 }
 
 func (r *RuleContextMockup) NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent {

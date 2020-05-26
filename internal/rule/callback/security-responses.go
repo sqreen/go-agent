@@ -26,7 +26,7 @@ const (
 	redirectUserEventName = "app.sqreen.action.redirect_user"
 )
 
-func NewIPSecurityResponseCallback(RuleFace) (sqhook.PrologCallback, error) {
+func NewIPSecurityResponseCallback(RuleFace, NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newIPSecurityResponsePrologCallback(), nil
 }
 
@@ -70,7 +70,7 @@ func writeIPSecurityResponse(ctx *httpprotection.RequestContext, action actor.Ac
 	}
 }
 
-func NewUserSecurityResponseCallback(RuleFace) (sqhook.PrologCallback, error) {
+func NewUserSecurityResponseCallback(RuleFace, NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newUserSecurityResponsePrologCallback(), nil
 }
 

@@ -7,8 +7,6 @@
 package rule
 
 import (
-	"reflect"
-
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
