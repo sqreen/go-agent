@@ -17,7 +17,6 @@ type InstrumentationFace interface {
 
 type HookFace interface {
 	Attach(prolog sqhook.PrologCallback) error
-	PrologFuncType() reflect.Type
 }
 
 type defaultInstrumentationImpl struct{}
