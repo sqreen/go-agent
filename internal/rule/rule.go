@@ -188,10 +188,14 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 		}
 
 		switch hookpoint.Strategy {
-		case "":
-			fallthrough
-		case "native":
-			prolog, err := callback.NewNativeCallback(hookpoint.Callback, callbackContext)
+		case "", "native":
+			cfg, err := newNativeCallbackConfig(&r)
+			if err != nil {
+				logger.Error(sqerrors.Wrap(err, "callback configuration"))
+				continue
+			}
+
+			prolog, err := callback.NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
@@ -201,7 +205,13 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			hookDescriptors.Set(hook, prolog)
 
 		case "reflected":
-			prolog, err := callback.NewReflectedCallback(hookpoint.Callback, hook.PrologFuncType(), callbackContext)
+			cfg, err := newReflectedCallbackConfig(&r)
+			if err != nil {
+				logger.Error(sqerrors.Wrap(err, "callback configuration"))
+				continue
+			}
+
+			prolog, err := callback.NewReflectedCallback(hookpoint.Callback, callbackContext, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrap(err, fmt.Sprintf("security rules: rule `%s`: callback constructor", r.Name)))
 				continue

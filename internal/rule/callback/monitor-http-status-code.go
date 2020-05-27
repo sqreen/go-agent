@@ -12,7 +12,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-func NewMonitorHTTPStatusCodeCallback(rule RuleFace) (sqhook.PrologCallback, error) {
+func NewMonitorHTTPStatusCodeCallback(rule RuleFace, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newMonitorHTTPStatusCodePrologCallback(rule), nil
 }
 

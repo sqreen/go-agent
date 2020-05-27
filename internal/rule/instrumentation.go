@@ -7,8 +7,6 @@
 package rule
 
 import (
-	"reflect"
-
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
@@ -19,7 +17,6 @@ type InstrumentationFace interface {
 
 type HookFace interface {
 	Attach(prolog sqhook.PrologCallback) error
-	PrologFuncType() reflect.Type
 }
 
 type defaultInstrumentationImpl struct{}

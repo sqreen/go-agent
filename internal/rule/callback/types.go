@@ -5,10 +5,10 @@
 package callback
 
 import (
-	"reflect"
-
+	"github.com/dop251/goja"
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/backend/api"
+	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
@@ -22,23 +22,27 @@ type RuleFace interface {
 	//   pushing them. But the current metrics store interface doesn't allow
 	//   to pass a time (to pass the time of the observation).
 	PushMetricsValue(key interface{}, value int64) error
-	Config() Config
 	// TODO: variadic options api
 	NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent
 }
 
 // Config is the interface of the rule configuration.
-type Config interface {
+type NativeCallbackConfig interface {
 	BlockingMode() bool
 	Data() interface{}
-	// TODO: make clean config interfaces according to the callback type
+}
+
+type ReflectedCallbackConfig interface {
+	NativeCallbackConfig
 	Strategy() *api.ReflectedCallbackConfig
+	Pre() (funcDecl *goja.Program, funcCallParams []bindingaccessor.BindingAccessorFunc)
+	Post() (funcDecl *goja.Program, funcCallParams []bindingaccessor.BindingAccessorFunc)
 }
 
 // NativeCallbackConstructorFunc is a function returning a native callback
 // function or a CallbackObject.
-type NativeCallbackConstructorFunc func(r RuleFace) (prolog sqhook.PrologCallback, err error)
+type NativeCallbackConstructorFunc func(r RuleFace, cfg NativeCallbackConfig) (prolog sqhook.PrologCallback, err error)
 
 // ReflectedCallbackConstructorFunc is a function returning a reflected callback
 // function for the provided type.
-type ReflectedCallbackConstructorFunc func(r RuleFace, prologFuncType reflect.Type) (prolog sqhook.ReflectedPrologCallback, err error)
+type ReflectedCallbackConstructorFunc func(r RuleFace, cfg ReflectedCallbackConfig) (prolog sqhook.ReflectedPrologCallback, err error)

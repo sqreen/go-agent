@@ -243,10 +243,6 @@ func (h *Hook) String() string {
 	return fmt.Sprintf("%s (%s)", h.symbol, h.prologFuncType)
 }
 
-func (h *Hook) PrologFuncType() reflect.Type {
-	return h.prologFuncType
-}
-
 // Attach atomically attaches a prolog function to the hook. The hook can be
 // disabled with a `nil` prolog value.
 func (h *Hook) Attach(prolog PrologCallback) error {
