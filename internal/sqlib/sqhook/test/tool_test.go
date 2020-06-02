@@ -27,6 +27,10 @@ func TestInstrumentation(t *testing.T) {
 	t.Run("hello-example", func(t *testing.T) {
 		testInstrumentation(t, toolPath, "./testdata/hello-example")
 	})
+
+	t.Run("hello-gls", func(t *testing.T) {
+		testInstrumentation(t, toolPath, "./testdata/hello-gls")
+	})
 }
 
 func buildInstrumentationTool(t *testing.T) (path string) {
@@ -51,11 +55,19 @@ func testInstrumentation(t *testing.T, toolPath string, testApp string) {
 	outputBuf, err := cmd.Output()
 	require.NoError(t, err)
 
-	// Check that we got the expected execution outputBuf in stdout.
-	expectedOutputBuf, err := ioutil.ReadFile(filepath.Join(testApp, "output.txt"))
-	expectedOutput := strings.ReplaceAll(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
 	output := string(outputBuf)
 	fmt.Print(output)
+
+	// Check the expected output against the output.txt file if any
+	outputFile := filepath.Join(testApp, "output.txt")
+	if !fileExists(outputFile) {
+		return
+	}
+
+	// Check that we got the expected execution outputBuf in stdout.
+	expectedOutputBuf, err := ioutil.ReadFile(outputFile)
+	require.NoError(t, err)
+	expectedOutput := strings.ReplaceAll(string(expectedOutputBuf), "\r\n", "\n") // windows seems to change te file \n into \r\n
 	require.NoError(t, err)
 	require.Equal(t, expectedOutput, output)
 }
@@ -76,4 +88,12 @@ func gobinpath(tool string) string {
 		return tool
 	}
 	return filepath.Join(goroot, "bin", tool)
+}
+
+func fileExists(f string) bool {
+	info, err := os.Stat(f)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
 }

@@ -12,10 +12,15 @@ import (
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/dstutil"
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/version"
 )
 
-type instrumentationVisitor struct {
+type instrumentationVisitorFace interface {
+	instrument(root *dst.Package) (instrumented []*dst.File)
+}
+
+type defaultPackageInstrumentationVisitor struct {
 	// Instrumentation statistics of the currently instrumented package.
 	stats instrumentationStats
 	// Package path being instrumented. Used to generate unique hook names
@@ -27,7 +32,9 @@ type instrumentationVisitor struct {
 	// List of hookpoints in the current file being instrumented.
 	instrumented []*hookpoint
 	// Map of instrumented files along with there hookpoints
-	instrumentedFiles map[*dst.File][]*hookpoint
+	instrumentedHooks map[*dst.File][]*hookpoint
+	// Slice of instrumented files
+	instrumentedFiles []*dst.File
 	// Hook descriptor type declaration node. It will be added to the file
 	// metadata.
 	hookDescriptorTypeIdent string
@@ -52,19 +59,21 @@ func (s *instrumentationStats) addInstrumented(funcDecl *dst.FuncDecl) {
 	s.instrumented = append(s.instrumented, funcDecl.Name.Name)
 }
 
-func newInstrumentationVisitor(pkgPath string) *instrumentationVisitor {
+func newDefaultPackageInstrumentationVisitor(pkgPath string, instrumentedFiles map[*dst.File][]*hookpoint) *defaultPackageInstrumentationVisitor {
+	sqassert.NotNil(instrumentedFiles)
+
 	hookDescriptorTypeDecl, hookDescriptorTypeSpec, newDescriptorValueInitializer := newHookDescriptorType()
 	hookDescriptorTypeIdent := hookDescriptorTypeSpec.Name.Name
-	return &instrumentationVisitor{
+	return &defaultPackageInstrumentationVisitor{
 		pkgPath:                           pkgPath,
-		instrumentedFiles:                 make(map[*dst.File][]*hookpoint),
+		instrumentedHooks:                 instrumentedFiles,
 		hookDescriptorTypeIdent:           hookDescriptorTypeIdent,
 		hookDescriptorTypeDecl:            hookDescriptorTypeDecl,
 		newHookDescriptorValueInitializer: newDescriptorValueInitializer,
 	}
 }
 
-func (v *instrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
+func (v *defaultPackageInstrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
 	if shouldIgnoreFuncDecl(funcDecl) {
 		v.stats.addIgnored(funcDecl)
 		return
@@ -76,12 +85,12 @@ func (v *instrumentationVisitor) instrumentFuncDeclPre(funcDecl *dst.FuncDecl) {
 	funcDecl.Body.List = append([]dst.Stmt{hook.instrumentationStmt}, funcDecl.Body.List...)
 }
 
-func (v *instrumentationVisitor) instrument(root *dst.Package) (instrumented map[*dst.File][]*hookpoint) {
+func (v *defaultPackageInstrumentationVisitor) instrument(root *dst.Package) (instrumented []*dst.File) {
 	dstutil.Apply(root, v.instrumentPre, v.instrumentPost)
 	return v.instrumentedFiles
 }
 
-func (v *instrumentationVisitor) instrumentPre(cursor *dstutil.Cursor) bool {
+func (v *defaultPackageInstrumentationVisitor) instrumentPre(cursor *dstutil.Cursor) bool {
 	switch node := cursor.Node().(type) {
 	case *dst.FuncDecl:
 		v.instrumentFuncDeclPre(node)
@@ -94,7 +103,7 @@ func (v *instrumentationVisitor) instrumentPre(cursor *dstutil.Cursor) bool {
 	return true
 }
 
-func (v *instrumentationVisitor) instrumentPost(cursor *dstutil.Cursor) bool {
+func (v *defaultPackageInstrumentationVisitor) instrumentPost(cursor *dstutil.Cursor) bool {
 	switch node := cursor.Node().(type) {
 	case *dst.File:
 		v.instrumentFilePost(node)
@@ -102,19 +111,23 @@ func (v *instrumentationVisitor) instrumentPost(cursor *dstutil.Cursor) bool {
 	return true
 }
 
-func (v *instrumentationVisitor) instrumentFilePost(file *dst.File) {
+func (v *defaultPackageInstrumentationVisitor) instrumentFilePost(file *dst.File) {
 	if len(v.instrumented) == 0 {
 		// Nothing got instrumented
 		return
 	}
 	// Add file-level instrumentation metadata
 	v.addFileMetadata(file, v.instrumented)
-	// Save the list of hooks
-	v.instrumentedFiles[file] = v.instrumented
+
+	// Add the list of hooks of this file node
+	v.instrumentedHooks[file] = v.instrumented
 	v.instrumented = nil
+
+	// Add the file node in the list of instrumented files
+	v.instrumentedFiles = append(v.instrumentedFiles, file)
 }
 
-func (v *instrumentationVisitor) addFileMetadata(file *dst.File, instrumented []*hookpoint) {
+func (v *defaultPackageInstrumentationVisitor) addFileMetadata(file *dst.File, instrumented []*hookpoint) {
 	addSqreenUnsafePackageImport(file)
 	if !v.fileMetadataOnce {
 		v.fileMetadataOnce = true
@@ -126,29 +139,29 @@ func (v *instrumentationVisitor) addFileMetadata(file *dst.File, instrumented []
 	}
 }
 
-func (v *instrumentationVisitor) addHookDescriptorFuncDecl(file *dst.File, h *hookpoint) {
+func (v *defaultPackageInstrumentationVisitor) addHookDescriptorFuncDecl(file *dst.File, h *hookpoint) {
 	file.Decls = append(file.Decls, h.descriptorFuncDecl)
 }
 
-func (v *instrumentationVisitor) addHookPrologLoadFuncDecl(file *dst.File, h *hookpoint) {
+func (v *defaultPackageInstrumentationVisitor) addHookPrologLoadFuncDecl(file *dst.File, h *hookpoint) {
 	file.Decls = append(file.Decls, h.prologLoadFuncDecl)
 }
 
-func (v *instrumentationVisitor) addHookMetadata(file *dst.File, h *hookpoint) {
+func (v *defaultPackageInstrumentationVisitor) addHookMetadata(file *dst.File, h *hookpoint) {
 	v.addHookPrologVarDecl(file, h)
 	v.addHookPrologLoadFuncDecl(file, h)
 	v.addHookDescriptorFuncDecl(file, h)
 }
 
-func (v *instrumentationVisitor) addHookPrologVarDecl(file *dst.File, h *hookpoint) {
+func (v *defaultPackageInstrumentationVisitor) addHookPrologVarDecl(file *dst.File, h *hookpoint) {
 	file.Decls = append(file.Decls, h.prologVarDecl)
 }
 
-func (v *instrumentationVisitor) addAtomicLoadFuncDecl(file *dst.File) {
+func (v *defaultPackageInstrumentationVisitor) addAtomicLoadFuncDecl(file *dst.File) {
 	file.Decls = append(file.Decls, newLinkTimeSqreenAtomicLoadPointerFuncDecl())
 }
 
-func (v *instrumentationVisitor) addHookDescriptorType(file *dst.File) {
+func (v *defaultPackageInstrumentationVisitor) addHookDescriptorType(file *dst.File) {
 	file.Decls = append(file.Decls, v.hookDescriptorTypeDecl)
 }
 

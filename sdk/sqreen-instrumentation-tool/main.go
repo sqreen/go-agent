@@ -32,7 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Don't passing instrumentation tool arguments
+	// Hide instrumentation tool arguments
 	if cmdArgPos != -1 {
 		args = args[cmdArgPos:]
 	}
@@ -111,11 +111,6 @@ Options:
 
 To see the instrumented code, use the go option -work in order to keep the
 build directory. It will contain every instrumented Go source file.
-
-Limitations:
-- Debugging an instrumented program is possible by using the Go option -work so
-  that debuggers can find the instrumented Go source code into the build
-  directory. Better debugging support will be added in the future.
 `
 	_, _ = fmt.Fprintf(os.Stderr, usageFormat, os.Args[0], version.Version())
 	os.Exit(2)
