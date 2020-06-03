@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"go/token"
 	"log"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -418,56 +417,6 @@ func newHookDescriptorType() (*dst.GenDecl, *dst.TypeSpec, hookDescriptorValueIn
 	}
 
 	return typ, spec, valInitializer
-}
-
-func isFileNameIgnored(file string) bool {
-	filename := filepath.Base(file)
-	// Don't instrument cgo files
-	if strings.Contains(filename, "cgo") {
-		return true
-	}
-	// Don't instrument the go module table file.
-	if filename == "_gomod_.go" {
-		return true
-	}
-	return false
-}
-
-var ignoredPkgPrefixes = []string{
-	"runtime",
-	"sync",
-	"reflect",
-	"internal",
-	"unsafe",
-	"syscall",
-	"time",
-	"math",
-}
-
-var limitedInstrumentationPkgPrefixes = []string{
-	"github.com/sqreen/go-agent/internal/protection",
-	"database/sql",
-}
-
-func isPackageNameIgnored(pkg string, fullInstrumentation bool) bool {
-	for _, prefix := range ignoredPkgPrefixes {
-		if strings.HasPrefix(pkg, prefix) {
-			return true
-		}
-	}
-
-	if fullInstrumentation {
-		return false
-	}
-
-	// Non-full instrumentation mode, limited to a set of given package
-	for _, prefix := range limitedInstrumentationPkgPrefixes {
-		if strings.HasPrefix(pkg, prefix) {
-			return false
-		}
-	}
-
-	return true
 }
 
 func shouldIgnoreFuncDecl(funcDecl *dst.FuncDecl) bool {

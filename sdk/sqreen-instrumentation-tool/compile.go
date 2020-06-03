@@ -5,19 +5,11 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"go/parser"
-	"go/token"
 	"log"
-	"os"
-	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/dave/dst"
-	"github.com/dave/dst/decorator"
 )
 
 type compileFlagSet struct {
@@ -52,232 +44,79 @@ func makeCompileCommandExecutionFunc(flags *compileFlagSet, args []string) comma
 
 		pkgPath := flags.Package
 		packageBuildDir := filepath.Dir(flags.Output)
-		projectBuildDir := path.Join(packageBuildDir, "..")
-		hookListFilepath := getHookListFilepath(projectBuildDir)
 
-		// Check if the instrumentation should be skipped for this package name.
-		if isPackageNameIgnored(pkgPath, globalFlags.Full) {
+		var i Instrumenter
+		switch pkgPath {
+		case "runtime":
+			i = newRuntimePackageInstrumentation(packageBuildDir)
+		case "main":
+			i = newMainPackageInstrumentation(pkgPath, globalFlags.Full, packageBuildDir)
+		default:
+			i = newDefaultPackageInstrumentation(pkgPath, globalFlags.Full, packageBuildDir)
+		}
+
+		if i.IsIgnored() {
 			log.Printf("skipping instrumentation of package `%s`\n", pkgPath)
-			if pkgPath == "main" {
-				// Still add the hook table if any
-				return addHookTable(args, packageBuildDir, hookListFilepath)
-			} else {
-				return nil, nil
-			}
+			return nil, nil
 		}
-
-		log.Println("instrumenting package:", pkgPath)
-		log.Println("package build directory:", packageBuildDir)
-
-		// Make the list of Go files to instrument out of the argument list and
-		// replace their argument list entry by their instrumented copy.
-		var pkgInstrumentation packageInstrumentationHelper
-		argEntries := make(map[string]int)
-		for i, src := range args {
-			// Only consider args ending with the Go file extension and assume they
-			// are Go files.
-			if !strings.HasSuffix(src, ".go") {
-				continue
-			}
-			if err := pkgInstrumentation.addFile(src); err != nil {
-				return nil, err
-			}
-			// Save the position of the source file in the argument list
-			// to later change it if it gets instrumented.
-			argEntries[src] = i
-		}
-
-		instrumented, err := pkgInstrumentation.instrument(pkgPath)
-		if err != nil {
-			return nil, err
-		}
-		if !instrumented {
-			return args, nil
-		}
-
-		written, err := pkgInstrumentation.writeInstrumentedFiles(packageBuildDir)
-		if err != nil {
-			return nil, err
-		}
-
-		// Update the argument list by replacing source files that were
-		// instrumented.
-		for src, dest := range written {
-			argIndex := argEntries[src]
-			args[argIndex] = dest
-		}
-
-		// Add the hook IDs to the hook list file.
-		hookListFile, err := openHookListFile(hookListFilepath)
-		if err != nil {
-			return nil, err
-		}
-		defer hookListFile.Close()
-		count, err := pkgInstrumentation.writeHookList(hookListFile)
-		if err != nil {
-			return nil, err
-		}
-		log.Printf("added %d hooks to the hook list\n", count)
-
-		if pkgPath == "main" {
-			return addHookTable(args, packageBuildDir, hookListFilepath)
-		}
-
-		return args, nil
+		return instrument(i, args, pkgPath, packageBuildDir)
 	}
 }
 
-func addHookTable(args []string, packageBuildDir, hookListFilepath string) ([]string, error) {
-	// Create the hook table and compile it.
-	// Get the full list of hooks
-	hooks, err := readHookListFile(hookListFilepath)
+// Update the argument list by replacing source files that were instrumented.
+func updateArgs(args []string, argIndices map[string]int, written map[string]string) {
+	for src, dest := range written {
+		argIndex := argIndices[src]
+		args[argIndex] = dest
+	}
+}
+
+// Walk the list of arguments and add the go source files and the arg slice
+// index to returned map.
+func parseCompileCommandArgs(args []string) map[string]int {
+	goFiles := make(map[string]int)
+	for i, src := range args {
+		// Only consider args ending with the Go file extension and assume they
+		// are Go files.
+		if !strings.HasSuffix(src, ".go") {
+			continue
+		}
+		// Save the position of the source file in the argument list
+		// to later change it if it gets instrumented.
+		goFiles[src] = i
+	}
+	return goFiles
+}
+
+func instrument(i Instrumenter, args []string, pkgPath, packageBuildDir string) ([]string, error) {
+	log.Println("instrumenting package:", pkgPath)
+	log.Println("package build directory:", packageBuildDir)
+
+	// Make the list of Go files to instrument out of the argument list and
+	// replace their argument list entry by their instrumented copy.
+	argIndices := parseCompileCommandArgs(args)
+	for src := range argIndices {
+		if err := i.AddFile(src); err != nil {
+			return nil, err
+		}
+	}
+
+	if instrumented, err := i.Instrument(); err != nil {
+		return nil, err
+	} else if len(instrumented) > 0 {
+		written, err := i.WriteInstrumentedFiles(packageBuildDir, instrumented)
+		if err != nil {
+			return nil, err
+		}
+		// Replace original files in the args by the new ones
+		updateArgs(args, argIndices, written)
+	}
+
+	extraFiles, err := i.WriteExtraFiles()
 	if err != nil {
 		return nil, err
 	}
 
-	if len(hooks) == 0 {
-		log.Printf("skipping hook table generation: the list of hooks is empty")
-		return args, nil
-	}
-
-	// Create the hook table file into the package build directory
-	hookTableFile, err := createHookTableFile(packageBuildDir)
-	if err != nil {
-		return nil, err
-	}
-	defer hookTableFile.Close()
-	log.Printf("creating the hook table for %d hooks into `%s`", len(hooks), hookTableFile.Name())
-	if err := writeHookTable(hookTableFile, hooks); err != nil {
-		return nil, err
-	}
-
-	// Add it into the argument list to compile it
-	args = append(args, hookTableFile.Name())
+	args = append(args, extraFiles...)
 	return args, nil
-}
-
-func createHookTableFile(dir string) (*os.File, error) {
-	filename := filepath.Join(dir, "sqreen-hooktable.go")
-	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
-}
-
-// Create or append the hook list file in write-only.
-func openHookListFile(hookListFilepath string) (*os.File, error) {
-	return os.OpenFile(hookListFilepath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-}
-
-func getHookListFilepath(dir string) string {
-	return filepath.Join(dir, "sqreen-hooks.txt")
-}
-
-// Read the given hook list file by reopening it and reading its full content,
-// returned as a slice of hook IDs.
-func readHookListFile(hookListFilepath string) (hooks []string, err error) {
-	f, err := os.OpenFile(hookListFilepath, os.O_RDONLY, 0666)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	// Read each hook id line by line
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		id := scanner.Text()
-		hooks = append(hooks, id)
-	}
-	return
-}
-
-type packageInstrumentationHelper struct {
-	parsedFiles       map[string]*dst.File
-	parsedFileSources map[*dst.File]string
-	fset              *token.FileSet
-	instrumentedFiles map[*dst.File][]*hookpoint
-}
-
-// addFile parses the given Go source file `src` and adds it to the set of
-// files to instrument if it is not ignored by a directive.
-func (h *packageInstrumentationHelper) addFile(src string) error {
-	// Check if the instrumentation should be skipped for this filename
-	if isFileNameIgnored(src) {
-		log.Println("skipping instrumentation of file", src)
-		return nil
-	}
-
-	log.Printf("parsing file `%s`", src)
-	if h.fset != nil {
-		// The token fileset is required to later create the package node.
-		h.fset = token.NewFileSet()
-	}
-	file, err := decorator.ParseFile(h.fset, src, nil, parser.ParseComments)
-	if err != nil {
-		return err
-	}
-
-	// Check if there is a file-level ignore directive
-	if hasSqreenIgnoreDirective(file) {
-		log.Printf("file `%s` skipped due to ignore directive", src)
-		return nil
-	}
-	if h.parsedFiles == nil {
-		h.parsedFiles = make(map[string]*dst.File)
-		h.parsedFileSources = make(map[*dst.File]string)
-	}
-	h.parsedFiles[src] = file
-	h.parsedFileSources[file] = src
-	return nil
-}
-
-func (h *packageInstrumentationHelper) instrument(pkgPath string) (instrumented bool, err error) {
-	if len(h.parsedFiles) == 0 {
-		log.Println("nothing to instrument")
-		return false, nil
-	}
-
-	root, err := dst.NewPackage(h.fset, h.parsedFiles, nil, nil)
-	if err != nil {
-		return false, err
-	}
-
-	v := newInstrumentationVisitor(pkgPath)
-	h.instrumentedFiles = v.instrument(root)
-	return len(h.instrumentedFiles) > 0, nil
-}
-
-func (h *packageInstrumentationHelper) writeInstrumentedFiles(buildDirPath string) (srcdst map[string]string, err error) {
-	srcdst = make(map[string]string, len(h.instrumentedFiles))
-	for node := range h.instrumentedFiles {
-		src := h.parsedFileSources[node]
-		filename := filepath.Base(src)
-		dest := filepath.Join(buildDirPath, filename)
-		output, err := os.Create(dest)
-		if err != nil {
-			return nil, err
-		}
-		defer output.Close()
-		// Add a go line directive in order to map it to its original source file.
-		// Note that otherwise it uses the build directory but it is trimmed by the
-		// compiler - so you end up with filenames without any leading path (eg.
-		// myfile.go) leading to broken debuggers or stack traces.
-		output.WriteString(fmt.Sprintf("//line %s:1\n", src))
-		if err := writeFile(node, output); err != nil {
-			return nil, err
-		}
-		srcdst[src] = dest
-	}
-	return srcdst, nil
-}
-
-func (h *packageInstrumentationHelper) writeHookList(hookList *os.File) (count int, err error) {
-	for _, hooks := range h.instrumentedFiles {
-		for _, hook := range hooks {
-			if _, err = hookList.WriteString(fmt.Sprintf("%s\n", hook.descriptorFuncDecl.Name.Name)); err != nil {
-				return count, err
-			}
-			count += 1
-		}
-	}
-	return count, nil
 }
