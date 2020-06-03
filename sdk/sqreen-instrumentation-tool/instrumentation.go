@@ -346,11 +346,11 @@ import _ "unsafe" // for go:linkname
 
 //go:nosplit
 //go:linkname _sqreen_gls_get _sqreen_gls_get
-func _sqreen_gls_get() uintptr { return getg().m.curg.sqgls }
+func _sqreen_gls_get() interface{} { return getg().m.curg.sqgls }
 
 //go:nosplit
 //go:linkname _sqreen_gls_set _sqreen_gls_set
-func _sqreen_gls_set(v uintptr)  { getg().m.curg.sqgls = v }
+func _sqreen_gls_set(v interface{})  { getg().m.curg.sqgls = v }
 `), 0644); err != nil {
 		return nil, err
 	}
@@ -382,7 +382,7 @@ func (v *runtimeInstrumentationVisitor) instrument(root *dst.Package) (instrumen
 			}
 			st.Fields.List = append(st.Fields.List, &dst.Field{
 				Names: []*dst.Ident{dst.NewIdent("sqgls")},
-				Type:  dst.NewIdent("uintptr"),
+				Type:  dst.NewIdent("interface{}"),
 			})
 			instrumented = true
 			return true
