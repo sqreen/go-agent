@@ -7,7 +7,6 @@
 package callback
 
 import (
-	"context"
 	"reflect"
 	"sync"
 
@@ -216,10 +215,7 @@ func call(vm *goja.Runtime, descr *jsCallbackFunc, baCtx bindingaccessor.Context
 }
 
 func getProtectionContext(protection *api.ReflectedCallbackProtectionConfig, params []reflect.Value) *httpprotection.RequestContext {
-	// Get the HTTP protection context out of the Go context taken from the
-	// function call arguments according to the strategy definition.
-	goCtx := params[protection.Context.ArgIndex].Elem().Interface().(context.Context)
-	return httpprotection.FromContext(goCtx)
+	return httpprotection.FromGLS()
 }
 
 type noScrub map[string]interface{}
