@@ -46,3 +46,31 @@ func TestParseCommandID(t *testing.T) {
 		})
 	}
 }
+
+func TestUnvendorPackagePath(t *testing.T) {
+	for _, tc := range []struct {
+		PkgPath  string
+		Expected string
+	}{
+		{
+			PkgPath:  "github.com/sqreen/go-agent/internal/protection/http",
+			Expected: "github.com/sqreen/go-agent/internal/protection/http",
+		},
+
+		{
+			PkgPath:  "github.com/my-org/my-app/vendor/github.com/sqreen/go-agent/internal/protection/http",
+			Expected: "github.com/sqreen/go-agent/internal/protection/http",
+		},
+
+		{
+			PkgPath:  "my-app/vendor/github.com/sqreen/go-agent/internal/protection/http",
+			Expected: "github.com/sqreen/go-agent/internal/protection/http",
+		},
+	} {
+		tc := tc
+		t.Run("", func(t *testing.T) {
+			got := unvendorPackagePath(tc.PkgPath)
+			require.Equal(t, tc.Expected, got)
+		})
+	}
+}

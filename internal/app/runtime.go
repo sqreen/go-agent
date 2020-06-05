@@ -153,11 +153,15 @@ func executable(logger *plog.Logger) string {
 
 func VendorPrefix() string {
 	type t struct{}
-	pkg := reflect.TypeOf(t{}).PkgPath()
-	vendor := "vendor/"
-	i := strings.Index(pkg, vendor)
+	pkgPath := reflect.TypeOf(t{}).PkgPath()
+	return vendorPrefix(pkgPath)
+}
+
+func vendorPrefix(pkgPath string) (prefix string) {
+	vendor := "/vendor/"
+	i := strings.Index(pkgPath, vendor)
 	if i == -1 {
 		return ""
 	}
-	return pkg[:i+len(vendor)]
+	return pkgPath[:i+len(vendor)]
 }
