@@ -8,7 +8,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"os"
-	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -149,19 +148,4 @@ func executable(logger *plog.Logger) string {
 		return ""
 	}
 	return name
-}
-
-func VendorPrefix() string {
-	type t struct{}
-	pkgPath := reflect.TypeOf(t{}).PkgPath()
-	return vendorPrefix(pkgPath)
-}
-
-func vendorPrefix(pkgPath string) (prefix string) {
-	vendor := "/vendor/"
-	i := strings.Index(pkgPath, vendor)
-	if i == -1 {
-		return ""
-	}
-	return pkgPath[:i+len(vendor)]
 }

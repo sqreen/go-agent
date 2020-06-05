@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/sqreen/go-agent/internal/app"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
@@ -43,7 +42,6 @@ type Engine struct {
 	enabled               bool
 	metricsEngine         *metrics.Engine
 	publicKey             *ecdsa.PublicKey
-	vendorPrefix          string
 	instrumentationEngine InstrumentationFace
 	errorMetricsStore     *metrics.Store
 }
@@ -60,16 +58,10 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 		instrumentationEngine = defaultInstrumentationEngine
 	}
 
-	vendorPrefix := app.VendorPrefix()
-	if vendorPrefix != "" {
-		logger.Debugf("vendor folder detected at `%s`", vendorPrefix)
-	}
-
 	return &Engine{
 		logger:                logger,
 		metricsEngine:         metricsEngine,
 		publicKey:             publicKey,
-		vendorPrefix:          vendorPrefix,
 		instrumentationEngine: instrumentationEngine,
 		errorMetricsStore:     errorMetricsStore,
 	}
@@ -165,13 +157,6 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 		if err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
 			continue
-		}
-		if hook == nil && e.vendorPrefix != "" {
-			hook, err = e.instrumentationEngine.Find(e.vendorPrefix + symbol)
-			if err != nil {
-				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
-				continue
-			}
 		}
 		if hook == nil {
 			logger.Debugf("security rules: rule `%s`: could not find the hook of function `%s`", r.Name, symbol)

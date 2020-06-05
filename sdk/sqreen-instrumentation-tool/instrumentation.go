@@ -19,6 +19,7 @@ import (
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
 	"github.com/dave/dst/dstutil"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
 type Instrumenter interface {
@@ -132,6 +133,13 @@ func newDefaultPackageInstrumentation(pkgPath string, fullInstrumentation bool, 
 	projectBuildDir := path.Join(packageBuildDir, "..")
 	hookListFilepath := getHookListFilepath(projectBuildDir)
 
+	// Remove the package path vendor prefix so that everything, from this tool to
+	// the agent instrumentation package works properly with the package path names
+	// as if it wasn't vendored. By doing so, things like checking if the package
+	// should be ignored, or looking up a hook descriptor is simplified and can
+	// completely ignore the vendoring.
+	pkgPath = unvendorPackagePath(pkgPath)
+
 	return &defaultPackageInstrumentation{
 		pkgPath:             pkgPath,
 		fullInstrumentation: fullInstrumentation,
@@ -142,7 +150,7 @@ func newDefaultPackageInstrumentation(pkgPath string, fullInstrumentation bool, 
 
 func (h *defaultPackageInstrumentation) IsIgnored() bool {
 	// Check if the instrumentation should be skipped for this package name.
-	if h.isPackageNameIgnored() {
+	if h.isPackageIgnored() {
 		return true
 	}
 	return false
@@ -164,7 +172,7 @@ var limitedInstrumentationPkgPrefixes = []string{
 	"database/sql",
 }
 
-func (h *defaultPackageInstrumentation) isPackageNameIgnored() bool {
+func (h *defaultPackageInstrumentation) isPackageIgnored() bool {
 	for _, prefix := range ignoredPkgPrefixes {
 		if strings.HasPrefix(h.pkgPath, prefix) {
 			return true
@@ -183,6 +191,13 @@ func (h *defaultPackageInstrumentation) isPackageNameIgnored() bool {
 	}
 
 	return true
+}
+
+// Given the Go vendoring conventions, return the package prefix of the vendored
+// package. For example, given `my-app/vendor/github.com/sqreen/go-agent`,
+// the function should return `my-app/vendor/`
+func unvendorPackagePath(pkg string) (unvendored string) {
+	return sqgo.Unvendor(pkg)
 }
 
 func (h *defaultPackageInstrumentation) Instrument() (instrumented []*dst.File, err error) {

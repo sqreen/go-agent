@@ -57,6 +57,7 @@ import (
 	"unsafe"
 
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook/internal"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"golang.org/x/xerrors"
@@ -209,6 +210,9 @@ func (t symbolIndexType) add(fn, prologVar interface{}) (*Hook, error) {
 	if symbol == "" {
 		return nil, sqerrors.Errorf("could not read the symbol name of function `%#v`", fn)
 	}
+
+	// Unvendor it so that it is not prefixed by `<app>/vendor/`
+	symbol = sqgo.Unvendor(symbol)
 
 	// The hook may have been already added by a previous lookup
 	if hook, exists := t[symbol]; exists {
