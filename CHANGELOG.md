@@ -1,3 +1,10 @@
+# v0.10.1
+
+## Fix
+
+- (#116) Fix the instrumentation tool ignoring vendored packages, leading to
+  missing hook points in the agent.
+
 # v0.10.0
 
 ## New Features

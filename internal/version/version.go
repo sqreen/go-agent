@@ -4,7 +4,7 @@
 
 package version
 
-const version = "0.10.0"
+const version = "0.10.1"
 
 func Version() string {
 	return version
