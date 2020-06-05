@@ -449,7 +449,21 @@ var limitedInstrumentationPkgPrefixes = []string{
 	"database/sql",
 }
 
+// Given the Go vendoring conventions, return the package prefix of the vendored
+// package. For example, given `my-app/vendor/github.com/sqreen/go-agent`,
+// the function should return `my-app/vendor/`
+func unvendorPackagePath(pkg string) (unvendored string) {
+	vendorDir := "/vendor/"
+	i := strings.Index(pkg, vendorDir)
+	if i == -1 {
+		return pkg
+	}
+	return pkg[i+len(vendorDir):]
+}
+
 func isPackageNameIgnored(pkg string, fullInstrumentation bool) bool {
+	pkg = unvendorPackagePath(pkg)
+
 	for _, prefix := range ignoredPkgPrefixes {
 		if strings.HasPrefix(pkg, prefix) {
 			return true
