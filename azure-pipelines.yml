@@ -54,8 +54,8 @@ jobs:
       - script: |
           go env
           clang -v
-          go build -v github.com/jstemmer/go-junit-report
-          go test -v ./... 2>&1 | ./go-junit-report > report.xml
+          go build -v gotest.tools/gotestsum
+          ./gotestsum --junitfile report.xml ./...
         name: go_test
         displayName: go test
       - task: PublishTestResults@2
