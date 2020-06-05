@@ -59,11 +59,17 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 	if instrumentationEngine == nil {
 		instrumentationEngine = defaultInstrumentationEngine
 	}
+
+	vendorPrefix := app.VendorPrefix()
+	if vendorPrefix != "" {
+		logger.Debugf("vendor folder detected at `%s`", vendorPrefix)
+	}
+
 	return &Engine{
 		logger:                logger,
 		metricsEngine:         metricsEngine,
 		publicKey:             publicKey,
-		vendorPrefix:          app.VendorPrefix(),
+		vendorPrefix:          vendorPrefix,
 		instrumentationEngine: instrumentationEngine,
 		errorMetricsStore:     errorMetricsStore,
 	}
