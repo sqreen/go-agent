@@ -144,9 +144,18 @@ func compileCall(valueFn valueFunc, buf string) (valueFunc, string, error) {
 		return nil, buf, sqerrors.Errorf("missing closing index bracket `)` in `%s`", buf)
 	}
 
-	arg, err := compileExpr(buf[:close])
-	if err != nil {
-		return nil, buf, err
+	// Compile the list of arguments
+	var args []valueFunc
+	if argList := buf[:close]; len(argList) > 0 {
+		argv := strings.Split(argList, ",")
+		args = make([]valueFunc, len(argv))
+		for i, a := range argv {
+			arg, err := compileExpr(a)
+			if err != nil {
+				return nil, buf, err
+			}
+			args[i] = arg
+		}
 	}
 
 	buf = buf[close:]
@@ -164,11 +173,15 @@ func compileCall(valueFn valueFunc, buf string) (valueFunc, string, error) {
 		if err != nil {
 			return nil, err
 		}
-		a, err := arg(ctx, depth-1)
-		if err != nil {
-			return nil, err
+		argValues := make([]interface{}, len(args))
+		for i, arg := range args {
+			a, err := arg(ctx, depth-1)
+			if err != nil {
+				return nil, err
+			}
+			argValues[i] = a
 		}
-		return execCall(v, a)
+		return execCall(v, argValues...)
 	}, buf, nil
 }
 

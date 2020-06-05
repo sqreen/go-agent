@@ -85,9 +85,13 @@ func execFieldAccess(value interface{}, field string) (interface{}, error) {
 	}
 }
 
-func execCall(fn interface{}, arg interface{}) (interface{}, error) {
+func execCall(fn interface{}, args ...interface{}) (interface{}, error) {
 	// TODO: func type validation
-	results := reflect.ValueOf(fn).Call([]reflect.Value{reflect.ValueOf(arg)})
+	argValues := make([]reflect.Value, len(args))
+	for i, a := range args {
+		argValues[i] = reflect.ValueOf(a)
+	}
+	results := reflect.ValueOf(fn).Call(argValues)
 
 	if r1 := results[1]; !r1.IsNil() {
 		return nil, r1.Interface().(error)
