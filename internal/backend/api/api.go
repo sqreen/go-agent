@@ -262,8 +262,7 @@ type ReflectedCallbackHTTPProtectionContextConfig struct {
 }
 
 type ReflectedCallbackHTTPProtectionConfig struct {
-	Context       ReflectedCallbackHTTPProtectionContextConfig `json:"context"`
-	BlockStrategy ReflectedCallbackBlockStrategyConfig         `json:"block_strategy"`
+	BlockStrategy ReflectedCallbackBlockStrategyConfig `json:"block_strategy"`
 }
 
 type ReflectedCallbackProtectionConfig struct {

@@ -19,6 +19,7 @@ import (
 	"github.com/sqreen/go-agent/internal/event"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 )
 
 type RequestContext struct {
@@ -80,6 +81,14 @@ func FromContext(ctx context.Context) *RequestContext {
 	return c
 }
 
+func FromGLS() *RequestContext {
+	ctx := sqgls.Get()
+	if ctx == nil {
+		return nil
+	}
+	return ctx.(*RequestContext)
+}
+
 func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWriter, r types.RequestReader, cancelHandlerContextFunc context.CancelFunc) *RequestContext {
 	if r.ClientIP() == nil {
 		cfg := agent.Config()
@@ -97,6 +106,9 @@ func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWrite
 		RequestReader:            r,
 		cancelHandlerContextFunc: cancelHandlerContextFunc,
 	}
+	// Set the current goroutine local storage to this request storage to be able
+	// to retrieve it from lower-level functions.
+	sqgls.Set(ctx)
 	return ctx
 }
 
