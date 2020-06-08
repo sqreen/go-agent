@@ -167,10 +167,21 @@ var ignoredPkgPrefixes = []string{
 	"math",
 }
 
-var limitedInstrumentationPkgPrefixes = []string{
-	"github.com/sqreen/go-agent/internal/protection",
-	"database/sql",
-}
+// List of packages to instrument when not in full instrumentation mode.
+var (
+	// List of package path prefixes to instrument. A package is instrumented
+	// iif its package path begins with one of the following prefixes.
+	limitedInstrumentationPkgPathPrefixes = []string{
+		"github.com/sqreen/go-agent/internal/protection",
+		"database/sql",
+	}
+
+	// List of package paths to instrument. A package is instrumented iif it is
+	// equal to one of the following package paths.
+	limitedInstrumentationPkgPaths = []string{
+		"os",
+	}
+)
 
 func (h *defaultPackageInstrumentation) isPackageIgnored() bool {
 	for _, prefix := range ignoredPkgPrefixes {
@@ -183,8 +194,14 @@ func (h *defaultPackageInstrumentation) isPackageIgnored() bool {
 		return false
 	}
 
-	// Non-full instrumentation mode, limited to a set of given package
-	for _, prefix := range limitedInstrumentationPkgPrefixes {
+	// Non-full instrumentation mode is limited to a set of packages
+	for _, pkgPath := range limitedInstrumentationPkgPaths {
+		if h.pkgPath == pkgPath {
+			return false
+		}
+	}
+
+	for _, prefix := range limitedInstrumentationPkgPathPrefixes {
 		if strings.HasPrefix(h.pkgPath, prefix) {
 			return false
 		}

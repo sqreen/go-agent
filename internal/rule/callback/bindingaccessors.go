@@ -32,6 +32,8 @@ func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflec
 			c.Func = NewFunctionBindingAccessorContext(args, res)
 		case "request":
 			c.RequestBindingAccessorContext = NewRequestCallbackBindingAccessorContext(req)
+		case "lib":
+			c.Lib = NewLibraryBindingAccessorContext()
 		default:
 			return nil, sqerrors.Errorf("unknown binding accessor capability `%s`", cap)
 		}
@@ -85,7 +87,12 @@ func (*SQLBindingAccessorContextType) Dialect(v interface{}) (string, error) {
 	return "", sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath)
 }
 
+// BindingAccessorContextType is the context passed to binding accessor calls of
+// security rules. Its fields are instantiated according to the rule
+// capabilities and are nil by default. This mainly allows to avoid their
+// creation cost when not needed.
 type BindingAccessorContextType struct {
+	Lib  *LibraryBindingAccessorContextType
 	Func *FuncCallBindingAccessorContextType
 	SQL  *SQLBindingAccessorContextType
 	*RequestBindingAccessorContext
@@ -106,4 +113,35 @@ func NewRequestCallbackBindingAccessorContext(request types.RequestReader) *Requ
 	ctx := &RequestBindingAccessorContext{}
 	ctx.Request = httpprotection.NewRequestBindingAccessorContext(request)
 	return ctx
+}
+
+// Library of functions accessible to binding accessor expressions
+type (
+	LibraryBindingAccessorContextType struct {
+		Array ArrayLibraryBindingAccessorContextType
+	}
+
+	ArrayLibraryBindingAccessorContextType struct{}
+)
+
+func NewLibraryBindingAccessorContext() *LibraryBindingAccessorContextType {
+	return &LibraryBindingAccessorContextType{}
+}
+
+// Prepend inserts the value into the first position of the slice.
+func (ArrayLibraryBindingAccessorContextType) Prepend(slice, value interface{}) (interface{}, error) {
+	// Create a new slice of the same type, having l+1 element capacity
+	sv := reflect.ValueOf(slice)
+	l := sv.Len() + 1
+	newSlice := reflect.MakeSlice(sv.Type(), l, l)
+
+	// Insert the value first in the new slice
+	newSlice.Index(0).Set(reflect.ValueOf(value))
+
+	// Add the slice values next
+	for i := 1; i < l; i++ {
+		newSlice.Index(i).Set(sv.Index(i - 1))
+	}
+
+	return newSlice.Interface(), nil
 }
