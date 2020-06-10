@@ -17,11 +17,11 @@ func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 	lvalue := reflect.ValueOf(v)
 	switch lvalue.Kind() {
 	case reflect.Func:
-		// TODO: this is only for backward compatible with some binding accessor
-		//   expressions that were struct fields and became interface methods such
-		//   as `#.Request.Header['header']` that formerly was the http header map
-		//   and is now an interface method... To remove as soon as we deprecate
-		//   versions below v1.
+		// In order to be backward compatible with some binding accessor
+		// expressions that were struct fields and became interface methods such
+		// as `#.Request.Header['header']` that formerly was the http header map
+		// and is now an interface method... To remove as soon as we deprecate
+		// versions below v1.
 		return execCall(v, index)
 	case reflect.Map:
 		value := lvalue.MapIndex(reflect.ValueOf(index))

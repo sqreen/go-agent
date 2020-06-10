@@ -15,7 +15,6 @@ import (
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
-	"gopkg.in/go-playground/assert.v1"
 )
 
 type contextWithMethods struct{}
@@ -71,6 +70,12 @@ func TestBindingAccessor(t *testing.T) {
 			Expression:    `#['One']`,
 			Context:       map[string]string{"One": "Sqreen"},
 			ExpectedValue: "Sqreen",
+		},
+		{
+			Title:         "string value",
+			Expression:    `'test'`,
+			Context:       nil,
+			ExpectedValue: "test",
 		},
 		{
 			Title:      "function value",
@@ -511,6 +516,8 @@ func TestBindingAccessor(t *testing.T) {
 					xerrors.Is(err, actual)
 				}
 				return
+			} else {
+				require.NoError(t, err)
 			}
 
 			if flatTransResult, ok := tc.ExpectedValue.(FlattenedResult); ok {
@@ -630,15 +637,5 @@ func TestBindingAccessorUsage(t *testing.T) {
 type FlattenedResult []interface{}
 
 func requireEqualFlatResult(t *testing.T, expected FlattenedResult, value interface{}) {
-	got := value.([]interface{})
-	require.Equal(t, len(expected), len(got), got)
-loop:
-	for _, f := range expected {
-		for _, g := range got {
-			if assert.IsEqual(g, f) {
-				continue loop
-			}
-		}
-		require.Failf(t, "missing expected value", "expected `%v` having type `%T`", f, f)
-	}
+	require.ElementsMatch(t, expected, value)
 }
