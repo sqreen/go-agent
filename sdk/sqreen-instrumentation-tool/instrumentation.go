@@ -34,6 +34,20 @@ type packageInstrumentationHelper struct {
 	parsedFiles       map[string]*dst.File
 	parsedFileSources map[*dst.File]string
 	fset              *token.FileSet
+	pkgPath           string
+}
+
+func makePackageInstrumentationHelper(pkgPath string) packageInstrumentationHelper {
+	// Remove the package path vendor prefix so that everything, from this tool to
+	// the agent instrumentation package works properly with the package path names
+	// as if it wasn't vendored. By doing so, things like checking if the package
+	// should be ignored, or looking up a hook descriptor is simplified and can
+	// completely ignore the vendoring.
+	pkgPath = unvendorPackagePath(pkgPath)
+
+	return packageInstrumentationHelper{
+		pkgPath: pkgPath,
+	}
 }
 
 // AddFile parses the given Go source file `src` and adds it to the set of
@@ -43,6 +57,20 @@ func (h *packageInstrumentationHelper) AddFile(src string) error {
 	if isFileNameIgnored(src) {
 		log.Println("skipping instrumentation of file", src)
 		return nil
+	}
+
+	basename := filepath.Base(src)
+	if limited := limitedInstrumentationPkgFiles[h.pkgPath]; len(limited) > 0 {
+		found := false
+		for _, f := range limited {
+			if f == basename {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
 	}
 
 	log.Printf("parsing file `%s`", src)
@@ -123,7 +151,6 @@ func (h *packageInstrumentationHelper) WriteInstrumentedFiles(buildDirPath strin
 type defaultPackageInstrumentation struct {
 	packageInstrumentationHelper
 	instrumentedFiles   map[*dst.File][]*hookpoint
-	pkgPath             string
 	fullInstrumentation bool
 	hookListFilepath    string
 	packageBuildDir     string
@@ -133,18 +160,11 @@ func newDefaultPackageInstrumentation(pkgPath string, fullInstrumentation bool, 
 	projectBuildDir := path.Join(packageBuildDir, "..")
 	hookListFilepath := getHookListFilepath(projectBuildDir)
 
-	// Remove the package path vendor prefix so that everything, from this tool to
-	// the agent instrumentation package works properly with the package path names
-	// as if it wasn't vendored. By doing so, things like checking if the package
-	// should be ignored, or looking up a hook descriptor is simplified and can
-	// completely ignore the vendoring.
-	pkgPath = unvendorPackagePath(pkgPath)
-
 	return &defaultPackageInstrumentation{
-		pkgPath:             pkgPath,
-		fullInstrumentation: fullInstrumentation,
-		hookListFilepath:    hookListFilepath,
-		packageBuildDir:     packageBuildDir,
+		packageInstrumentationHelper: makePackageInstrumentationHelper(pkgPath),
+		fullInstrumentation:          fullInstrumentation,
+		hookListFilepath:             hookListFilepath,
+		packageBuildDir:              packageBuildDir,
 	}
 }
 
@@ -180,6 +200,21 @@ var (
 	// equal to one of the following package paths.
 	limitedInstrumentationPkgPaths = []string{
 		"os",
+		"net/http",
+	}
+
+	// Optional list packages, files and functions we want to only instrument for
+	// a given package.
+	// TODO: unified list for every possible "limited" case: package, file, up to
+	//  a given set of function names.
+	limitedInstrumentationPkgFiles = map[string][]string{
+		"net/http": {
+			// net/http is pretty performance sensitive and we want to only instrument
+			// what is needed.
+			// TODO: limit to the `(*Client).do(*Request) error` function (maybe we
+			//   can parse this string and compare the signature ASTs)
+			"client.go",
+		},
 	}
 )
 
