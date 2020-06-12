@@ -57,11 +57,10 @@ func (a *AgentType) addUserEvent(e event.UserEventFace) {
 	}
 }
 
-func (a *AgentType) addWhitelistEvent(matchedWhitelistEntry string) {
-	a.logger.Debugf("request whitelisted for `%s`", matchedWhitelistEntry)
-	err := a.staticMetrics.whitelistedIP.Add(matchedWhitelistEntry, 1)
+func (a *AgentType) addPassListEvent(matchedPasslistEntry string) {
+	err := a.staticMetrics.allowedIP.Add(matchedPasslistEntry, 1)
 	if err != nil {
-		sqErr := sqerrors.Wrap(err, "whitelist event: could not update the whitelist metrics store")
+		sqErr := sqerrors.Wrap(err, "passlist event: could not update the passlist metrics store")
 		switch actualErr := err.(type) {
 		case metrics.MaxMetricsStoreLengthError:
 			a.logger.Debug(sqErr)

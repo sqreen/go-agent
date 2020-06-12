@@ -6,7 +6,7 @@ package callback_test
 
 //
 //func TestNewAddSecurityHeadersCallbacks(t *testing.T) {
-//	RunCallbackTest(t, TestConfig{
+//	RunNativeCallbackTest(t, TestConfig{
 //		CallbacksCtor: callback.NewAddSecurityHeadersCallback,
 //		ExpectProlog:  true,
 //		PrologType:    reflect.TypeOf(callback.AddSecurityHeadersPrologCallbackType(nil)),

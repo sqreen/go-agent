@@ -35,10 +35,10 @@ type Store struct {
 		lock  sync.RWMutex
 		store *actionStore
 	}
-	whitelistStore struct {
+	passlistStore struct {
 		// Store pointer access RW lock.
 		lock  sync.RWMutex
-		store *CIDRWhitelistStore
+		store *CIDRIPListStore
 	}
 	logger *plog.Logger
 }
@@ -49,42 +49,42 @@ func NewStore(logger *plog.Logger) *Store {
 	}
 }
 
-// SetCIDRWhitelist creates a new whitelist store and then replaces the current
+// SetCIDRPasslist creates a new passlist store and then replaces the current
 // one. The new store is built while allowing accesses to the current one.
-func (s *Store) SetCIDRWhitelist(cidrs []string) error {
-	store, err := NewCIDRWhitelistStore(cidrs)
+func (s *Store) SetCIDRPasslist(cidrs []string) error {
+	store, err := NewCIDRIPListStore(cidrs)
 	if err != nil {
 		s.logger.Error(err)
 		return err
 	}
-	s.setCIDRWhitelistStore(store)
+	s.setCIDRPasslistStore(store)
 	return nil
 }
 
-// getCIDRWhitelistStore is a thread-safe cidrWhitelistStore pointer getter.
-func (s *Store) getCIDRWhitelistStore() (store *CIDRWhitelistStore) {
-	s.whitelistStore.lock.RLock()
-	store = s.whitelistStore.store
-	s.whitelistStore.lock.RUnlock()
+// getCIDRPasslistStore is a thread-safe cidrPasslistStore pointer getter.
+func (s *Store) getCIDRPasslistStore() (store *CIDRIPListStore) {
+	s.passlistStore.lock.RLock()
+	store = s.passlistStore.store
+	s.passlistStore.lock.RUnlock()
 	return
 }
 
-// setCIDRWhitelistStore is a thread-safe cidrWhitelistStore pointer setter.
-func (s *Store) setCIDRWhitelistStore(store *CIDRWhitelistStore) {
-	s.whitelistStore.lock.Lock()
-	s.whitelistStore.store = store
-	s.whitelistStore.lock.Unlock()
+// setCIDRPasslistStore is a thread-safe cidrPasslistStore pointer setter.
+func (s *Store) setCIDRPasslistStore(store *CIDRIPListStore) {
+	s.passlistStore.lock.Lock()
+	s.passlistStore.store = store
+	s.passlistStore.lock.Unlock()
 }
 
-// IsIPWhitelisted returns true when the given IP address matched a whitelist
-// entry. This matched whitelist entry is also returned. The error is non-nil
+// IsIPAllowed returns true when the given IP address matched a passlist
+// entry. This matched passlist entry is also returned. The error is non-nil
 // when an internal error occurred.
-func (s *Store) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
-	whitelist := s.getCIDRWhitelistStore()
-	if whitelist == nil {
+func (s *Store) IsIPAllowed(ip net.IP) (allowed bool, matchedCIDR string, err error) {
+	passlist := s.getCIDRPasslistStore()
+	if passlist == nil {
 		return false, "", nil
 	}
-	return whitelist.Find(ip)
+	return passlist.Find(ip)
 }
 
 // getActionStore is a thread-safe actionStore pointer getter.
@@ -359,5 +359,5 @@ func NewUserIdentifiersHash(id map[string]string) UserIdentifiersHash {
 			hash[i] += k[i] + v[i]
 		}
 	}
-	return UserIdentifiersHash(hash)
+	return hash
 }

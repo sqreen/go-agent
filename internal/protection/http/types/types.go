@@ -55,6 +55,4 @@ type ClosedRequestContextFace interface {
 
 type WriteAfterCloseError struct{}
 
-func (WriteAfterCloseError) Error() string {
-	return "response write after close"
-}
+func (WriteAfterCloseError) Error() string { return "response write after close" }

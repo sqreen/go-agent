@@ -31,6 +31,8 @@ func NewNativeCallback(name string, ctx RuleFace, cfg NativeCallbackConfig) (pro
 		callbackCtor = NewIPSecurityResponseCallback
 	case "UserSecurityResponse":
 		callbackCtor = NewUserSecurityResponseCallback
+	case "IPBlockList", "IPDenyList":
+		callbackCtor = NewIPDenyListCallback
 	}
 	return callbackCtor(ctx, cfg)
 }

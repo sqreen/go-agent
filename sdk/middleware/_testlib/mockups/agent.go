@@ -62,12 +62,12 @@ func (a *AgentMockup) ExpectSendClosedRequestContext(ctx interface{}) *mock.Call
 	return a.On("SendClosedRequestContext", ctx)
 }
 
-func (a *AgentMockup) IsIPWhitelisted(ip net.IP) bool {
+func (a *AgentMockup) IsIPAllowed(ip net.IP) bool {
 	return a.Called(ip).Bool(0)
 }
 
-func (a *AgentMockup) ExpectIsIPWhitelisted(ip interface{}) *mock.Call {
-	return a.On("IsIPWhitelisted", ip)
+func (a *AgentMockup) ExpectIsIPAllowed(ip interface{}) *mock.Call {
+	return a.On("IsIPAllowed", ip)
 }
 
 type AgentConfigMockup struct {

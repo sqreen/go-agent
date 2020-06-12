@@ -5,7 +5,7 @@
 package callback_test
 
 //func TestNewWriteHTTPRedirectionCallbacks(t *testing.T) {
-//	RunCallbackTest(t, TestConfig{
+//	RunNativeCallbackTest(t, TestConfig{
 //		CallbacksCtor: callback.NewWriteHTTPRedirectionCallbacks,
 //		ExpectProlog:  true,
 //		PrologType:    reflect.TypeOf(callback.WriteHTTPRedirectionPrologCallbackType(nil)),
