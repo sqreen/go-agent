@@ -9,7 +9,7 @@ package record
 //	FindActionByUserID(userID map[string]string) (action actor.Action, exists bool)
 //	AddHTTPRequestRecord(rr *RequestRecord)
 //	addUserEvent(event UserEventFace)
-//	IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error)
+//	IsIPAllowed(ip net.IP) (whitelisted bool, matchedCIDR string, err error)
 //	addWhitelistEvent(matchedWhitelistEntry string)
 //}
 //

@@ -34,8 +34,8 @@ func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqho
 func newWriteCustomErrorPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
 	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
 		ctx := *m
-		// Note that the header must be written first because body writting will
-		// otherwise write the default OK status
+		// Note that the header must be written first since writing the body first
+		// leads to the default OK status.
 		ctx.ResponseWriter.WriteHeader(statusCode)
 		ctx.ResponseWriter.WriteString(blockedBySqreenPage)
 		return nil, nil

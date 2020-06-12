@@ -83,15 +83,3 @@ func (r *RequestBindingAccessorContext) Params() RequestParamsSet {
 func (r *RequestBindingAccessorContext) Header(h string) (*string, error) {
 	return r.RequestReader.Header(h), nil
 }
-
-// Helper types for callbacks who must be designed for this protection so that
-// they are the source of truth and so that the compiler catches type issues
-// when compiling (versus when the callback is attached).
-type (
-	NonBlockingPrologCallbackType        = func(**RequestContext) (NonBlockingEpilogCallbackType, error)
-	BlockingPrologCallbackType           = func(**RequestContext) (BlockingEpilogCallbackType, error)
-	IdentifyUserPrologCallbackType       = func(**RequestContext, *map[string]string) (BlockingEpilogCallbackType, error)
-	ResponseMonitoringPrologCallbackType = func(**RequestContext, *types.ResponseFace) (NonBlockingEpilogCallbackType, error)
-	NonBlockingEpilogCallbackType        = func()
-	BlockingEpilogCallbackType           = func(*error)
-)

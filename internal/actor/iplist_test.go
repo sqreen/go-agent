@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCIDRWhitelistStore(t *testing.T) {
+func TestCIDRIPListStore(t *testing.T) {
 	t.Run("Random addresses", func(t *testing.T) {
 		var cidrs []string
 		// 4000 because the race detector cannot work with more than 8192
@@ -26,16 +26,16 @@ func TestCIDRWhitelistStore(t *testing.T) {
 			cidrs = append(cidrs, RandIPv6().String())
 		}
 
-		whitelist, err := actor.NewCIDRWhitelistStore(cidrs)
+		iplist, err := actor.NewCIDRIPListStore(cidrs)
 		require.NoError(t, err)
 
 		for _, cidr := range cidrs {
 			cidr := cidr // new scope
 			t.Run("Find", func(t *testing.T) {
 				t.Parallel()
-				whitelisted, matched, err := whitelist.Find(net.ParseIP(cidr))
+				listed, matched, err := iplist.Find(net.ParseIP(cidr))
 				require.NoError(t, err)
-				require.True(t, whitelisted)
+				require.True(t, listed)
 				require.Equal(t, cidr, matched)
 			})
 		}
@@ -46,7 +46,7 @@ func TestCIDRWhitelistStore(t *testing.T) {
 		matchesIPv4 := "5.6.7.8"
 		matchesNetv6 := "1:2:3:4:5:6:7:8/120"
 		matchesIPv6 := "33:2:3:4:5:6:7:8"
-		whitelist, err := actor.NewCIDRWhitelistStore([]string{
+		iplist, err := actor.NewCIDRIPListStore([]string{
 			matchesNetv4,
 			matchesIPv4,
 			matchesNetv6,
@@ -121,28 +121,28 @@ func TestCIDRWhitelistStore(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("Find(%s)", tc.test), func(t *testing.T) {
 				t.Parallel()
-				whitelisted, matched, err := whitelist.Find(tc.test)
+				listed, matched, err := iplist.Find(tc.test)
 				require.NoError(t, err)
-				require.Equal(t, tc.matches != "", whitelisted)
+				require.Equal(t, tc.matches != "", listed)
 				require.Equal(t, tc.matches, matched)
 			})
 		}
 	})
 }
 
-func BenchmarkCIDRWhitelistStore(b *testing.B) {
+func BenchmarkCIDRIPListStore(b *testing.B) {
 	b.Run("Lookup", func(b *testing.B) {
 		for n := 1; n <= 1000000; n *= 10 {
 			n := n // new scope
-			whitelist, ips := NewRandCIDRWhitelist(b, n)
+			iplist, ips := NewRandCIDRIPList(b, n)
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
 				b.ReportAllocs()
 				for n := 0; n < b.N; n++ {
 					// Pick a random cidr that was inserted
 					ix := int(rand.Int63n(int64(len(ips))))
 					ip := ips[ix]
-					whitelisted, _, err := whitelist.Find(ip)
-					if err != nil || !whitelisted {
+					listed, _, err := iplist.Find(ip)
+					if err != nil || !listed {
 						b.FailNow()
 					}
 				}
@@ -156,7 +156,7 @@ func BenchmarkCIDRWhitelistStore(b *testing.B) {
 			_, ips := NewRandIPList(n)
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
 				for n := 0; n < b.N; n++ {
-					actor.NewCIDRWhitelistStore(ips)
+					_, _ = actor.NewCIDRIPListStore(ips)
 				}
 			})
 		}
@@ -169,18 +169,18 @@ func BenchmarkCIDRWhitelistStore(b *testing.B) {
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
 				b.ReportAllocs()
 				for n := 0; n < b.N; n++ {
-					actor.NewCIDRWhitelistStore(ips)
+					_, _ = actor.NewCIDRIPListStore(ips)
 				}
 			})
 		}
 	})
 }
 
-func NewRandCIDRWhitelist(b *testing.B, n int) (whitelist *actor.CIDRWhitelistStore, ips []net.IP) {
+func NewRandCIDRIPList(b *testing.B, n int) (iplist *actor.CIDRIPListStore, ips []net.IP) {
 	ips, ipsStr := NewRandIPList(n)
-	whitelist, err := actor.NewCIDRWhitelistStore(ipsStr)
+	iplist, err := actor.NewCIDRIPListStore(ipsStr)
 	require.NoError(b, err)
-	return whitelist, ips
+	return iplist, ips
 }
 
 func NewRandIPList(n int) (ips []net.IP, ipsStr []string) {

@@ -17,13 +17,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/event"
-	protection_context "github.com/sqreen/go-agent/internal/protection/context"
+	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 )
 
 type RequestContext struct {
-	*protection_context.RequestContext
+	*protectioncontext.RequestContext
 	RequestReader              types.RequestReader
 	ResponseWriter             types.ResponseWriter
 	events                     event.Record
@@ -37,13 +37,26 @@ type RequestContext struct {
 	contextHandlerCanceled bool
 }
 
+// Helper types for callbacks who must be designed for this protection so that
+// they are the source of truth and so that the compiler catches type issues
+// when compiling (versus when the callback is attached).
+type (
+	BlockingPrologCallbackType = func(**RequestContext) (BlockingEpilogCallbackType, error)
+	BlockingEpilogCallbackType = func(*error)
+
+	NonBlockingPrologCallbackType = func(**RequestContext) (NonBlockingEpilogCallbackType, error)
+	NonBlockingEpilogCallbackType = func()
+
+	IdentifyUserPrologCallbackType = func(**RequestContext, *map[string]string) (BlockingEpilogCallbackType, error)
+
+	ResponseMonitoringPrologCallbackType = func(**RequestContext, *types.ResponseFace) (NonBlockingEpilogCallbackType, error)
+)
+
 // Static assert that RequestContext implements the SDK Event Recorder Getter
 // interface.
-var _ protection_context.EventRecorderGetter = (*RequestContext)(nil)
+var _ protectioncontext.EventRecorderGetter = (*RequestContext)(nil)
 
-func (c *RequestContext) EventRecorder() protection_context.EventRecorder {
-	return c
-}
+func (c *RequestContext) EventRecorder() protectioncontext.EventRecorder { return c }
 
 type requestReader struct {
 	types.RequestReader
@@ -56,7 +69,7 @@ func (c *RequestContext) AddAttackEvent(attack *event.AttackEvent) {
 	c.events.AddAttackEvent(attack)
 }
 
-func (c *RequestContext) TrackEvent(event string) protection_context.CustomEvent {
+func (c *RequestContext) TrackEvent(event string) protectioncontext.CustomEvent {
 	return c.events.AddCustomEvent(event)
 }
 
@@ -74,10 +87,10 @@ func (c *RequestContext) IdentifyUser(id map[string]string) error {
 }
 
 // Static assert that the SDK interface is implemented.
-var _ protection_context.EventRecorder = &RequestContext{}
+var _ protectioncontext.EventRecorder = &RequestContext{}
 
 func FromContext(ctx context.Context) *RequestContext {
-	c, _ := protection_context.FromContext(ctx).(*RequestContext)
+	c, _ := protectioncontext.FromContext(ctx).(*RequestContext)
 	return c
 }
 
@@ -89,7 +102,7 @@ func FromGLS() *RequestContext {
 	return ctx.(*RequestContext)
 }
 
-func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWriter, r types.RequestReader, cancelHandlerContextFunc context.CancelFunc) *RequestContext {
+func NewRequestContext(agent protectioncontext.AgentFace, w types.ResponseWriter, r types.RequestReader, cancelHandlerContextFunc context.CancelFunc) *RequestContext {
 	if r.ClientIP() == nil {
 		cfg := agent.Config()
 		r = requestReader{
@@ -97,18 +110,15 @@ func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWrite
 			RequestReader: r,
 		}
 	}
-	if agent.IsIPWhitelisted(r.ClientIP()) {
+	if agent.IsIPAllowed(r.ClientIP()) {
 		return nil
 	}
 	ctx := &RequestContext{
-		RequestContext:           protection_context.NewRequestContext(agent),
+		RequestContext:           protectioncontext.NewRequestContext(agent),
 		ResponseWriter:           w,
 		RequestReader:            r,
 		cancelHandlerContextFunc: cancelHandlerContextFunc,
 	}
-	// Set the current goroutine local storage to this request storage to be able
-	// to retrieve it from lower-level functions.
-	sqgls.Set(ctx)
 	return ctx
 }
 
@@ -116,7 +126,15 @@ func NewRequestContext(agent protection_context.AgentFace, w types.ResponseWrite
 // and the request should be stopped immediately by closing the RequestContext
 // and returning.
 func (c *RequestContext) Before() (err error) {
+	// Set the current goroutine local storage to this request storage to be able
+	// to retrieve it from lower-level functions.
+	sqgls.Set(c)
+
 	c.addSecurityHeaders()
+
+	if err := c.isIPBlocked(); err != nil {
+		return err
+	}
 	if err := c.ipSecurityResponse(); err != nil {
 		return err
 	}
@@ -125,6 +143,9 @@ func (c *RequestContext) Before() (err error) {
 	}
 	return nil
 }
+
+//go:noinline
+func (c *RequestContext) isIPBlocked() error { /* dynamically instrumented */ return nil }
 
 //go:noinline
 func (c *RequestContext) waf() error { /* dynamically instrumented */ return nil }
@@ -191,6 +212,11 @@ func (c *closedRequestContext) Response() types.ResponseFace {
 }
 
 func (c *RequestContext) Close(response types.ResponseFace) error {
+	// Make sure to clear the goroutine local storage to avoid keeping it if some
+	// memory pools are used under the hood.
+	// TODO: enforce this by design of the gls instrumentation
+	defer sqgls.Set(nil)
+
 	// Do not assume values are safe to keep after the request is done, as they
 	// might be put back in a shared pool.
 	c.monitorObservedResponse(response)
