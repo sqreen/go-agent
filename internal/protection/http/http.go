@@ -110,9 +110,10 @@ func NewRequestContext(agent protectioncontext.AgentFace, w types.ResponseWriter
 			RequestReader: r,
 		}
 	}
-	if agent.IsIPAllowed(r.ClientIP()) {
+	if agent.IsIPAllowed(r.ClientIP()) || agent.IsPathAllowed(r.URL().Path) {
 		return nil
 	}
+
 	ctx := &RequestContext{
 		RequestContext:           protectioncontext.NewRequestContext(agent),
 		ResponseWriter:           w,
@@ -217,8 +218,8 @@ func (c *RequestContext) Close(response types.ResponseFace) error {
 	// TODO: enforce this by design of the gls instrumentation
 	defer sqgls.Set(nil)
 
-	// Do not assume values are safe to keep after the request is done, as they
-	// might be put back in a shared pool.
+	// Copy everything we need here as it is not safe to keep then after the
+	// request is done because of memory pools reusing them.
 	c.monitorObservedResponse(response)
 	return c.RequestContext.Close(&closedRequestContext{
 		response: response,

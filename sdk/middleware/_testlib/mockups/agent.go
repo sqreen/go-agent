@@ -70,6 +70,14 @@ func (a *AgentMockup) ExpectIsIPAllowed(ip interface{}) *mock.Call {
 	return a.On("IsIPAllowed", ip)
 }
 
+func (a *AgentMockup) IsPathAllowed(path string) bool {
+	return a.Called(path).Bool(0)
+}
+
+func (a *AgentMockup) ExpectIsPathAllowed(path string) *mock.Call {
+	return a.On("IsIPAllowed", path)
+}
+
 type AgentConfigMockup struct {
 	mock.Mock
 }

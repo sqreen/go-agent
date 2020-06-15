@@ -23,11 +23,12 @@ type CommandHandler func(args []json.RawMessage) (output string, err error)
 // CommandManagerAgent defines the expected agentInstance SDK and allows to easily
 // implement functional tests by mocking it up.
 type CommandManagerAgent interface {
-	InstrumentationEnable() (rulespackID string, err error)
-	InstrumentationDisable() error
-	ActionsReload() error
-	SetCIDRWhitelist([]string) error
-	RulesReload() (rulespackID string, err error)
+	EnableInstrumentation() (rulespackID string, err error)
+	DisableInstrumentation() error
+	ReloadActions() error
+	SetCIDRIPPasslist([]string) error
+	SetPathPasslist([]string) error
+	ReloadRules() (rulespackID string, err error)
 	SendAppBundle() error
 }
 
@@ -39,12 +40,13 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 
 	// Note: using Go's reflection to call methods would be slower.
 	mng.handlers = map[string]CommandHandler{
-		"instrumentation_enable": mng.InstrumentationEnable,
-		"instrumentation_remove": mng.InstrumentationRemove,
-		"actions_reload":         mng.ActionsReload,
-		"ips_whitelist":          mng.IPSWhitelist,
-		"rules_reload":           mng.RulesReload,
+		"instrumentation_enable": mng.EnableInstrumentation,
+		"instrumentation_remove": mng.DisableInstrumentation,
+		"actions_reload":         mng.ReloadActons,
+		"ips_whitelist":          mng.SetCIDRIPPasslist,
+		"rules_reload":           mng.ReloadRules,
 		"get_bundle":             mng.GetBundle,
+		"paths_whitelist":        mng.SetPathPasslist,
 	}
 
 	return mng
@@ -85,19 +87,19 @@ func (m *CommandManager) Do(commands []api.CommandRequest) map[string]api.Comman
 	return results
 }
 
-func (m *CommandManager) InstrumentationEnable([]json.RawMessage) (string, error) {
-	return m.agent.InstrumentationEnable()
+func (m *CommandManager) EnableInstrumentation([]json.RawMessage) (string, error) {
+	return m.agent.EnableInstrumentation()
 }
 
-func (m *CommandManager) InstrumentationRemove([]json.RawMessage) (string, error) {
-	return "", m.agent.InstrumentationDisable()
+func (m *CommandManager) DisableInstrumentation([]json.RawMessage) (string, error) {
+	return "", m.agent.DisableInstrumentation()
 }
 
-func (m *CommandManager) ActionsReload([]json.RawMessage) (string, error) {
-	return "", m.agent.ActionsReload()
+func (m *CommandManager) ReloadActons([]json.RawMessage) (string, error) {
+	return "", m.agent.ReloadActions()
 }
 
-func (m *CommandManager) IPSWhitelist(args []json.RawMessage) (string, error) {
+func (m *CommandManager) SetCIDRIPPasslist(args []json.RawMessage) (string, error) {
 	if argc := len(args); argc != 1 {
 		return "", fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
 	}
@@ -106,11 +108,23 @@ func (m *CommandManager) IPSWhitelist(args []json.RawMessage) (string, error) {
 	if err := json.Unmarshal(arg0, &cidrs); err != nil {
 		return "", err
 	}
-	return "", m.agent.SetCIDRWhitelist(cidrs)
+	return "", m.agent.SetCIDRIPPasslist(cidrs)
 }
 
-func (m *CommandManager) RulesReload([]json.RawMessage) (string, error) {
-	return m.agent.RulesReload()
+func (m *CommandManager) SetPathPasslist(args []json.RawMessage) (string, error) {
+	if argc := len(args); argc != 1 {
+		return "", fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
+	}
+	var paths []string
+	arg0 := args[0]
+	if err := json.Unmarshal(arg0, &paths); err != nil {
+		return "", err
+	}
+	return "", m.agent.SetPathPasslist(paths)
+}
+
+func (m *CommandManager) ReloadRules([]json.RawMessage) (string, error) {
+	return m.agent.ReloadRules()
 }
 
 func (m *CommandManager) GetBundle([]json.RawMessage) (string, error) {
