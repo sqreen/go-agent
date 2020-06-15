@@ -15,9 +15,8 @@ import (
 type (
 	// CIDRIPListStore is the set of data-structures to store CIDR IPv6 and IPv4
 	// IPLists. Locking is avoided by not having concurrent insertions and
-	// lookups. Therefore, a second IPListStore is created when a new IPList
-	// is received, and only swapping the IPListStore pointer needs to be
-	// thread-safe.
+	// lookups. Therefore, a second CIDRIPListStore is created when a new IPList
+	// is received, and only swapping the pointers needs to be thread-safe.
 	CIDRIPListStore struct {
 		treeV4 *IPListTreeV4
 		treeV6 *IPListTreeV6

@@ -81,6 +81,7 @@ type AgentFace interface {
 	// could not be sent (eg. full channel).
 	SendClosedRequestContext(ClosedRequestContextFace) error
 	IsIPAllowed(ip net.IP) bool
+	IsPathAllowed(path string) bool
 }
 
 type ClosedRequestContextFace interface{}

@@ -12,6 +12,7 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/gofuzz v1.0.0
 	github.com/google/uuid v1.1.1
+	github.com/hashicorp/go-immutable-radix v1.2.0
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/kentik/patricia v0.0.0-20190405133149-20eb46c597b3
 	github.com/labstack/echo v3.3.10+incompatible

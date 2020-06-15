@@ -59,6 +59,10 @@ func (a *AgentMock) IsIPAllowed(ip net.IP) bool {
 	return a.Called(ip).Bool(0)
 }
 
+func (a *AgentMock) IsPathAllowed(path string) bool {
+	return a.Called(path).Bool(0)
+}
+
 func (a *AgentMock) ExpectLogger() *mock.Call {
 	return a.On("Logger")
 }
