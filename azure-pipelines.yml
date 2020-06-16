@@ -50,12 +50,13 @@ jobs:
         inputs:
           version: $(GOVERSION)
       - task: Go@0
-        displayName: go test
+        displayName: Build gotestsum
+        name: build_gotestsum
         continueOnError: true
         inputs:
           command: 'build'
           arguments: '-v gotest.tools/gotestsum'
-      - script: |
+      - bash: |
           go env
           go build -v gotest.tools/gotestsum
           ./gotestsum --junitfile report.xml ./...
