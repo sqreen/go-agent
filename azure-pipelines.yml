@@ -50,11 +50,11 @@ jobs:
         inputs:
           version: $(GOVERSION)
       - task: Go@0
-          displayName: go test
-          continueOnError: true
-          inputs:
-            command: 'build'
-            arguments: '-v gotest.tools/gotestsum'
+        displayName: go test
+        continueOnError: true
+        inputs:
+          command: 'build'
+          arguments: '-v gotest.tools/gotestsum'
       - script: |
           go env
           clang -v
