@@ -41,11 +41,24 @@ jobs:
         inputs:
           version: $(GOVERSION)
       - task: Go@0
+          displayName: go test
+          continueOnError: true
+          inputs:
+            command: 'build'
+            arguments: '-v gotest.tools/gotestsum'
+      - script: |
+          go env
+          clang -v
+          go build -v gotest.tools/gotestsum
+          ./gotestsum --junitfile report.xml ./...
+        name: go_test
         displayName: go test
-        continueOnError: true
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
         inputs:
-          command: 'test'
-          arguments: '-v ./...'
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+          platform: windows
 
   - job: MacOS
     pool:
@@ -59,6 +72,8 @@ jobs:
         name: go_test
         displayName: go test
       - task: PublishTestResults@2
+        condition: succeededOrFailed()
         inputs:
           testRunner: JUnit
           testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+          platform: macos

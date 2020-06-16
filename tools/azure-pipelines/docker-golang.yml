@@ -36,10 +36,11 @@ jobs:
             name: go_test
             displayName: go test
           - task: PublishTestResults@2
+            condition: succeededOrFailed()
             inputs:
               testRunner: JUnit
               testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
-              buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
+              platform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
       - ${{ if not(parameters.go.junit) }}:
           - script: |
               go env
