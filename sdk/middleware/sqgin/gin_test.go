@@ -99,6 +99,7 @@ func TestMiddleware(t *testing.T) {
 		agent := &mockups.AgentMockup{}
 		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{})
 		agent.ExpectIsIPAllowed(mock.Anything).Return(false)
+		agent.ExpectIsPathAllowed(mock.Anything).Return(false)
 		agent.ExpectSendClosedRequestContext(mock.Anything).Return(nil)
 		defer agent.AssertExpectations(t) // inaccurate but worth it
 
@@ -320,6 +321,7 @@ func TestMiddleware(t *testing.T) {
 		agent := &mockups.AgentMockup{}
 		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
 		agent.ExpectIsIPAllowed(mock.Anything).Return(false).Once()
+		agent.ExpectIsPathAllowed(mock.Anything).Return(false).Once()
 		var responseStatusCode int
 		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
 			resp := recorded.Response()

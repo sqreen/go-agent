@@ -5,7 +5,6 @@
 package callback_test
 
 import (
-	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +19,7 @@ import (
 	sdktypes "github.com/sqreen/go-agent/sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	errors "golang.org/x/xerrors"
 )
 
 type AgentMock struct {

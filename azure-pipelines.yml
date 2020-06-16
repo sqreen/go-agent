@@ -1,3 +1,12 @@
+schedules:
+  # Nightly run
+  - cron: "0 0 * * *"
+    displayName: Daily midnight run
+    always: true
+    branches:
+      include:
+        - master
+
 trigger:
   - master
   - dev
@@ -41,11 +50,23 @@ jobs:
         inputs:
           version: $(GOVERSION)
       - task: Go@0
-        displayName: go test
-        continueOnError: true
+        displayName: Build gotestsum
+        name: build_gotestsum
         inputs:
-          command: 'test'
-          arguments: '-v ./...'
+          command: 'build'
+          arguments: '-v gotest.tools/gotestsum'
+      - bash: |
+          go env
+          go build -v gotest.tools/gotestsum
+          ./gotestsum --junitfile report.xml ./...
+        name: go_test
+        displayName: go test
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+          platform: windows
 
   - job: MacOS
     pool:
@@ -54,11 +75,13 @@ jobs:
       - script: |
           go env
           clang -v
-          go build -v github.com/jstemmer/go-junit-report
-          go test -v ./... 2>&1 | ./go-junit-report > report.xml
+          go build -v gotest.tools/gotestsum
+          ./gotestsum --junitfile report.xml ./...
         name: go_test
         displayName: go test
       - task: PublishTestResults@2
+        condition: succeededOrFailed()
         inputs:
           testRunner: JUnit
           testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+          platform: macos

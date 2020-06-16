@@ -6,11 +6,11 @@ package internal
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	errors "golang.org/x/xerrors"
 )
 
 func (a *AgentType) addUserEvent(e event.UserEventFace) {

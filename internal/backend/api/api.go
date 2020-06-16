@@ -560,20 +560,6 @@ type AppLoginResponseFace interface {
 	GetPackId() string
 }
 
-type AppLoginResponse_FeatureFace interface {
-	GetBatchSize() uint32
-	GetMaxStaleness() uint32
-	GetHeartbeatDelay() uint32
-}
-
-func NewAppLoginResponse_FeatureFromFace(that AppLoginResponse_FeatureFace) *AppLoginResponse_Feature {
-	this := &AppLoginResponse_Feature{}
-	this.BatchSize = that.GetBatchSize()
-	this.MaxStaleness = that.GetMaxStaleness()
-	this.HeartbeatDelay = that.GetHeartbeatDelay()
-	return this
-}
-
 type CommandResultFace interface {
 	GetOutput() string
 	GetStatus() bool

@@ -5,11 +5,11 @@
 package types_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/sqreen/go-agent/sdk/types"
 	"github.com/stretchr/testify/require"
+	errors "golang.org/x/xerrors"
 )
 
 type myErrorType struct{ e error }
