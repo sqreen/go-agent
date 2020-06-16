@@ -52,7 +52,6 @@ jobs:
       - task: Go@0
         displayName: Build gotestsum
         name: build_gotestsum
-        continueOnError: true
         inputs:
           command: 'build'
           arguments: '-v gotest.tools/gotestsum'
