@@ -5,7 +5,7 @@
 package main
 
 import (
-	"github.com/sqreen/go-agent/internal/sqlib/sqhook/test/testdata/helpers"
+	"github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool/testdata/helpers"
 )
 
 func init() {

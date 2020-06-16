@@ -2,14 +2,15 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-//sqreen:ignore
-
 package main
 
 import (
-	"github.com/sqreen/go-agent/internal/sqlib/sqhook/test/testdata/helpers"
+	"fmt"
+
+	"github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool/testdata/helpers"
 )
 
-func init() {
-	helpers.MustAttachTracer("main.main", func() (func(), error)(nil))
+func main() {
+	defer helpers.TraceCall()()
+	fmt.Println("Hello, Go!")
 }

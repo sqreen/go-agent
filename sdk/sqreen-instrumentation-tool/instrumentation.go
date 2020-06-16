@@ -409,7 +409,11 @@ func (h *runtimePackageInstrumentation) Instrument() (instrumented []*dst.File, 
 func (h *runtimePackageInstrumentation) WriteExtraFiles() ([]string, error) {
 	rtExtensions := filepath.Join(h.packageBuildDir, "sqreen.go")
 	if err := ioutil.WriteFile(rtExtensions, []byte(`package runtime
-import _ "unsafe" // for go:linkname
+
+import (
+	"unsafe" // also required for go:linkname
+	"runtime/internal/atomic"
+)
 
 //go:linkname _sqreen_gls_get _sqreen_gls_get
 var _sqreen_gls_get = _sqreen_gls_get_impl
@@ -427,7 +431,11 @@ func _sqreen_gls_set_impl(v interface{}) {
 	getg().m.curg.sqgls = v
 }
 
-
+//go:linkname _sqreen_atomic_load_pointer _sqreen_atomic_load_pointer
+//go:nosplit
+func _sqreen_atomic_load_pointer(addr unsafe.Pointer) unsafe.Pointer {
+	return atomic.Loadp(addr)
+}
 `), 0644); err != nil {
 		return nil, err
 	}
