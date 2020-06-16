@@ -19,6 +19,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
+	"github.com/sqreen/go-agent/sdk/types"
 )
 
 func NewJSExecCallback(rule RuleFace, cfg ReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
@@ -64,7 +65,7 @@ func NewJSExecCallback(rule RuleFace, cfg ReflectedCallbackConfig) (sqhook.Refle
 				// Create the attack event
 				blocking := cfg.BlockingMode()
 				metadata := result.Record
-				abortErr := abortError{}
+				abortErr := types.SqreenError{Err: attackError{}}
 				st := sqerrors.StackTrace(errors.WithStack(abortErr))
 				ctx.AddAttackEvent(rule.NewAttackEvent(blocking, noScrub(metadata), st))
 
@@ -222,6 +223,6 @@ type noScrub map[string]interface{}
 
 func (n noScrub) NoScrub() {}
 
-type abortError struct{}
+type attackError struct{}
 
-func (abortError) Error() string { return "abort" }
+func (attackError) Error() string { return "attack detected" }
