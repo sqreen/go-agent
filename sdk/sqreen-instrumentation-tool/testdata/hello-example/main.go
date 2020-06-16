@@ -7,7 +7,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/sqreen/go-agent/internal/sqlib/sqhook/test/testdata/helpers"
+	"github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool/testdata/helpers"
 )
 
 // no params nor results
