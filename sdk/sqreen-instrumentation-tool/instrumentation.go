@@ -413,11 +413,11 @@ import _ "unsafe" // for go:linkname
 
 //go:nosplit
 //go:linkname _sqreen_gls_get _sqreen_gls_get
-func _sqreen_gls_get() interface{} { return getg().m.curg.sqgls }
+var _sqreen_gls_get = func() interface{} { return getg().m.curg.sqgls }
 
 //go:nosplit
 //go:linkname _sqreen_gls_set _sqreen_gls_set
-func _sqreen_gls_set(v interface{})  { getg().m.curg.sqgls = v }
+var _sqreen_gls_set = func(v interface{})  { getg().m.curg.sqgls = v }
 `), 0644); err != nil {
 		return nil, err
 	}

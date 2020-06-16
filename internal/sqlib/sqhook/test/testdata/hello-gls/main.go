@@ -9,17 +9,11 @@ package main
 import (
 	"reflect"
 	"sync"
-	_ "unsafe" // for go:linkname
 
+	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 	_ "github.com/sqreen/go-agent/internal/sqlib/sqhook" // for the instrumentation symbols TODO: remove once provided by the instrumentation tool
 	"github.com/sqreen/go-agent/tools/testlib"
 )
-
-//go:linkname _sqreen_gls_get _sqreen_gls_get
-func _sqreen_gls_get() interface{}
-
-//go:linkname _sqreen_gls_set _sqreen_gls_set
-func _sqreen_gls_set(v interface{})
 
 type MyGLSType struct {
 	s string
@@ -29,7 +23,7 @@ type MyGLSType struct {
 }
 
 func getMyGLS() *MyGLSType {
-	g := _sqreen_gls_get()
+	g := sqgls.Get()
 	if g == nil {
 		return nil
 	}
@@ -37,7 +31,7 @@ func getMyGLS() *MyGLSType {
 }
 
 func setMyGLS(v *MyGLSType) {
-	_sqreen_gls_set(v)
+	sqgls.Set(v)
 }
 
 func main() {
