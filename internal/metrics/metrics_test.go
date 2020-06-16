@@ -250,7 +250,7 @@ func TestUsage(t *testing.T) {
 			}
 			prevStoreFinish = store.Finish()
 		}
-		require.True(t, prevStoreFinish.Before(finished))
+		require.True(t, prevStoreFinish.Before(finished) || prevStoreFinish.Equal(finished))
 
 		// Check each writer wrote the expected number of times.
 		for n := 0; n < nbWrites; n++ {
