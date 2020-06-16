@@ -75,7 +75,7 @@ func (a *AgentMockup) IsPathAllowed(path string) bool {
 }
 
 func (a *AgentMockup) ExpectIsPathAllowed(path string) *mock.Call {
-	return a.On("IsIPAllowed", path)
+	return a.On("IsPathAllowed", path)
 }
 
 type AgentConfigMockup struct {
