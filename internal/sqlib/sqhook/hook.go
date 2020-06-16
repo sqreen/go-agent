@@ -7,7 +7,8 @@
 // Package sqhook allows to attach at run time (ie. hook) prolog and epilog
 // callbacks to instrumented functions. They can read/write the function
 // parameters and return values of function calls. Functions must have been
-// instrumented using the instrumentation tool at FIXME.
+// instrumented using the instrumentation tool at
+// github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool.
 //
 // Prolog callbacks get read/write access to the arguments of the function call
 // before it gets executed, while epilog callbacks get read/write access to the
@@ -28,21 +29,18 @@
 //
 // Main requirements
 //
-//		- Concurrent access and modification of callbacks.
-//		- Ability to read/write arguments and return values.
-//		- Hook the prolog and epilog of a function.
-//		- Epilog callbacks should be able to recover a panic.
-//		- Callbacks should be reentrant. If any context needs to be shared, it
-//		  should be done through the epilog closure.
-//		- Fast callback calls thanks to regular pointer to function calls. No need
-//		  for any type-assertion.
-//		- Ability to
-//		  Type-assertion instead of `reflect.Call` is therefore used while generic
-//		  callbacks that are not tied a specific function will be attached using
-//		  `reflect.MakeFunc` in order to match the function signature. The usage
-//		  of dynamic calls using `reflect` is indeed much slower and consumes
-//		  memory.
-//		- Access and modification of callbacks need to be atomic.
+// - Concurrent access and modification of callbacks.
+// - Ability to read/write arguments and return values.
+// - Hook the prolog and epilog of a function.
+// - Epilog callbacks should be able to recover a panic.
+// - Callbacks should be reentrant. If any context needs to be shared, it
+//   should be done through the epilog closure.
+// - Fast callback calls thanks to regular pointer to function calls. No need
+//   for any type-assertion.
+// - Ability to rely on type assertions instead of using `reflect.Call()`.
+//   The usage of dynamic calls using `reflect` is indeed much slower and
+//   consumes memory.
+// - Access and modification of callbacks need to be atomic.
 //
 package sqhook
 
@@ -62,12 +60,6 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"golang.org/x/xerrors"
 )
-
-//go:linkname _sqreen_atomic_load_pointer _sqreen_atomic_load_pointer
-//go:nosplit
-func _sqreen_atomic_load_pointer(addr *unsafe.Pointer) unsafe.Pointer {
-	return atomic.LoadPointer(addr)
-}
 
 //go:linkname _sqreen_instrumentation_descriptor _sqreen_instrumentation_descriptor
 var _sqreen_instrumentation_descriptor *internal.InstrumentationDescriptorType

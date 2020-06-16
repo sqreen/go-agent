@@ -129,8 +129,8 @@ func newPrologLoadFuncDecl(ident string, prologVarSpec *dst.ValueSpec) *dst.Func
 									Fun: dst.NewIdent(sqreenAtomicLoadPointerFuncIdent),
 									Args: []dst.Expr{
 										newCastValueExpr(
-											newPointerTypeOf(newSqreenUnsafePointerType()),
-											newCastValueExpr(newSqreenUnsafePointerType(), newIdentAddressExpr(dst.NewIdent(prologVarName)))),
+											newSqreenUnsafePointerType(),
+											newIdentAddressExpr(dst.NewIdent(prologVarName))),
 									},
 								},
 							},
@@ -357,7 +357,7 @@ func newHookDescriptorFuncDecl(ident string, funcDecl *dst.FuncDecl, prologVarId
 func newLinkTimeSqreenAtomicLoadPointerFuncDecl() *dst.FuncDecl {
 	ftype := &dst.FuncType{
 		Params: &dst.FieldList{
-			List: []*dst.Field{{Type: &dst.StarExpr{X: newSqreenUnsafePointerType()}}},
+			List: []*dst.Field{{Type: newSqreenUnsafePointerType()}},
 		},
 		Results: &dst.FieldList{
 			List: []*dst.Field{{Type: newSqreenUnsafePointerType()}},

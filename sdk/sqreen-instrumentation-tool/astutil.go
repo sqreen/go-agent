@@ -116,11 +116,6 @@ func newCastValueExpr(typ dst.Expr, val dst.Expr) dst.Expr {
 	return &dst.CallExpr{Fun: typ, Args: []dst.Expr{val}}
 }
 
-// Return the type expression for `*<typ>`.
-func newPointerTypeOf(typ dst.Expr) dst.Expr {
-	return &dst.StarExpr{X: typ}
-}
-
 // Return true if the node has a sqreen:ignore directive comment. Explanatory
 // text can be added after it (eg. `//sqreen:ignore because...`)
 func hasSqreenIgnoreDirective(node dst.Node) bool {
