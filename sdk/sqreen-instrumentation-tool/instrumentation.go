@@ -411,13 +411,23 @@ func (h *runtimePackageInstrumentation) WriteExtraFiles() ([]string, error) {
 	if err := ioutil.WriteFile(rtExtensions, []byte(`package runtime
 import _ "unsafe" // for go:linkname
 
-//go:nosplit
 //go:linkname _sqreen_gls_get _sqreen_gls_get
-var _sqreen_gls_get = func() interface{} { return getg().m.curg.sqgls }
+var _sqreen_gls_get = _sqreen_gls_get_impl
+
+//go:linkname _sqreen_gls_set _sqreen_gls_set
+var _sqreen_gls_set = _sqreen_gls_set_impl
 
 //go:nosplit
-//go:linkname _sqreen_gls_set _sqreen_gls_set
-var _sqreen_gls_set = func(v interface{})  { getg().m.curg.sqgls = v }
+func _sqreen_gls_get_impl() interface{} {
+	return getg().m.curg.sqgls
+}
+
+//go:nosplit
+func _sqreen_gls_set_impl(v interface{}) {
+	getg().m.curg.sqgls = v
+}
+
+
 `), 0644); err != nil {
 		return nil, err
 	}
