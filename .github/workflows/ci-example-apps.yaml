@@ -1,0 +1,25 @@
+name: Example App Builds
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+jobs:
+  docker:
+    name: Docker Examples
+    strategy:
+      matrix:
+        example: [ alpine, debian, scratch ]
+        go-version: [ rc, 1.14, 1.13, 1.12]
+        do-vendoring: [ true, false ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup go
+        uses: actions/setup-go@v2
+        if: ${{ matrix.do-vendoring }}
+      - run: go mod vendor
+        name: Vendor the dependencies
+        if: ${{ matrix.do-vendoring }}
+      - run: docker build -f ${{ matrix.example }}/Dockerfile -t hello-sqreen:${{ matrix.example }} --build-arg GO_VERSION=${{ matrix.go-version }} .
+        working-directory: examples/docker

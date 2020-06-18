@@ -3,7 +3,8 @@
 # image is absolutely empty and more files need to be copied in that case.
 
 # Build docker image
-FROM golang:1 AS build
+ARG GO_VERSION=1
+FROM golang:$GO_VERSION AS build
 # Workdir out of the GOPATH to enable the Go modules mode.
 WORKDIR /app
 COPY . .
@@ -18,7 +19,7 @@ RUN go build -v -a -toolexec $PWD/sqreen-instrumentation-tool -o hello-sqreen .
 # Now prepare a directory with the shared libraries the compiled program file
 # requires by using ldd:
 # 1. Install binutils for ldd
-RUN apt update && apt install binutils ca-certificates
+RUN apt update && apt install -y binutils ca-certificates
 # 2. Use ldd to list the shared libraries and copy them into deps/
 RUN ldd hello-sqreen | tr -s '[:blank:]' '\n' | grep '^/' | \
     xargs -I % sh -c 'mkdir -p $(dirname deps%); cp % deps%;'
