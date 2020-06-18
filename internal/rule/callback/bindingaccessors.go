@@ -9,25 +9,22 @@ package callback
 import (
 	"database/sql"
 	"reflect"
-	"regexp"
+	"strings"
 
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
-func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader) (*BindingAccessorContextType, error) {
-	var (
-		c   = &BindingAccessorContextType{}
-		err error
-	)
+func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, values interface{}) (*BindingAccessorContextType, error) {
+	var c = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
+		case "rule":
+			c.Rule = NewRuleBindingAccessorContext(values)
 		case "sql":
-			c.SQL, err = NewSQLBindingAccessorContext()
-			if err != nil {
-				return nil, err
-			}
+			c.SQL = NewSQLBindingAccessorContext()
 		case "func":
 			c.Func = NewFunctionBindingAccessorContext(args, res)
 		case "request":
@@ -41,47 +38,64 @@ func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflec
 	return c, nil
 }
 
+type RuleBindingAccessorContextType struct {
+	Data RuleDataBindingAccessorContextType
+}
+
+type RuleDataBindingAccessorContextType struct {
+	Values interface{}
+}
+
+func NewRuleBindingAccessorContext(values interface{}) *RuleBindingAccessorContextType {
+	return &RuleBindingAccessorContextType{
+		Data: RuleDataBindingAccessorContextType{
+			Values: values,
+		},
+	}
+}
+
 func NewFunctionBindingAccessorContext(args []reflect.Value, rets []reflect.Value) *FuncCallBindingAccessorContextType {
 	c := &FuncCallBindingAccessorContextType{}
 	if l := len(args); l > 0 {
 		c.Args = make([]interface{}, l)
 		for i, arg := range args {
-			c.Args[i] = arg.Elem().Interface()
+			c.Args[i] = arg.Interface()
 		}
 	}
 
 	if l := len(rets); l > 0 {
 		c.Rets = make([]interface{}, l)
 		for i, ret := range rets {
-			c.Rets[i] = ret.Elem().Interface()
+			c.Rets[i] = ret.Interface()
 		}
 	}
 
 	return c
 }
 
-func NewSQLBindingAccessorContext() (*SQLBindingAccessorContextType, error) {
-	return &SQLBindingAccessorContextType{}, nil
+func NewSQLBindingAccessorContext() *SQLBindingAccessorContextType {
+	return &SQLBindingAccessorContextType{}
 }
 
-// TODO: make dynamic via the rule config
-var dialects = map[string]*regexp.Regexp{
-	"mysql":      regexp.MustCompile(`(?i)(my.*sql)`),
-	"postgresql": regexp.MustCompile(`(?i)(pg)|(pq)|(post)`),
-	"sqlite":     regexp.MustCompile(`(?i)(lite)`),
-	"oracle":     regexp.MustCompile(`(?i)(ora)`),
-}
+func (*SQLBindingAccessorContextType) Dialect(dbPtr **sql.DB, dialects map[string]interface{}) (string, error) {
+	db := *dbPtr
+	drvType := reflect.ValueOf(db.Driver()).Type()
+	pkgPath := sqgo.Unvendor(drvType.PkgPath())
 
-func (*SQLBindingAccessorContextType) Dialect(v interface{}) (string, error) {
-	db, ok := v.(*sql.DB)
-	if !ok {
-		return "", sqerrors.Errorf("unexpected type `%T` while expecting `*sql.DB`", v)
-	}
-	drvType := reflect.ValueOf(db.Driver()).Elem().Type()
-	pkgPath := drvType.PkgPath()
-	for dialect, re := range dialects {
-		if re.MatchString(pkgPath) {
-			return dialect, nil
+	for dialect, pkgList := range dialects {
+		pkgPaths, ok := pkgList.([]interface{})
+		if !ok {
+			return "", sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgList, pkgPaths)
+		}
+
+		for i := range pkgPaths {
+			path, ok := pkgPaths[i].(string)
+			if !ok {
+				return "", sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgPaths[i], path)
+			}
+			if strings.HasPrefix(pkgPath, path) {
+				return dialect, nil
+			}
 		}
 	}
 	return "", sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath)
@@ -95,6 +109,7 @@ type BindingAccessorContextType struct {
 	Lib  *LibraryBindingAccessorContextType
 	Func *FuncCallBindingAccessorContextType
 	SQL  *SQLBindingAccessorContextType
+	Rule *RuleBindingAccessorContextType
 	*RequestBindingAccessorContext
 }
 
@@ -131,15 +146,32 @@ func NewLibraryBindingAccessorContext() *LibraryBindingAccessorContextType {
 // Prepend inserts the value into the first position of the slice.
 func (ArrayLibraryBindingAccessorContextType) Prepend(slice, value interface{}) (interface{}, error) {
 	// Create a new slice of the same type, having l+1 element capacity
-	sv := reflect.ValueOf(slice)
-	l := sv.Len() + 1
-	newSlice := reflect.MakeSlice(sv.Type(), l, l)
+	var (
+		sv = reflect.ValueOf(slice)
+		vv = reflect.ValueOf(value)
+
+		newSlice     reflect.Value
+		newSliceType reflect.Type
+		newSliceLen  int
+	)
+
+	if slice == nil {
+		// Create a new slice based on the value type
+		newSliceLen = 1
+		newSliceType = reflect.SliceOf(vv.Type())
+	} else {
+		// Create a new slice based on the slice type
+		newSliceLen = sv.Len() + 1
+		newSliceType = sv.Type()
+	}
+
+	newSlice = reflect.MakeSlice(newSliceType, newSliceLen, newSliceLen)
 
 	// Insert the value first in the new slice
-	newSlice.Index(0).Set(reflect.ValueOf(value))
+	newSlice.Index(0).Set(vv)
 
 	// Add the slice values next
-	for i := 1; i < l; i++ {
+	for i := 1; i < newSliceLen; i++ {
 		newSlice.Index(i).Set(sv.Index(i - 1))
 	}
 

@@ -51,6 +51,9 @@ func buildInstrumentationTool(t *testing.T) (path string) {
 func testInstrumentation(t *testing.T, toolPath string, testApp string) {
 	// Run it with full instrumentation and verbose mode
 	cmd := exec.Command(godriver, "run", "-a", "-toolexec", fmt.Sprintf("%s -v -full", toolPath), testApp)
+	gocache, err := ioutil.TempDir("", "go-cache")
+	require.NoError(t, err, "could not create a go-cache directory")
+	cmd.Env = append(os.Environ(), "GOCACHE="+gocache)
 	cmd.Stderr = os.Stderr
 	outputBuf, err := cmd.Output()
 	require.NoError(t, err)
