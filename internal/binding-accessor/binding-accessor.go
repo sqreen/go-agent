@@ -241,7 +241,7 @@ func compileIdentifier(buf string) (valueFunc, string, error) {
 	var valueFn valueFunc
 	switch identifier {
 	default:
-		// Try match string value
+		// Try parse a string value
 		if l := len(identifier); l >= 2 && identifier[0] == '\'' && identifier[l-1] == '\'' {
 			str := identifier[1 : l-1]
 			valueFn = func(ctx Context, depth int) (interface{}, error) {
@@ -254,9 +254,7 @@ func compileIdentifier(buf string) (valueFunc, string, error) {
 		valueFn = func(ctx Context, depth int) (interface{}, error) {
 			return ctx, nil
 		}
-	case "nil":
-		fallthrough
-	case "null":
+	case "nil", "null":
 		valueFn = func(ctx Context, depth int) (interface{}, error) {
 			return nil, nil
 		}

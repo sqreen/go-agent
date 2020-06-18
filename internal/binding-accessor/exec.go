@@ -15,6 +15,7 @@ import (
 
 func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 	lvalue := reflect.ValueOf(v)
+doExecIndexAccess:
 	switch lvalue.Kind() {
 	case reflect.Func:
 		// In order to be backward compatible with some binding accessor
@@ -32,6 +33,9 @@ func execIndexAccess(v interface{}, index interface{}) (interface{}, error) {
 		return value.Interface(), nil
 	case reflect.Slice:
 		return lvalue.Index(index.(int)).Interface(), nil
+	case reflect.Ptr, reflect.Interface:
+		lvalue = lvalue.Elem()
+		goto doExecIndexAccess
 	default:
 		return nil, sqerrors.Errorf("cannot index value `%[1]v` of type `%[1]T` with index `%[2]v` of type `%[2]T`", v, index)
 	}
@@ -41,9 +45,7 @@ func execFieldAccess(value interface{}, field string) (interface{}, error) {
 	v := reflect.ValueOf(value)
 	for {
 		switch v.Kind() {
-		case reflect.Interface:
-			fallthrough
-		case reflect.Ptr:
+		case reflect.Interface, reflect.Ptr:
 			if m := v.MethodByName(field); m.IsValid() {
 				// Call the the method which is expected to take no argument and to return a
 				// single value. This line can panic on purpose as this is the primary way
@@ -86,12 +88,20 @@ func execFieldAccess(value interface{}, field string) (interface{}, error) {
 }
 
 func execCall(fn interface{}, args ...interface{}) (interface{}, error) {
-	// TODO: func type validation
+	fnValue := reflect.ValueOf(fn)
+	fnType := fnValue.Type()
+
 	argValues := make([]reflect.Value, len(args))
 	for i, a := range args {
-		argValues[i] = reflect.ValueOf(a)
+		if a != nil {
+			argValues[i] = reflect.ValueOf(a)
+		} else {
+			// Don't use nil to avoid panics when calling the function with reflect.
+			// Use instead the expected zero value for that argument type.
+			argValues[i] = reflect.Zero(fnType.In(i))
+		}
 	}
-	results := reflect.ValueOf(fn).Call(argValues)
+	results := fnValue.Call(argValues)
 
 	if r1 := results[1]; !r1.IsNil() {
 		return nil, r1.Interface().(error)
@@ -253,9 +263,7 @@ func flatKeys(v reflect.Value, depth int, elements *int) []interface{} {
 			}
 		}
 
-	case reflect.Ptr:
-		fallthrough
-	case reflect.Interface:
+	case reflect.Ptr, reflect.Interface:
 		// traverse the interface and don't count this iteration in the depth count
 		return flatKeys(v.Elem(), depth+1, elements)
 

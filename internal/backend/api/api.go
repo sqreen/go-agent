@@ -223,7 +223,10 @@ const (
 	CustomErrorPageType = "custom_error_page"
 	RedirectionType     = "redirection"
 	WAFType             = "waf"
+	CustomType          = "custom"
 )
+
+type CustomRuleDataEntry map[string]interface{}
 
 type CustomErrorPageRuleDataEntry struct {
 	StatusCode int `json:"status_code"`
