@@ -26,6 +26,21 @@ import (
 // This data can be therefore used using the binding accessor.
 type Context interface{}
 
+// BindingAccessorCacheFace is an optional interface that can be implemented by
+// a Context. When available, binding accessor results are cached in the context
+// and reused on every subsequent call using this same context. The key used to
+// cache a result is the binding accessor expression string `expr`.
+// The life time of the cache is the same as the life time of the binding
+// accessor context.
+type BindingAccessorCacheFace interface {
+	// Set a binding accessor expression result for the given value, possibly
+	// overwriting an existing one.
+	Set(expr string, value interface{})
+
+	// Get a binding accessor expression result.
+	Get(key string) (value interface{}, exists bool)
+}
+
 // BindingAccessorFunc is a compiled binding accessor expression function.
 // Errors or panics during the binding accessor execution are returned as an
 // error.
@@ -68,10 +83,36 @@ func Compile(expr string) (program BindingAccessorFunc, err error) {
 	return func(ctx Context) (value interface{}, err error) {
 		// Panics are how `reflect` returns forbidden and unexpected accesses.
 		// We need to catch any panic and return it as an error.
-		err = sqsafe.Call(func() error {
-			var err error
-			value, err = exprFn(ctx, MaxExecutionDepth)
-			return err
+		err = sqsafe.Call(func() (innerErr error) {
+			if cache, ok := ctx.(BindingAccessorCacheFace); ok {
+				if cached, ok := cache.Get(expr); ok {
+					// Use the cached result
+					if err, ok := cached.(error); ok {
+						// An execution error was cached
+						value = nil
+						innerErr = err
+					} else {
+						// A execution result value was cached (without execution error)
+						value = cached
+						innerErr = nil
+					}
+					return
+				}
+
+				// Cache the computed result when returning.
+				defer func() {
+					if innerErr != nil {
+						// Cache the error
+						cache.Set(expr, innerErr)
+					} else {
+						// Cache the value
+						cache.Set(expr, value)
+					}
+				}()
+			}
+
+			value, innerErr = exprFn(ctx, MaxExecutionDepth)
+			return innerErr
 		})
 		if err != nil {
 			return nil, sqerrors.Wrap(err, "binding accessor execution error")
