@@ -17,7 +17,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
-func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, values interface{}) (*BindingAccessorContextType, error) {
+func NewReflectedCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, values interface{}) (*BindingAccessorContextType, error) {
 	var c = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
@@ -28,9 +28,11 @@ func NewCallbackBindingAccessorContext(capabilities []string, args, res []reflec
 		case "func":
 			c.Func = NewFunctionBindingAccessorContext(args, res)
 		case "request":
-			c.RequestBindingAccessorContext = NewRequestCallbackBindingAccessorContext(req)
+			c.RequestBindingAccessorContext = NewRequestBindingAccessorContext(req)
 		case "lib":
 			c.Lib = NewLibraryBindingAccessorContext()
+		case "cache":
+			c.BindingAccessorResultCache = MakeBindingAccessorResultCache()
 		default:
 			return nil, sqerrors.Errorf("unknown binding accessor capability `%s`", cap)
 		}
@@ -111,6 +113,19 @@ type BindingAccessorContextType struct {
 	SQL  *SQLBindingAccessorContextType
 	Rule *RuleBindingAccessorContextType
 	*RequestBindingAccessorContext
+	BindingAccessorResultCache
+}
+
+type WAFBindingAccessorContextType struct {
+	RequestBindingAccessorContext
+	BindingAccessorResultCache
+}
+
+func MakeWAFCallbackBindingAccessorContext(request types.RequestReader) WAFBindingAccessorContextType {
+	return WAFBindingAccessorContextType{
+		RequestBindingAccessorContext: MakeRequestBindingAccessorContext(request),
+		BindingAccessorResultCache:    MakeBindingAccessorResultCache(),
+	}
 }
 
 type FuncCallBindingAccessorContextType struct {
@@ -124,10 +139,42 @@ type RequestBindingAccessorContext struct {
 	Request *httpprotection.RequestBindingAccessorContext
 }
 
-func NewRequestCallbackBindingAccessorContext(request types.RequestReader) *RequestBindingAccessorContext {
-	ctx := &RequestBindingAccessorContext{}
-	ctx.Request = httpprotection.NewRequestBindingAccessorContext(request)
-	return ctx
+// BindingAccessorResultCache is a simple result cache. There is no result
+// invalidation here as this first iteration is about caching results per
+// call site, meaning that a new cache should be used every time a new
+// binding accessor context is created.
+type BindingAccessorResultCache map[string]interface{}
+
+func MakeBindingAccessorResultCache() BindingAccessorResultCache {
+	cache := make(BindingAccessorResultCache)
+	return cache
+}
+
+func (b BindingAccessorResultCache) Set(expr string, value interface{}) {
+	if b == nil {
+		return
+	}
+	b[expr] = value
+}
+
+func (b BindingAccessorResultCache) Get(expr string) (value interface{}, exists bool) {
+	if b == nil {
+		return nil, false
+	}
+
+	value, exists = b[expr]
+	return
+}
+
+func NewRequestBindingAccessorContext(request types.RequestReader) *RequestBindingAccessorContext {
+	ctx := MakeRequestBindingAccessorContext(request)
+	return &ctx
+}
+
+func MakeRequestBindingAccessorContext(request types.RequestReader) RequestBindingAccessorContext {
+	return RequestBindingAccessorContext{
+		Request: httpprotection.NewRequestBindingAccessorContext(request),
+	}
 }
 
 // Library of functions accessible to binding accessor expressions

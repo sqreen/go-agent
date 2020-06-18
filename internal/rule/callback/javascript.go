@@ -39,7 +39,7 @@ func NewJSExecCallback(rule RuleFace, cfg ReflectedCallbackConfig) (sqhook.Refle
 			defer pool.put(vm)
 
 			// Make benefit from the fact this is a protection callback to also get the request reader
-			baCtx, err := NewCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, nil, ctx.RequestReader, cfg.Data())
+			baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, nil, ctx.RequestReader, cfg.Data())
 			if err != nil {
 				return err
 			}
