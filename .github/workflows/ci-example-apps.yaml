@@ -10,6 +10,7 @@ jobs:
     strategy:
       matrix:
         example: [ alpine, debian, scratch ]
+        go-version: [ rc, 1.14, 1.13, 1.12]
         do-vendoring: [ true, false ]
     runs-on: ubuntu-latest
     steps:
@@ -20,5 +21,5 @@ jobs:
       - run: go mod vendor
         name: Vendor the dependencies
         if: ${{ matrix.do-vendoring }}
-      - run: docker build -f ${{ matrix.example }}/Dockerfile  -t hello-sqreen:${{ matrix.example }} .
+      - run: docker build -f ${{ matrix.example }}/Dockerfile -t hello-sqreen:${{ matrix.example }} --build-arg GO_VERSION=${{ matrix.go-version }} .
         working-directory: examples/docker
