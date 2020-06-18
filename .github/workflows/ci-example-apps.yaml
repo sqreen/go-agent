@@ -10,8 +10,15 @@ jobs:
     strategy:
       matrix:
         example: [ alpine, debian, scratch ]
+        do-vendoring: [ true, false ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Setup go
+        uses: actions/setup-go@v2
+        if: ${{ matrix.do-vendoring }}
+      - run: go mod vendor
+        name: Vendor the dependencies
+        if: ${{ matrix.do-vendoring }}
       - run: docker build -f ${{ matrix.example }}/Dockerfile  -t hello-sqreen:${{ matrix.example }} .
         working-directory: examples/docker
