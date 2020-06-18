@@ -73,7 +73,7 @@ func newWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waf_types.Ru
 		wafRule: wafRule,
 		prolog: func(p **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
 			ctx := *p
-			baCtx := NewRequestCallbackBindingAccessorContext(ctx.RequestReader)
+			baCtx := MakeWAFCallbackBindingAccessorContext(ctx.RequestReader)
 			args := make(waf_types.DataSet, len(bindingAccessors))
 			for expr, ba := range bindingAccessors {
 				value, err := ba(baCtx)
