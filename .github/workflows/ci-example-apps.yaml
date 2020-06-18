@@ -1,9 +1,9 @@
 name: Example App Builds
 on:
-  - push
-  - pull_request
-  - schedule:
-      - cron: "0 0 * * *"
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
 jobs:
   docker:
     name: Docker Examples
@@ -12,6 +12,6 @@ jobs:
         example: [ alpine, debian, scratch ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - run: docker build -f . -t hello-sqreen:${{ matrix.example }}
         working-directory: examples/docker/${{ matrix.example }}
