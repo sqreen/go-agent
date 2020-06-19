@@ -5,6 +5,8 @@
 package bindingaccessor_test
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,7 +15,6 @@ import (
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
-	"gopkg.in/go-playground/assert.v1"
 )
 
 type contextWithMethods struct{}
@@ -71,6 +72,12 @@ func TestBindingAccessor(t *testing.T) {
 			ExpectedValue: "Sqreen",
 		},
 		{
+			Title:         "string value",
+			Expression:    `'test'`,
+			Context:       nil,
+			ExpectedValue: "test",
+		},
+		{
 			Title:      "function value",
 			Expression: `#.A(#.B)`,
 			Context: struct {
@@ -78,6 +85,16 @@ func TestBindingAccessor(t *testing.T) {
 				B int
 			}{A: func(i int) (int, error) { return i, nil }, B: 23},
 			ExpectedValue: 23,
+		},
+		{
+			Title:      "function value given interface arguments",
+			Expression: `#.A(#.B, #.C)`,
+			Context: struct {
+				A func(s, v interface{}) (interface{}, error)
+				B []string
+				C string
+			}{A: func(s, v interface{}) (interface{}, error) { return append([]string{v.(string)}, s.([]string)...), nil }, B: []string{"b", "c"}, C: "a"},
+			ExpectedValue: []string{"a", "b", "c"},
 		},
 		{
 			Title:      "function value",
@@ -88,6 +105,43 @@ func TestBindingAccessor(t *testing.T) {
 				C struct{ D struct{ A, B, C, D string } }
 			}{A: func(d struct{ A, B, C, D string }) (struct{ A, B, C, D string }, error) { return d, nil }, B: 23, C: struct{ D struct{ A, B, C, D string } }{D: struct{ A, B, C, D string }{B: "yes"}}},
 			ExpectedValue: "yes",
+		},
+		{
+			Title:      "function value",
+			Expression: `#.A()`,
+			Context: struct {
+				A func() (int, error)
+				B int
+			}{A: func() (int, error) { return 33, nil }, B: 23},
+			ExpectedValue: 33,
+		},
+		{
+			Title:      "function value",
+			Expression: `#.A(#.B, #.C)`,
+			Context: struct {
+				A func(int, string) (string, error)
+				B int
+				C string
+			}{A: func(b int, c string) (string, error) { return fmt.Sprintf("%d %s", b, c), nil }, B: 23, C: "sqreen"},
+			ExpectedValue: "23 sqreen",
+		},
+		{
+			Title:      "function value returning an error",
+			Expression: `#.A()`,
+			Context: struct {
+				A func() (int, error)
+				B int
+			}{A: func() (int, error) { return 0, errors.New("error") }, B: 23},
+			ExpectedExecutionError: errors.New("error"),
+		},
+		{
+			Title:      "function value unexpected arg type",
+			Expression: `#.A()`,
+			Context: struct {
+				A func() (int, error)
+				B bool
+			}{A: func() (int, error) { return 0, errors.New("error") }, B: true},
+			ExpectedExecutionError: true,
 		},
 		{
 			Title:      "field value",
@@ -462,6 +516,8 @@ func TestBindingAccessor(t *testing.T) {
 					xerrors.Is(err, actual)
 				}
 				return
+			} else {
+				require.NoError(t, err)
 			}
 
 			if flatTransResult, ok := tc.ExpectedValue.(FlattenedResult); ok {
@@ -581,15 +637,5 @@ func TestBindingAccessorUsage(t *testing.T) {
 type FlattenedResult []interface{}
 
 func requireEqualFlatResult(t *testing.T, expected FlattenedResult, value interface{}) {
-	got := value.([]interface{})
-	require.Equal(t, len(expected), len(got), got)
-loop:
-	for _, f := range expected {
-		for _, g := range got {
-			if assert.IsEqual(g, f) {
-				continue loop
-			}
-		}
-		require.Failf(t, "missing expected value", "expected `%v` having type `%T`", f, f)
-	}
+	require.ElementsMatch(t, expected, value)
 }

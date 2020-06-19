@@ -5,8 +5,6 @@
 package callback
 
 import (
-	"reflect"
-
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
@@ -14,7 +12,7 @@ import (
 // NewCallback returns the callback object or function for the given callback
 // name. An error is returned if the callback name is unknown or an error
 // occurred during the constructor call.
-func NewNativeCallback(name string, ctx RuleFace) (prolog sqhook.PrologCallback, err error) {
+func NewNativeCallback(name string, ctx RuleFace, cfg NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
 	var callbackCtor NativeCallbackConstructorFunc
 	switch name {
 	default:
@@ -33,22 +31,22 @@ func NewNativeCallback(name string, ctx RuleFace) (prolog sqhook.PrologCallback,
 		callbackCtor = NewIPSecurityResponseCallback
 	case "UserSecurityResponse":
 		callbackCtor = NewUserSecurityResponseCallback
+	case "IPBlockList", "IPDenyList":
+		callbackCtor = NewIPDenyListCallback
 	}
-	return callbackCtor(ctx)
+	return callbackCtor(ctx, cfg)
 }
 
 // NewReflectedCallback returns the callback object or function for the given callback
 // name. An error is returned if the callback name is unknown or an error
 // occurred during the constructor call.
-func NewReflectedCallback(name string, prologFuncType reflect.Type, ctx RuleFace) (prolog sqhook.ReflectedPrologCallback, err error) {
+func NewReflectedCallback(name string, ctx RuleFace, cfg ReflectedCallbackConfig) (prolog sqhook.ReflectedPrologCallback, err error) {
 	var callbackCtor ReflectedCallbackConstructorFunc
 	switch name {
 	default:
 		return nil, sqerrors.Errorf("undefined reflected callback name `%s`", name)
-	case "":
-		fallthrough
-	case "JSExec":
+	case "", "JSExec":
 		callbackCtor = NewJSExecCallback
 	}
-	return callbackCtor(ctx, prologFuncType)
+	return callbackCtor(ctx, cfg)
 }

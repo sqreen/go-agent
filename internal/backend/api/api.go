@@ -223,7 +223,10 @@ const (
 	CustomErrorPageType = "custom_error_page"
 	RedirectionType     = "redirection"
 	WAFType             = "waf"
+	CustomType          = "custom"
 )
+
+type CustomRuleDataEntry map[string]interface{}
 
 type CustomErrorPageRuleDataEntry struct {
 	StatusCode int `json:"status_code"`
@@ -262,8 +265,7 @@ type ReflectedCallbackHTTPProtectionContextConfig struct {
 }
 
 type ReflectedCallbackHTTPProtectionConfig struct {
-	Context       ReflectedCallbackHTTPProtectionContextConfig `json:"context"`
-	BlockStrategy ReflectedCallbackBlockStrategyConfig         `json:"block_strategy"`
+	BlockStrategy ReflectedCallbackBlockStrategyConfig `json:"block_strategy"`
 }
 
 type ReflectedCallbackProtectionConfig struct {
@@ -559,20 +561,6 @@ type AppLoginResponseFace interface {
 	GetCommands() []CommandRequest
 	GetFeatures() AppLoginResponse_Feature
 	GetPackId() string
-}
-
-type AppLoginResponse_FeatureFace interface {
-	GetBatchSize() uint32
-	GetMaxStaleness() uint32
-	GetHeartbeatDelay() uint32
-}
-
-func NewAppLoginResponse_FeatureFromFace(that AppLoginResponse_FeatureFace) *AppLoginResponse_Feature {
-	this := &AppLoginResponse_Feature{}
-	this.BatchSize = that.GetBatchSize()
-	this.MaxStaleness = that.GetMaxStaleness()
-	this.HeartbeatDelay = that.GetHeartbeatDelay()
-	return this
 }
 
 type CommandResultFace interface {

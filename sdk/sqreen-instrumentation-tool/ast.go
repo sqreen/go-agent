@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"go/token"
 	"log"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -130,8 +129,8 @@ func newPrologLoadFuncDecl(ident string, prologVarSpec *dst.ValueSpec) *dst.Func
 									Fun: dst.NewIdent(sqreenAtomicLoadPointerFuncIdent),
 									Args: []dst.Expr{
 										newCastValueExpr(
-											newPointerTypeOf(newSqreenUnsafePointerType()),
-											newCastValueExpr(newSqreenUnsafePointerType(), newIdentAddressExpr(dst.NewIdent(prologVarName)))),
+											newSqreenUnsafePointerType(),
+											newIdentAddressExpr(dst.NewIdent(prologVarName))),
 									},
 								},
 							},
@@ -358,7 +357,7 @@ func newHookDescriptorFuncDecl(ident string, funcDecl *dst.FuncDecl, prologVarId
 func newLinkTimeSqreenAtomicLoadPointerFuncDecl() *dst.FuncDecl {
 	ftype := &dst.FuncType{
 		Params: &dst.FieldList{
-			List: []*dst.Field{{Type: &dst.StarExpr{X: newSqreenUnsafePointerType()}}},
+			List: []*dst.Field{{Type: newSqreenUnsafePointerType()}},
 		},
 		Results: &dst.FieldList{
 			List: []*dst.Field{{Type: newSqreenUnsafePointerType()}},
@@ -418,70 +417,6 @@ func newHookDescriptorType() (*dst.GenDecl, *dst.TypeSpec, hookDescriptorValueIn
 	}
 
 	return typ, spec, valInitializer
-}
-
-func isFileNameIgnored(file string) bool {
-	filename := filepath.Base(file)
-	// Don't instrument cgo files
-	if strings.Contains(filename, "cgo") {
-		return true
-	}
-	// Don't instrument the go module table file.
-	if filename == "_gomod_.go" {
-		return true
-	}
-	return false
-}
-
-var ignoredPkgPrefixes = []string{
-	"runtime",
-	"sync",
-	"reflect",
-	"internal",
-	"unsafe",
-	"syscall",
-	"time",
-	"math",
-}
-
-var limitedInstrumentationPkgPrefixes = []string{
-	"github.com/sqreen/go-agent/internal/protection",
-	"database/sql",
-}
-
-// Given the Go vendoring conventions, return the package prefix of the vendored
-// package. For example, given `my-app/vendor/github.com/sqreen/go-agent`,
-// the function should return `my-app/vendor/`
-func unvendorPackagePath(pkg string) (unvendored string) {
-	vendorDir := "/vendor/"
-	i := strings.Index(pkg, vendorDir)
-	if i == -1 {
-		return pkg
-	}
-	return pkg[i+len(vendorDir):]
-}
-
-func isPackageNameIgnored(pkg string, fullInstrumentation bool) bool {
-	pkg = unvendorPackagePath(pkg)
-
-	for _, prefix := range ignoredPkgPrefixes {
-		if strings.HasPrefix(pkg, prefix) {
-			return true
-		}
-	}
-
-	if fullInstrumentation {
-		return false
-	}
-
-	// Non-full instrumentation mode, limited to a set of given package
-	for _, prefix := range limitedInstrumentationPkgPrefixes {
-		if strings.HasPrefix(pkg, prefix) {
-			return false
-		}
-	}
-
-	return true
 }
 
 func shouldIgnoreFuncDecl(funcDecl *dst.FuncDecl) bool {

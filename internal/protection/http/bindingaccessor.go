@@ -24,13 +24,24 @@ type RequestBindingAccessorContext struct {
 	types.RequestReader
 }
 
-type RequestParams map[string]url.Values
+type (
+	// RequestParamsSet represents the set of parameters present in the HTTP request,
+	// such as URL query parameters, form values, cookies, etc. Every source of
+	// parameter is stored in its map key to avoid conflicts
+	// (cf. methods `Params()` and `FilteredParams()`).
+	// We are intentionally not using `url.Values` because of the JS VM constraint
+	// discussed here https://github.com/dop251/goja/issues/134: `url.Values` has
+	// methods and the key enumeration of such value results in the list of
+	// methods. Casting the type solves the issue, but it is not possible to cast
+	// nested type definitions like `RequestParamsSet` without copying the map and
+	// casting its values. To avoid this, we decided to change the type we return
+	// from binding accessors to types not having method helpers.
+	RequestParamsSet = map[string]RequestParams
+	RequestParams    = map[string][]string
+)
 
-func (set RequestParams) Add(key string, params url.Values) {
-	if len(params) > 0 {
-		set[key] = params
-	}
-}
+// Static assert that `url.Values` can be assigned to `RequestParams`.
+var _ RequestParams = url.Values(nil)
 
 func NewRequestBindingAccessorContext(r types.RequestReader) *RequestBindingAccessorContext {
 	return &RequestBindingAccessorContext{RequestReader: r}
@@ -52,14 +63,18 @@ func (c *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBind
 	return c, nil
 }
 
-func (r *RequestBindingAccessorContext) FilteredParams() RequestParams {
-	set := RequestParams{}
-	set.Add("Form", r.RequestReader.Form())
-	set.Add("Framework", r.RequestReader.FrameworkParams())
+func (r *RequestBindingAccessorContext) FilteredParams() RequestParamsSet {
+	set := RequestParamsSet{}
+	if form := r.RequestReader.Form(); len(form) > 0 {
+		set["Form"] = form
+	}
+	if framework := r.RequestReader.FrameworkParams(); len(framework) > 0 {
+		set["Framework"] = framework
+	}
 	return set
 }
 
-func (r *RequestBindingAccessorContext) Params() RequestParams {
+func (r *RequestBindingAccessorContext) Params() RequestParamsSet {
 	params := r.FilteredParams()
 	// TODO: cookies, etc.
 	return params
@@ -68,15 +83,3 @@ func (r *RequestBindingAccessorContext) Params() RequestParams {
 func (r *RequestBindingAccessorContext) Header(h string) (*string, error) {
 	return r.RequestReader.Header(h), nil
 }
-
-// Helper types for callbacks who must be designed for this protection so that
-// they are the source of truth and so that the compiler catches type issues
-// when compiling (versus when the callback is attached).
-type (
-	NonBlockingPrologCallbackType        = func(**RequestContext) (NonBlockingEpilogCallbackType, error)
-	BlockingPrologCallbackType           = func(**RequestContext) (BlockingEpilogCallbackType, error)
-	IdentifyUserPrologCallbackType       = func(**RequestContext, *map[string]string) (BlockingEpilogCallbackType, error)
-	ResponseMonitoringPrologCallbackType = func(**RequestContext, *types.ResponseFace) (NonBlockingEpilogCallbackType, error)
-	NonBlockingEpilogCallbackType        = func()
-	BlockingEpilogCallbackType           = func(*error)
-)

@@ -2,7 +2,8 @@
 # creating a final alpine docker image.
 
 # Build docker image
-FROM golang:1 AS build
+ARG GO_VERSION=1
+FROM golang:$GO_VERSION AS build
 # Workdir out of the GOPATH to enable the Go modules mode.
 WORKDIR /app
 COPY . .

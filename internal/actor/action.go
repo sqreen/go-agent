@@ -95,17 +95,17 @@ func (a *timedAction) Expired() bool {
 	return time.Now().After(a.deadline)
 }
 
-type whitelistAction struct {
+type ipListAction struct {
 	// The CIDR is used as action ID
 	CIDR string
 }
 
-func newWhitelistAction(cidr string) whitelistAction {
-	return whitelistAction{
+func newIPListAction(cidr string) ipListAction {
+	return ipListAction{
 		CIDR: cidr,
 	}
 }
 
-func (a whitelistAction) ActionID() string {
+func (a ipListAction) ActionID() string {
 	return a.CIDR
 }

@@ -240,17 +240,17 @@ func TestUsage(t *testing.T) {
 		// Aggregate the ready metrics the reader retrieved and check the previous
 		// store finish time is before the current store start time.
 		results := make(metrics.ReadyStoreMap)
-		lastStoreFinish := started
+		prevStoreFinish := started
 		for _, store := range metricsArray {
 			for k, v := range store.Metrics() {
 				results[k] += v
 			}
-			if !lastStoreFinish.IsZero() {
-				require.True(t, lastStoreFinish.Before(store.Start()), fmt.Sprint(lastStoreFinish, store))
+			if !prevStoreFinish.IsZero() {
+				require.True(t, prevStoreFinish.Before(store.Start()) || prevStoreFinish.Equal(store.Start()), fmt.Sprint(prevStoreFinish, store.Start()))
 			}
-			lastStoreFinish = store.Finish()
+			prevStoreFinish = store.Finish()
 		}
-		require.True(t, lastStoreFinish.Before(finished))
+		require.True(t, prevStoreFinish.Before(finished) || prevStoreFinish.Equal(finished))
 
 		// Check each writer wrote the expected number of times.
 		for n := 0; n < nbWrites; n++ {

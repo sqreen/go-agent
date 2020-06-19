@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/sqreen/go-agent/internal/app"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
@@ -43,7 +42,6 @@ type Engine struct {
 	enabled               bool
 	metricsEngine         *metrics.Engine
 	publicKey             *ecdsa.PublicKey
-	vendorPrefix          string
 	instrumentationEngine InstrumentationFace
 	errorMetricsStore     *metrics.Store
 }
@@ -60,16 +58,10 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 		instrumentationEngine = defaultInstrumentationEngine
 	}
 
-	vendorPrefix := app.VendorPrefix()
-	if vendorPrefix != "" {
-		logger.Debugf("vendor folder detected at `%s`", vendorPrefix)
-	}
-
 	return &Engine{
 		logger:                logger,
 		metricsEngine:         metricsEngine,
 		publicKey:             publicKey,
-		vendorPrefix:          vendorPrefix,
 		instrumentationEngine: instrumentationEngine,
 		errorMetricsStore:     errorMetricsStore,
 	}
@@ -166,13 +158,6 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
 			continue
 		}
-		if hook == nil && e.vendorPrefix != "" {
-			hook, err = e.instrumentationEngine.Find(e.vendorPrefix + symbol)
-			if err != nil {
-				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
-				continue
-			}
-		}
 		if hook == nil {
 			logger.Debugf("security rules: rule `%s`: could not find the hook of function `%s`", r.Name, symbol)
 			continue
@@ -194,10 +179,14 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 		}
 
 		switch hookpoint.Strategy {
-		case "":
-			fallthrough
-		case "native":
-			prolog, err := callback.NewNativeCallback(hookpoint.Callback, callbackContext)
+		case "", "native":
+			cfg, err := newNativeCallbackConfig(&r)
+			if err != nil {
+				logger.Error(sqerrors.Wrap(err, "callback configuration"))
+				continue
+			}
+
+			prolog, err := callback.NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
@@ -207,7 +196,13 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			hookDescriptors.Set(hook, prolog)
 
 		case "reflected":
-			prolog, err := callback.NewReflectedCallback(hookpoint.Callback, hook.PrologFuncType(), callbackContext)
+			cfg, err := newReflectedCallbackConfig(&r)
+			if err != nil {
+				logger.Error(sqerrors.Wrap(err, "callback configuration"))
+				continue
+			}
+
+			prolog, err := callback.NewReflectedCallback(hookpoint.Callback, callbackContext, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrap(err, fmt.Sprintf("security rules: rule `%s`: callback constructor", r.Name)))
 				continue

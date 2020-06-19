@@ -17,10 +17,10 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallback(rule RuleFace) (sqhook.PrologCallback, error) {
+func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var statusCode = 500 // default status code
-	if cfg := rule.Config().Data(); cfg != nil {
-		cfg, ok := cfg.(*api.CustomErrorPageRuleDataEntry)
+	if data := cfg.Data(); data != nil {
+		cfg, ok := data.(*api.CustomErrorPageRuleDataEntry)
 		if !ok {
 			return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", cfg)
 		}
@@ -34,8 +34,8 @@ func NewWriteCustomErrorPageCallback(rule RuleFace) (sqhook.PrologCallback, erro
 func newWriteCustomErrorPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
 	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
 		ctx := *m
-		// Note that the header must be written first because body writting will
-		// otherwise write the default OK status
+		// Note that the header must be written first since writing the body first
+		// leads to the default OK status.
 		ctx.ResponseWriter.WriteHeader(statusCode)
 		ctx.ResponseWriter.WriteString(blockedBySqreenPage)
 		return nil, nil

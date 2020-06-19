@@ -9,99 +9,191 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMiddleware(t *testing.T) {
-	//t.Run("without security response", func(t *testing.T) {
-	//	agent, record := testlib.NewAgentForMiddlewareTestsWithoutSecurityResponse()
-	//	sdk.SetAgent(agent)
-	//	defer agent.AssertExpectations(t)
-	//	defer record.AssertExpectations(t)
-	//
-	//	req, _ := http.NewRequest("GET", "/hello", nil)
-	//	body := testlib.RandUTF8String(4096)
-	//	// Create a router
-	//	router := http.NewServeMux()
-	//	// Add an endpoint accessing the SDK handle
-	//	subrouter := http.NewServeMux()
-	//	subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
-	//		require.NotNil(t, sdk.FromContext(req.Context()), "The middleware should attach its handle object to the requestImplType's context")
-	//		w.Write([]byte(body))
-	//		w.WriteHeader(http.StatusOK)
-	//	})
-	//	router.Handle("/", sqhttp.Middleware(subrouter))
-	//	// Perform the requestImplType and record the output
-	//	rec := httptest.NewRecorder()
-	//	router.ServeHTTP(rec, req)
-	//	// Check the requestImplType was performed as expected
-	//	require.Equal(t, http.StatusOK, rec.Code)
-	//	require.Equal(t, body, rec.Body.String())
-	//})
+type ResponseWriterMockup struct {
+	mock.Mock
+}
 
-	//t.Run("with security response", func(t *testing.T) {
-	//	t.Run("ip security response", func(t *testing.T) {
-	//		status := http.StatusBadRequest
-	//		agent, record := testlib.NewAgentForMiddlewareTestsWithSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	//			w.WriteHeader(status)
-	//		}))
-	//		sdk.SetAgent(agent)
-	//		defer agent.AssertExpectations(t)
-	//		defer record.AssertExpectations(t)
-	//
-	//		// Create a router
-	//		router := http.NewServeMux()
-	//		// Add an endpoint accessing the SDK handle
-	//		subrouter := http.NewServeMux()
-	//		subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
-	//			panic("must not be called")
-	//		})
-	//		router.Handle("/", sqhttp.Middleware(subrouter))
-	//		// Perform the requestImplType and record the output
-	//		req, _ := http.NewRequest("GET", "/hello", nil)
-	//		rec := httptest.NewRecorder()
-	//		router.ServeHTTP(rec, req)
-	//		// Check the requestImplType was performed as expected
-	//		require.Equal(t, rec.Body.String(), "")
-	//		require.Equal(t, rec.Code, status)
-	//	})
-	//
-	//	t.Run("user response", func(t *testing.T) {
-	//		status := http.StatusBadRequest
-	//		agent, record := testlib.NewAgentForMiddlewareTestsWithUserSecurityResponse(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	//			w.WriteHeader(status)
-	//		}))
-	//		uid := sdk.EventUserIdentifiersMap{}
-	//		record.ExpectIdentify(uid)
-	//		sdk.SetAgent(agent)
-	//		defer agent.AssertExpectations(t)
-	//		defer record.AssertExpectations(t)
-	//
-	//		// Create a router
-	//		router := http.NewServeMux()
-	//		// Add an endpoint accessing the SDK handle
-	//		subrouter := http.NewServeMux()
-	//		subrouter.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
-	//			sqreen := sdk.FromContext(req.Context())
-	//			sqUser := sqreen.ForUser(uid)
-	//			sqUser.Identify()
-	//			match, err := sqUser.MatchSecurityResponse()
-	//			require.True(t, match)
-	//			require.Error(t, err)
-	//		})
-	//		router.Handle("/", sqhttp.Middleware(subrouter))
-	//		// Perform the requestImplType and record the output
-	//		req, _ := http.NewRequest("GET", "/hello", nil)
-	//		rec := httptest.NewRecorder()
-	//		router.ServeHTTP(rec, req)
-	//		// Check the requestImplType was performed as expected
-	//		require.Equal(t, rec.Body.String(), "")
-	//		require.Equal(t, rec.Code, status)
-	//	})
-	//})
+func (r *ResponseWriterMockup) Header() http.Header {
+	h, _ := r.Called().Get(0).(http.Header)
+	return h
+}
+
+func (r *ResponseWriterMockup) Write(bytes []byte) (int, error) {
+	ret := r.Called(bytes)
+	return ret.Int(0), ret.Error(1)
+}
+
+func (r *ResponseWriterMockup) WriteHeader(statusCode int) {
+	r.Called(statusCode)
+}
+
+func (r *ResponseWriterMockup) WriteString(s string) (n int, err error) {
+	ret := r.Called(s)
+	return ret.Int(0), ret.Error(1)
+}
+
+type RequestReaderMockup struct {
+	mock.Mock
+}
+
+func (r *RequestReaderMockup) Header(header string) (value *string) {
+	value, _ = r.Called(header).Get(0).(*string)
+	return value
+}
+
+func (r *RequestReaderMockup) Headers() http.Header {
+	h, _ := r.Called().Get(0).(http.Header)
+	return h
+}
+
+func (r *RequestReaderMockup) Method() string {
+	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) URL() *url.URL {
+	u, _ := r.Called().Get(0).(*url.URL)
+	return u
+}
+
+func (r *RequestReaderMockup) ExpectURL() *mock.Call {
+	return r.On("URL")
+}
+
+func (r *RequestReaderMockup) RequestURI() string {
+	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) Host() string {
+	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) RemoteAddr() string {
+	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) IsTLS() bool {
+	return r.Called().Bool(0)
+}
+
+func (r *RequestReaderMockup) UserAgent() string {
+	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) Referer() string {
+	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) Form() url.Values {
+	v, _ := r.Called().Get(0).(url.Values)
+	return v
+}
+
+func (r *RequestReaderMockup) PostForm() url.Values {
+	v, _ := r.Called().Get(0).(url.Values)
+	return v
+}
+
+func (r *RequestReaderMockup) ClientIP() net.IP {
+	ip, _ := r.Called().Get(0).(net.IP)
+	return ip
+}
+
+func (r *RequestReaderMockup) ExpectClientIP() *mock.Call {
+	return r.On("ClientIP")
+}
+
+func (r *RequestReaderMockup) FrameworkParams() url.Values {
+	v, _ := r.Called().Get(0).(url.Values)
+	return v
+}
+
+func TestProtectionAPI(t *testing.T) {
+	t.Run("passlists", func(t *testing.T) {
+		t.Run("ip allowed", func(t *testing.T) {
+			agentMockup := &mockups.AgentMockup{}
+			defer agentMockup.AssertExpectations(t)
+
+			responseWriterMockup := &ResponseWriterMockup{}
+			defer responseWriterMockup.AssertExpectations(t)
+
+			requestReaderMockup := &RequestReaderMockup{}
+			defer requestReaderMockup.AssertExpectations(t)
+			ip := net.ParseIP("1.2.3.4")
+			requestReaderMockup.ExpectClientIP().Return(ip)
+			agentMockup.ExpectIsIPAllowed(ip).Return(true)
+
+			ctx := NewRequestContext(agentMockup, responseWriterMockup, requestReaderMockup, func() {
+				panic("unexpected call to cancel")
+			})
+			require.Nil(t, ctx)
+		})
+
+		t.Run("path allowed", func(t *testing.T) {
+			agentMockup := &mockups.AgentMockup{}
+			defer agentMockup.AssertExpectations(t)
+
+			responseWriterMockup := &ResponseWriterMockup{}
+			defer responseWriterMockup.AssertExpectations(t)
+
+			requestReaderMockup := &RequestReaderMockup{}
+			defer requestReaderMockup.AssertExpectations(t)
+
+			// The IP is not allowed
+			ip := net.ParseIP("1.2.3.4")
+			requestReaderMockup.ExpectClientIP().Return(ip)
+			agentMockup.ExpectIsIPAllowed(ip).Return(false)
+
+			// The request path is allowed
+			u, err := url.Parse("https://test.com/foo/bar/")
+			require.NoError(t, err)
+			requestReaderMockup.ExpectURL().Return(u)
+			agentMockup.ExpectIsPathAllowed(u.Path).Return(true)
+
+			ctx := NewRequestContext(agentMockup, responseWriterMockup, requestReaderMockup, func() {
+				panic("unexpected call to cancel")
+			})
+			require.Nil(t, ctx)
+		})
+
+		t.Run("none allowed", func(t *testing.T) {
+			agentMockup := &mockups.AgentMockup{}
+			defer agentMockup.AssertExpectations(t)
+
+			responseWriterMockup := &ResponseWriterMockup{}
+			defer responseWriterMockup.AssertExpectations(t)
+
+			requestReaderMockup := &RequestReaderMockup{}
+			defer requestReaderMockup.AssertExpectations(t)
+
+			// The IP is not allowed
+			ip := net.ParseIP("1.2.3.4")
+			requestReaderMockup.ExpectClientIP().Return(ip)
+			agentMockup.ExpectIsIPAllowed(ip).Return(false)
+
+			// The request path is not allowed
+			u, err := url.Parse("https://test.com/foo/bar/")
+			require.NoError(t, err)
+			requestReaderMockup.ExpectURL().Return(u)
+			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
+
+			ctx := NewRequestContext(agentMockup, responseWriterMockup, requestReaderMockup, func() {
+				panic("unexpected call to cancel")
+			})
+
+			require.NotNil(t, ctx)
+		})
+	})
+
+	// TODO: more test cases
 }
 
 func TestParseClientIPHeaderHeaderValue(t *testing.T) {

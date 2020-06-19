@@ -193,7 +193,7 @@ type AgentType struct {
 }
 
 type staticMetrics struct {
-	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, whitelistedIP, errors *metrics.Store
+	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, allowedIP, allowedPath, errors *metrics.Store
 }
 
 // Error channel buffer length.
@@ -256,7 +256,8 @@ func New(cfg *config.Config) *AgentType {
 			sdkUserLoginSuccess: metrics.GetStore("sdk-login-success", sdkMetricsPeriod),
 			sdkUserLoginFailure: metrics.GetStore("sdk-login-fail", sdkMetricsPeriod),
 			sdkUserSignup:       metrics.GetStore("sdk-signup", sdkMetricsPeriod),
-			whitelistedIP:       metrics.GetStore("whitelisted", sdkMetricsPeriod),
+			allowedIP:           metrics.GetStore("whitelisted", sdkMetricsPeriod),
+			allowedPath:         metrics.GetStore("whitelisted_paths", sdkMetricsPeriod),
 			errors:              errorMetrics,
 		},
 		ctx:         ctx,
@@ -323,17 +324,6 @@ func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextF
 	}
 
 	return nil
-}
-
-func (a *AgentType) IsIPWhitelisted(ip net.IP) (whitelisted bool) {
-	whitelisted, matched, err := a.actors.IsIPWhitelisted(ip)
-	if err != nil {
-		a.logger.Error(sqerrors.Wrapf(err, "agent: unexpected error while looking-up the ip whitelist with `%s`", ip))
-	}
-	if whitelisted {
-		a.addWhitelistEvent(matched)
-	}
-	return whitelisted
 }
 
 type withNotificationError struct {
@@ -447,11 +437,11 @@ func (a *AgentType) Serve() error {
 	}
 }
 
-func (a *AgentType) InstrumentationEnable() (string, error) {
+func (a *AgentType) EnableInstrumentation() (string, error) {
 	var id string
 	if a.rules.Count() == 0 {
 		var err error
-		id, err = a.RulesReload()
+		id, err = a.ReloadRules()
 		if err != nil {
 			return "", err
 		}
@@ -464,9 +454,9 @@ func (a *AgentType) InstrumentationEnable() (string, error) {
 	return id, nil
 }
 
-// InstrumentationDisable disables the agent instrumentation, which includes for
+// DisableInstrumentation disables the agent instrumentation, which includes for
 // now the SDK.
-func (a *AgentType) InstrumentationDisable() error {
+func (a *AgentType) DisableInstrumentation() error {
 	a.setRunning(false)
 	a.rules.Disable()
 	err := a.actors.SetActions(nil)
@@ -474,7 +464,7 @@ func (a *AgentType) InstrumentationDisable() error {
 	return err
 }
 
-func (a *AgentType) ActionsReload() error {
+func (a *AgentType) ReloadActions() error {
 	actions, err := a.client.ActionsPack()
 	if err != nil {
 		a.logger.Error(err)
@@ -500,11 +490,37 @@ func (a *AgentType) SendAppBundle() error {
 	return a.client.SendAppBundle(&bundle)
 }
 
-func (a *AgentType) SetCIDRWhitelist(cidrs []string) error {
-	return a.actors.SetCIDRWhitelist(cidrs)
+func (a *AgentType) SetCIDRIPPasslist(cidrs []string) error {
+	return a.actors.SetCIDRIPPasslist(cidrs)
 }
 
-func (a *AgentType) RulesReload() (string, error) {
+func (a *AgentType) IsIPAllowed(ip net.IP) (allowed bool) {
+	allowed, matched, err := a.actors.IsIPAllowed(ip)
+	if err != nil {
+		a.logger.Error(sqerrors.Wrapf(err, "agent: unexpected error while searching `%s` into the ip passlist", ip))
+	}
+	if allowed {
+		a.addIPPasslistEvent(matched)
+		a.logger.Debugf("ip address `%s` matched the passlist entry `%s` and is allowed to pass through Sqreen monitoring and protections", ip, matched)
+	}
+	return allowed
+}
+
+func (a *AgentType) SetPathPasslist(paths []string) error {
+	a.actors.SetPathPasslist(paths)
+	return nil
+}
+
+func (a *AgentType) IsPathAllowed(path string) (allowed bool) {
+	allowed = a.actors.IsPathAllowed(path)
+	if allowed {
+		a.addPathPasslistEvent(path)
+		a.logger.Debugf("request path `%s` found in the passlist and is allowed to pass through Sqreen monitoring and protections", path)
+	}
+	return allowed
+}
+
+func (a *AgentType) ReloadRules() (string, error) {
 	rulespack, err := a.client.RulesPack()
 	if err != nil {
 		a.logger.Error(err)

@@ -5,7 +5,7 @@
 package callback_test
 
 //func TestNewMonitorHTTPStatusCodeCallbacks(t *testing.T) {
-//	RunCallbackTest(t, TestConfig{
+//	RunNativeCallbackTest(t, TestConfig{
 //		CallbacksCtor: callback.NewMonitorHTTPStatusCodeCallback,
 //		ExpectProlog:  true,
 //		PrologType:    reflect.TypeOf(callback.MonitorHTTPStatusCodePrologCallbackType(nil)),

@@ -187,6 +187,12 @@ func (r *requestReaderImpl) RemoteAddr() string {
 type responseWriterImpl struct {
 	c      *gingonic.Context
 	closed bool
+	// Gin allows overwriting the status field even when it was already done and
+	// sent over the network. It can therefore lead to a status code distinct from
+	// what was actually sent. To avoid this problem, we record the status code
+	// we see going through this wrapper. Note that the absence of dynamic
+	// dispatch in Go can allow to avoid this wrapper.
+	writtenStatus int
 }
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
@@ -222,6 +228,7 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 		return
 	}
 	w.c.Writer.WriteHeader(statusCode)
+	w.writtenStatus = statusCode
 }
 
 // response observed by the response writer
@@ -244,7 +251,11 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 		}
 	}
 
-	status := r.c.Writer.Status()
+	// Take the status code we observed, and Gin's if none.
+	status := r.writtenStatus
+	if status == 0 {
+		status = r.c.Writer.Status()
+	}
 
 	return &observedResponse{
 		contentType:   ct,

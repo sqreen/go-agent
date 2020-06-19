@@ -302,6 +302,13 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*me
 		for name, values := range readyMetrics {
 			observations := make(map[string]int64, len(values.Metrics()))
 			for k, v := range values.Metrics() {
+				// String keys are directly added
+				if s, ok := k.(string); ok {
+					observations[s] = v
+					continue
+				}
+
+				// Non-string keys are serialized into json
 				jsonKey, err := json.Marshal(k)
 				if err != nil {
 					logger.Error(sqerrors.Wrapf(err, "could not marshal to json key the value `%v` of type `%T`", k, k))

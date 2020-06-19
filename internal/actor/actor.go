@@ -8,8 +8,9 @@ import (
 	"crypto/sha256"
 	"math"
 	"net"
-	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/kentik/patricia"
 	"github.com/pkg/errors"
@@ -18,9 +19,9 @@ import (
 )
 
 // Store is the structure associating IP addresses or user IDs to security
-// actions such as whitelisting and blacklisting. It wraps several underlying
+// actions such as passlisting and denylisting. It wraps several underlying
 // memory- and cpu-efficient data-structures, and provides the API the agent
-// expects. It is designed to have the shortest possible lookup time from HTTP
+// needs. It is designed to have the shortest possible lookup time from HTTP
 // request handlers while providing the ability the load other security actions
 // concurrently, without locking the actionStore operations. To do so, when a
 // new set of actions is received, a new actionStore is created while still
@@ -30,16 +31,13 @@ import (
 // limited to the time to modify the actionStore pointer, hence the smallest
 // possible locking time.
 type Store struct {
-	actionStore struct {
-		// Store pointer access RW lock.
-		lock  sync.RWMutex
-		store *actionStore
-	}
-	whitelistStore struct {
-		// Store pointer access RW lock.
-		lock  sync.RWMutex
-		store *CIDRWhitelistStore
-	}
+	// The store of security response actions per IP address or user identifier.
+	actionStore *actionStore
+	// The store of the IP passlist.
+	cidrIPPasslistStore *CIDRIPListStore
+	// The store of the path passlist.
+	pathPasslistStore *PathListStore
+
 	logger *plog.Logger
 }
 
@@ -49,57 +47,74 @@ func NewStore(logger *plog.Logger) *Store {
 	}
 }
 
-// SetCIDRWhitelist creates a new whitelist store and then replaces the current
+// SetPathPasslist creates a new passlist store and then replaces the current
 // one. The new store is built while allowing accesses to the current one.
-func (s *Store) SetCIDRWhitelist(cidrs []string) error {
-	store, err := NewCIDRWhitelistStore(cidrs)
+func (s *Store) SetPathPasslist(paths []string) {
+	store := NewPathListStore(paths)
+	s.setPathPasslistStore(store)
+}
+
+// getCIDRPasslistStore is a thread-safe store getter.
+func (s *Store) getPathPasslistStore() (store *PathListStore) {
+	return (*PathListStore)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&s.pathPasslistStore))))
+}
+
+// setPathPasslistStore is a thread-safe store setter.
+func (s *Store) setPathPasslistStore(store *PathListStore) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&s.pathPasslistStore)), unsafe.Pointer(store))
+}
+
+// IsPathAllowed returns true when the given path matched a passlist entry.
+// The error is non-nil when an internal error occurred.
+func (s *Store) IsPathAllowed(path string) (allowed bool) {
+	passlist := s.getPathPasslistStore()
+	if passlist == nil {
+		return false
+	}
+	return passlist.Find(path)
+}
+
+// SetCIDRIPPasslist creates a new passlist store and then replaces the current
+// one. The new store is built while allowing accesses to the current one.
+func (s *Store) SetCIDRIPPasslist(cidrs []string) error {
+	store, err := NewCIDRIPListStore(cidrs)
 	if err != nil {
 		s.logger.Error(err)
 		return err
 	}
-	s.setCIDRWhitelistStore(store)
+	s.setCIDRPasslistStore(store)
 	return nil
 }
 
-// getCIDRWhitelistStore is a thread-safe cidrWhitelistStore pointer getter.
-func (s *Store) getCIDRWhitelistStore() (store *CIDRWhitelistStore) {
-	s.whitelistStore.lock.RLock()
-	store = s.whitelistStore.store
-	s.whitelistStore.lock.RUnlock()
-	return
+// getCIDRPasslistStore is a thread-safe store getter.
+func (s *Store) getCIDRPasslistStore() (store *CIDRIPListStore) {
+	return (*CIDRIPListStore)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&s.cidrIPPasslistStore))))
 }
 
-// setCIDRWhitelistStore is a thread-safe cidrWhitelistStore pointer setter.
-func (s *Store) setCIDRWhitelistStore(store *CIDRWhitelistStore) {
-	s.whitelistStore.lock.Lock()
-	s.whitelistStore.store = store
-	s.whitelistStore.lock.Unlock()
+// setCIDRPasslistStore is a thread-safe store setter.
+func (s *Store) setCIDRPasslistStore(store *CIDRIPListStore) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&s.cidrIPPasslistStore)), unsafe.Pointer(store))
 }
 
-// IsIPWhitelisted returns true when the given IP address matched a whitelist
-// entry. This matched whitelist entry is also returned. The error is non-nil
+// IsIPAllowed returns true when the given IP address matched a passlist
+// entry. This matched passlist entry is also returned. The error is non-nil
 // when an internal error occurred.
-func (s *Store) IsIPWhitelisted(ip net.IP) (whitelisted bool, matchedCIDR string, err error) {
-	whitelist := s.getCIDRWhitelistStore()
-	if whitelist == nil {
+func (s *Store) IsIPAllowed(ip net.IP) (allowed bool, matchedCIDR string, err error) {
+	passlist := s.getCIDRPasslistStore()
+	if passlist == nil {
 		return false, "", nil
 	}
-	return whitelist.Find(ip)
+	return passlist.Find(ip)
 }
 
 // getActionStore is a thread-safe actionStore pointer getter.
 func (s *Store) getActionStore() (store *actionStore) {
-	s.actionStore.lock.RLock()
-	store = s.actionStore.store
-	s.actionStore.lock.RUnlock()
-	return
+	return (*actionStore)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&s.actionStore))))
 }
 
 // setActionStore is a thread-safe actionStore pointer setter.
 func (s *Store) setActionStore(store *actionStore) {
-	s.actionStore.lock.Lock()
-	s.actionStore.store = store
-	s.actionStore.lock.Unlock()
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&s.actionStore)), unsafe.Pointer(store))
 }
 
 // FindIP returns the security action of the given IP v4/v6 address. The
@@ -359,5 +374,5 @@ func NewUserIdentifiersHash(id map[string]string) UserIdentifiersHash {
 			hash[i] += k[i] + v[i]
 		}
 	}
-	return UserIdentifiersHash(hash)
+	return hash
 }

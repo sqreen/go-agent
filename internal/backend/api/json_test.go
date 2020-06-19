@@ -56,10 +56,6 @@ func TestJSON(t *testing.T) {
 		//	NewMessage: api.NewAppLoginResponseFromFace,
 		//},
 		{
-			Object:     &AppLoginResponse_Feature{},
-			NewMessage: api.NewAppLoginResponse_FeatureFromFace,
-		},
-		{
 			Object:     &CommandResult{},
 			NewMessage: api.NewCommandResultFromFace,
 		},

@@ -10,7 +10,7 @@ package callback_test
 //		t.SkipNow()
 //	}
 //
-//	RunCallbackTest(t, TestConfig{
+//	RunNativeCallbackTest(t, TestConfig{
 //		CallbacksCtor: callback.NewWAFCallback,
 //		ExpectProlog:  true,
 //		InvalidTestCases: []interface{}{

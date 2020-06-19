@@ -59,24 +59,36 @@ func TestCommandManager(t *testing.T) {
 	}{
 		{
 			Command:                "instrumentation_enable",
-			ExpectedAgentCall:      agent.ExpectInstrumentationEnable,
+			ExpectedAgentCall:      agent.ExpectEnableInstrumentation,
 			AgentCallReturnNoError: []interface{}{"my pack id", nil},
 			AgentCallReturnError:   []interface{}{"", nil},
 			ExpectedOutput:         "my pack id",
 		},
 		{
 			Command:           "instrumentation_remove",
-			ExpectedAgentCall: agent.ExpectInstrumentationDisable,
+			ExpectedAgentCall: agent.ExpectDisableInstrumentation,
 		},
 		{
 			Command:           "actions_reload",
-			ExpectedAgentCall: agent.ExpectActionsReload,
+			ExpectedAgentCall: agent.ExpectReloadActions,
 		},
 		{
 			Command:           "ips_whitelist",
 			Args:              []json.RawMessage{json.RawMessage(`["a","b","c"]`)},
 			ExpectedArgs:      []interface{}{[]string{"a", "b", "c"}},
-			ExpectedAgentCall: agent.ExpectSetCIDRWhitelist,
+			ExpectedAgentCall: agent.ExpectSetCIDRIPPasslist,
+			BadArgs: [][]json.RawMessage{
+				{json.RawMessage(`"wrong type"`)},
+				{json.RawMessage(`[1,2,3]`)},
+				{json.RawMessage(`["a","b","c"]`), json.RawMessage(`"wrong count"`)},
+				{json.RawMessage(`["a", "b", "c"]`), json.RawMessage(`["a", "b", "c"]`)},
+			},
+		},
+		{
+			Command:           "paths_whitelist",
+			Args:              []json.RawMessage{json.RawMessage(`["a","b","c"]`)},
+			ExpectedArgs:      []interface{}{[]string{"a", "b", "c"}},
+			ExpectedAgentCall: agent.ExpectSetPathPasslist,
 			BadArgs: [][]json.RawMessage{
 				{json.RawMessage(`"wrong type"`)},
 				{json.RawMessage(`[1,2,3]`)},
@@ -86,7 +98,7 @@ func TestCommandManager(t *testing.T) {
 		},
 		{
 			Command:                "rules_reload",
-			ExpectedAgentCall:      agent.ExpectRulesReload,
+			ExpectedAgentCall:      agent.ExpectReloadRules,
 			AgentCallReturnNoError: []interface{}{"my pack id", nil},
 			AgentCallReturnError:   []interface{}{"", nil},
 			ExpectedOutput:         "my pack id",
@@ -301,27 +313,32 @@ func (a *agentMockup) Reset() {
 	a.Mock = mock.Mock{}
 }
 
-func (a *agentMockup) InstrumentationEnable() (string, error) {
+func (a *agentMockup) EnableInstrumentation() (string, error) {
 	ret := a.Called()
 	return ret.String(0), ret.Error(1)
 }
 
-func (a *agentMockup) InstrumentationDisable() error {
+func (a *agentMockup) DisableInstrumentation() error {
 	ret := a.Called()
 	return ret.Error(0)
 }
 
-func (a *agentMockup) ActionsReload() error {
+func (a *agentMockup) ReloadActions() error {
 	ret := a.Called()
 	return ret.Error(0)
 }
 
-func (a *agentMockup) SetCIDRWhitelist(cidrs []string) error {
+func (a *agentMockup) SetCIDRIPPasslist(cidrs []string) error {
 	ret := a.Called(cidrs)
 	return ret.Error(0)
 }
 
-func (a *agentMockup) RulesReload() (string, error) {
+func (a *agentMockup) SetPathPasslist(paths []string) error {
+	ret := a.Called(paths)
+	return ret.Error(0)
+}
+
+func (a *agentMockup) ReloadRules() (string, error) {
 	ret := a.Called()
 	return ret.String(0), ret.Error(1)
 }
@@ -335,22 +352,26 @@ func (a *agentMockup) ExpectSendAppBundle(...interface{}) *mock.Call {
 	return a.On("SendAppBundle")
 }
 
-func (a *agentMockup) ExpectInstrumentationEnable(...interface{}) *mock.Call {
-	return a.On("InstrumentationEnable")
+func (a *agentMockup) ExpectEnableInstrumentation(...interface{}) *mock.Call {
+	return a.On("EnableInstrumentation")
 }
 
-func (a *agentMockup) ExpectInstrumentationDisable(...interface{}) *mock.Call {
-	return a.On("InstrumentationDisable")
+func (a *agentMockup) ExpectDisableInstrumentation(...interface{}) *mock.Call {
+	return a.On("DisableInstrumentation")
 }
 
-func (a *agentMockup) ExpectActionsReload(...interface{}) *mock.Call {
-	return a.On("ActionsReload")
+func (a *agentMockup) ExpectReloadActions(...interface{}) *mock.Call {
+	return a.On("ReloadActions")
 }
 
-func (a *agentMockup) ExpectSetCIDRWhitelist(args ...interface{}) *mock.Call {
-	return a.On("SetCIDRWhitelist", args...)
+func (a *agentMockup) ExpectSetCIDRIPPasslist(args ...interface{}) *mock.Call {
+	return a.On("SetCIDRIPPasslist", args...)
 }
 
-func (a *agentMockup) ExpectRulesReload(...interface{}) *mock.Call {
-	return a.On("RulesReload")
+func (a *agentMockup) ExpectSetPathPasslist(args ...interface{}) *mock.Call {
+	return a.On("SetPathPasslist", args...)
+}
+
+func (a *agentMockup) ExpectReloadRules(...interface{}) *mock.Call {
+	return a.On("ReloadRules")
 }

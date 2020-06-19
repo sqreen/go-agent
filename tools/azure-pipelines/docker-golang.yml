@@ -26,20 +26,21 @@ jobs:
       env:
         GOARCH: $(GOARCH)
     steps:
-      - script: go build -v github.com/jstemmer/go-junit-report
-        name: download_tools
-        displayName: download tools
       - ${{ if parameters.go.junit }}:
+          - script: go build -v gotest.tools/gotestsum
+            name: download_gotestsum
+            displayName: download gotestsum
           - script: |
               go env
-              go test -v ./... 2>&1 | ./go-junit-report > report.xml
+              ./gotestsum --junitfile report.xml ./...
             name: go_test
             displayName: go test
           - task: PublishTestResults@2
+            condition: succeededOrFailed()
             inputs:
               testRunner: JUnit
               testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
-              buildPlatform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
+              platform: ${{ parameters.name }}_$(GOVERSION)_$(GOARCH)
       - ${{ if not(parameters.go.junit) }}:
           - script: |
               go env

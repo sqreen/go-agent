@@ -23,7 +23,7 @@ protected by Sqreen.
 Build the docker image and tag it with the image name `hello-sqreen` by doing:
 
 ```console
-examples/docker $ docker build -t hello-sqreen:debian -f debian/Dockerfile .
+examples/docker $ docker build -t hello-sqreen -f debian/Dockerfile .
 ```
 
 #### Building the Alpine docker image example
@@ -47,7 +47,7 @@ by Sqreen.
 Build the docker image and tag it with the image name `hello-sqreen` by doing:
 
 ```console
-examples/docker $ docker build -t hello-sqreen -f alpine/Dockerfile .
+examples/docker $ docker build -t hello-sqreen -f scratch/Dockerfile .
 ```
 
 ### Running the docker image

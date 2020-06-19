@@ -19,9 +19,9 @@ import (
 // NewWriteHTTPRedirectionCallbacks returns the native callback applying the
 // the rule-configured HTTP redirection to the HTTP protection response writer
 // using the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(rule RuleFace) (sqhook.PrologCallback, error) {
+func NewWriteHTTPRedirectionCallbacks(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var redirectionURL string
-	if cfg := rule.Config().Data(); cfg != nil {
+	if cfg := cfg.Data(); cfg != nil {
 		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)
 		if !ok {
 			return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.CustomErrorPageRuleDataEntry`", cfg)

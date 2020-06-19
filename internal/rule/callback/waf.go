@@ -23,10 +23,10 @@ import (
 
 const defaultMaxWAFTimeBudget = 3 * time.Millisecond
 
-func NewWAFCallback(rule RuleFace) (sqhook.PrologCallback, error) {
-	cfg, ok := rule.Config().Data().(*api.WAFRuleDataEntry)
+func NewWAFCallback(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+	data, ok := cfg.Data().(*api.WAFRuleDataEntry)
 	if !ok {
-		return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.WAFRuleDataEntry`", cfg)
+		return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `*api.WAFRuleDataEntry`", data)
 	}
 
 	id, err := uuid.NewRandom()
@@ -34,16 +34,16 @@ func NewWAFCallback(rule RuleFace) (sqhook.PrologCallback, error) {
 		return nil, sqerrors.New("could not generate a uuid")
 	}
 
-	wafRule, err := waf.NewRule(id.String(), cfg.WAFRules, bindingaccessor.NewValueMaxElements, bindingaccessor.MaxExecutionDepth)
+	wafRule, err := waf.NewRule(id.String(), data.WAFRules, bindingaccessor.NewValueMaxElements, bindingaccessor.MaxExecutionDepth)
 	if err != nil {
 		return nil, sqerrors.Wrap(err, "could not instantiate the in-app waf rule")
 	}
 
-	if len(cfg.BindingAccessors) == 0 {
+	if len(data.BindingAccessors) == 0 {
 		return nil, sqerrors.New("unexpected empty list of binding accessors")
 	}
-	bindingAccessors := make(map[string]bindingaccessor.BindingAccessorFunc, len(cfg.BindingAccessors))
-	for _, expr := range cfg.BindingAccessors {
+	bindingAccessors := make(map[string]bindingaccessor.BindingAccessorFunc, len(data.BindingAccessors))
+	for _, expr := range data.BindingAccessors {
 		ba, err := bindingaccessor.Compile(expr)
 		if err != nil {
 			return nil, sqerrors.Wrap(err, fmt.Sprintf("could not compile binding accessor expression `%s`", expr))
@@ -52,13 +52,13 @@ func NewWAFCallback(rule RuleFace) (sqhook.PrologCallback, error) {
 	}
 
 	var timeout time.Duration
-	if cfg.Timeout != 0 {
-		timeout = time.Duration(cfg.Timeout) * time.Millisecond
+	if data.Timeout != 0 {
+		timeout = time.Duration(data.Timeout) * time.Millisecond
 	} else {
 		timeout = defaultMaxWAFTimeBudget
 	}
 
-	return newWAFPrologCallback(rule, wafRule, bindingAccessors, timeout), nil
+	return newWAFPrologCallback(rule, cfg.BlockingMode(), wafRule, bindingAccessors, timeout), nil
 }
 
 type (
@@ -68,12 +68,12 @@ type (
 
 var WAFProtectionError = errors.New("waf protection triggered")
 
-func newWAFPrologCallback(rule RuleFace, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
+func newWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
 		prolog: func(p **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
 			ctx := *p
-			baCtx := NewRequestCallbackBindingAccessorContext(ctx.RequestReader)
+			baCtx := MakeWAFCallbackBindingAccessorContext(ctx.RequestReader)
 			args := make(waf_types.DataSet, len(bindingAccessors))
 			for expr, ba := range bindingAccessors {
 				value, err := ba(baCtx)
@@ -96,7 +96,7 @@ func newWAFPrologCallback(rule RuleFace, wafRule waf_types.Rule, bindingAccessor
 				// no-op: we don't log in such a hot path
 			} else {
 				info := api.WAFAttackInfo{WAFData: string(info)}
-				if rule.Config().BlockingMode() && action == waf_types.BlockAction {
+				if blockingMode && action == waf_types.BlockAction {
 					// Report the event
 					ctx.AddAttackEvent(rule.NewAttackEvent(true, info, nil))
 					ctx.WriteDefaultBlockingResponse()
