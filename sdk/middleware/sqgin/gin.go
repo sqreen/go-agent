@@ -254,7 +254,7 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// Take the status code we observed, and Gin's if none.
 	status := r.writtenStatus
 	if status == 0 {
-		r.c.Writer.Status()
+		status = r.c.Writer.Status()
 	}
 
 	return &observedResponse{
