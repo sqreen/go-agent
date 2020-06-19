@@ -14,6 +14,30 @@ import (
 )
 
 func TestJSVirtualMachine(t *testing.T) {
+	t.Run("passing strings", func(t *testing.T) {
+		str := "sqreen"
+
+		program, err := goja.Compile("test", `function foo(s) { return s === '`+str+`' }`, true)
+		require.NoError(t, err)
+
+		vm := goja.New()
+		v, err := vm.RunProgram(program)
+		require.NoError(t, err)
+
+		v = vm.Get("foo")
+		require.NotNil(t, v)
+
+		var foo goja.Callable
+		err = vm.ExportTo(v, &foo)
+		require.NoError(t, err)
+		require.NotNil(t, foo)
+
+		strPtr := str
+		v, err = foo(goja.Undefined(), vm.ToValue(strPtr))
+		require.NoError(t, err)
+		require.Equal(t, true, v.ToBoolean())
+	})
+
 	t.Run("substr", func(t *testing.T) {
 		vm := goja.New()
 		v, err := vm.RunString(`"'\xe3'".substr(2,1)`)
