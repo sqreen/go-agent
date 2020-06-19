@@ -81,8 +81,23 @@ func NewSQLBindingAccessorContext() *SQLBindingAccessorContextType {
 
 func (*SQLBindingAccessorContextType) Dialect(dbPtr **sql.DB, dialects map[string]interface{}) (string, error) {
 	db := *dbPtr
+
+	// Get the actual unreferenced type so that we can get its package path.
 	drvType := reflect.ValueOf(db.Driver()).Type()
+loop:
+	for {
+		switch drvType.Kind() {
+		case reflect.Ptr, reflect.Interface:
+			drvType = drvType.Elem()
+		default:
+			break loop
+		}
+	}
+
 	pkgPath := sqgo.Unvendor(drvType.PkgPath())
+	if pkgPath == "" {
+		return "", sqerrors.Errorf("could not get the package path of driver type `%T`", db.Driver())
+	}
 
 	for dialect, pkgList := range dialects {
 		pkgPaths, ok := pkgList.([]interface{})

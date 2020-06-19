@@ -25,291 +25,299 @@ func TestBindingAccessor(t *testing.T) {
 		Values    interface{}
 	}
 
-	db := sql.OpenDB(fakeSQLDriver{})
-
 	type TestCase struct {
 		Expr          string
 		ExpectedValue interface{}
 		ExpectedError bool
 	}
 
-	for _, tc := range []struct {
-		Name           string
-		Capabilities   []string
-		NewContextArgs NewContextArgs
-		TestCases      []TestCase
-	}{
-		{
-			Name:         "SQL",
-			Capabilities: []string{"sql", "rule", "func"},
-			NewContextArgs: NewContextArgs{
-				Args: []reflect.Value{
-					reflect.ValueOf(&db),
+	for _, db := range []*sql.DB{sql.OpenDB(&fakeSQLDriver{}), sql.OpenDB(fakeSQLDriver2{})} {
+		db := db
+
+		for _, tc := range []struct {
+			Name           string
+			Capabilities   []string
+			NewContextArgs NewContextArgs
+			TestCases      []TestCase
+		}{
+			{
+				Name:         "SQL",
+				Capabilities: []string{"sql", "rule", "func"},
+				NewContextArgs: NewContextArgs{
+					Args: []reflect.Value{
+						reflect.ValueOf(&db),
+					},
+					Values: map[string]interface{}{
+						"dialects": map[string]interface{}{
+							"mysql":  []interface{}{"mypkg", reflect.TypeOf(fakeSQLDriver{}).PkgPath()},
+							"mysql2": []interface{}{"mypkg2"},
+						},
+
+						"dialects2": map[string]interface{}{
+							"mysql":  []interface{}{"mypkg"},
+							"mysql2": []interface{}{"mypkg2"},
+						},
+
+						"dialects_wrong_type": map[string][]string{
+							"mysql":  {"mypkg"},
+							"mysql2": {"mypkg2"},
+						},
+					},
 				},
-				Values: map[string]interface{}{
-					"dialects": map[string]interface{}{
-						"mysql":  []interface{}{"mypkg", reflect.TypeOf(fakeSQLDriver{}).PkgPath()},
-						"mysql2": []interface{}{"mypkg2"},
+				TestCases: []TestCase{
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['dialects'])",
+						ExpectedValue: "mysql",
 					},
 
-					"dialects2": map[string]interface{}{
-						"mysql":  []interface{}{"mypkg"},
-						"mysql2": []interface{}{"mypkg2"},
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['dialects2'])",
+						ExpectedValue: nil,
+						ExpectedError: true,
 					},
 
-					"dialects_wrong_type": map[string][]string{
-						"mysql":  {"mypkg"},
-						"mysql2": {"mypkg2"},
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['oops'])",
+						ExpectedValue: nil,
+						ExpectedError: true,
+					},
+
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Oops)",
+						ExpectedValue: nil,
+						ExpectedError: true,
+					},
+
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[0], nil)",
+						ExpectedValue: nil,
+						ExpectedError: true,
+					},
+
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['dialects_wrong_type'])",
+						ExpectedValue: nil,
+						ExpectedError: true,
+					},
+
+					{
+						Expr:          "#.SQL.Dialect(#.Func.Args[1], #.Rule.Data.Values['dialects'])",
+						ExpectedValue: nil,
+						ExpectedError: true,
 					},
 				},
 			},
-			TestCases: []TestCase{
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['dialects'])",
-					ExpectedValue: "mysql",
-				},
 
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['dialects2'])",
-					ExpectedValue: nil,
-					ExpectedError: true,
-				},
+			{
+				Name:         "Array Library",
+				Capabilities: []string{"lib", "rule"},
+				NewContextArgs: NewContextArgs{
+					Values: struct {
+						StringSlice, EmptyStringSlice []string
+						StringValue                   string
 
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['oops'])",
-					ExpectedValue: nil,
-					ExpectedError: true,
-				},
+						IntSlice, EmptyIntSlice []int
+						IntValue                int
+						EmptyInterfaceSlice     []interface{}
+					}{
+						StringSlice:      []string{"b", "c", "d"},
+						EmptyStringSlice: []string{},
+						StringValue:      "a",
 
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Oops)",
-					ExpectedValue: nil,
-					ExpectedError: true,
-				},
+						IntSlice:      []int{2, 3, 4},
+						EmptyIntSlice: []int{},
+						IntValue:      1,
 
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[0], nil)",
-					ExpectedValue: nil,
-					ExpectedError: true,
+						EmptyInterfaceSlice: []interface{}{},
+					},
 				},
+				TestCases: []TestCase{
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.StringSlice, #.Rule.Data.Values.StringValue)",
+						ExpectedValue: []string{"a", "b", "c", "d"},
+					},
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.StringSlice, 'a')",
+						ExpectedValue: []string{"a", "b", "c", "d"},
+					},
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.EmptyStringSlice, 'a')",
+						ExpectedValue: []string{"a"},
+					},
+					{
+						Expr:          "#.Lib.Array.Prepend(nil, 'a')",
+						ExpectedValue: []string{"a"},
+					},
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.StringSlice, #.Rule.Data.Values.IntValue)",
+						ExpectedError: true,
+					},
 
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[0], #.Rule.Data.Values['dialects_wrong_type'])",
-					ExpectedValue: nil,
-					ExpectedError: true,
-				},
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.IntSlice, #.Rule.Data.Values.IntValue)",
+						ExpectedValue: []int{1, 2, 3, 4},
+					},
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.EmptyIntSlice, #.Rule.Data.Values.IntValue)",
+						ExpectedValue: []int{1},
+					},
+					{
+						Expr:          "#.Lib.Array.Prepend(nil, #.Rule.Data.Values.IntValue)",
+						ExpectedValue: []int{1},
+					},
 
-				{
-					Expr:          "#.SQL.Dialect(#.Func.Args[1], #.Rule.Data.Values['dialects'])",
-					ExpectedValue: nil,
-					ExpectedError: true,
+					{
+						Expr:          "#.Lib.Array.Prepend(nil, #.Rule.Data.Values.IntSlice)",
+						ExpectedValue: [][]int{{2, 3, 4}},
+					},
+
+					{
+						Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.EmptyInterfaceSlice, #.Rule.Data.Values.IntValue)",
+						ExpectedValue: []interface{}{1},
+					},
 				},
 			},
-		},
 
-		{
-			Name:         "Array Library",
-			Capabilities: []string{"lib", "rule"},
-			NewContextArgs: NewContextArgs{
-				Values: struct {
-					StringSlice, EmptyStringSlice []string
-					StringValue                   string
+			{
+				Name:         "Result Caching",
+				Capabilities: []string{"cache", "rule"},
+				NewContextArgs: NewContextArgs{
+					Values: &MyCachedValueType{WithCaching: true},
+				},
+				TestCases: []TestCase{
+					// F's call side effect is not visible with caching and not be called
+					// more than once
+					{
+						Expr:          "#.Rule.Data.Values.F",
+						ExpectedValue: 1,
+					},
 
-					IntSlice, EmptyIntSlice []int
-					IntValue                int
-					EmptyInterfaceSlice     []interface{}
-				}{
-					StringSlice:      []string{"b", "c", "d"},
-					EmptyStringSlice: []string{},
-					StringValue:      "a",
+					{
+						Expr:          "#.Rule.Data.Values.F",
+						ExpectedValue: 1,
+					},
 
-					IntSlice:      []int{2, 3, 4},
-					EmptyIntSlice: []int{},
-					IntValue:      1,
-
-					EmptyInterfaceSlice: []interface{}{},
+					{
+						Expr:          "#.Rule.Data.Values.F",
+						ExpectedValue: 1,
+					},
 				},
 			},
-			TestCases: []TestCase{
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.StringSlice, #.Rule.Data.Values.StringValue)",
-					ExpectedValue: []string{"a", "b", "c", "d"},
-				},
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.StringSlice, 'a')",
-					ExpectedValue: []string{"a", "b", "c", "d"},
-				},
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.EmptyStringSlice, 'a')",
-					ExpectedValue: []string{"a"},
-				},
-				{
-					Expr:          "#.Lib.Array.Prepend(nil, 'a')",
-					ExpectedValue: []string{"a"},
-				},
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.StringSlice, #.Rule.Data.Values.IntValue)",
-					ExpectedError: true,
-				},
 
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.IntSlice, #.Rule.Data.Values.IntValue)",
-					ExpectedValue: []int{1, 2, 3, 4},
+			{
+				Name:         "No Result Caching",
+				Capabilities: []string{"rule"},
+				NewContextArgs: NewContextArgs{
+					Values: &MyCachedValueType{},
 				},
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.EmptyIntSlice, #.Rule.Data.Values.IntValue)",
-					ExpectedValue: []int{1},
-				},
-				{
-					Expr:          "#.Lib.Array.Prepend(nil, #.Rule.Data.Values.IntValue)",
-					ExpectedValue: []int{1},
-				},
+				TestCases: []TestCase{
+					// F's call side effect is visible without caching
+					{
+						Expr:          "#.Rule.Data.Values.F",
+						ExpectedValue: 1,
+					},
 
-				{
-					Expr:          "#.Lib.Array.Prepend(nil, #.Rule.Data.Values.IntSlice)",
-					ExpectedValue: [][]int{{2, 3, 4}},
-				},
+					{
+						Expr:          "#.Rule.Data.Values.F",
+						ExpectedValue: 2,
+					},
 
-				{
-					Expr:          "#.Lib.Array.Prepend(#.Rule.Data.Values.EmptyInterfaceSlice, #.Rule.Data.Values.IntValue)",
-					ExpectedValue: []interface{}{1},
+					{
+						Expr:          "#.Rule.Data.Values.F",
+						ExpectedValue: 3,
+					},
 				},
 			},
-		},
+		} {
+			tc := tc
+			t.Run(tc.Name, func(t *testing.T) {
+				ctx, err := callback.NewReflectedCallbackBindingAccessorContext(tc.Capabilities, tc.NewContextArgs.Args, tc.NewContextArgs.Res, tc.NewContextArgs.Req, tc.NewContextArgs.Values)
+				require.NoError(t, err)
 
-		{
-			Name:         "Result Caching",
-			Capabilities: []string{"cache", "rule"},
-			NewContextArgs: NewContextArgs{
-				Values: &MyCachedValueType{WithCaching: true},
-			},
-			TestCases: []TestCase{
-				// F's call side effect is not visible with caching and not be called
-				// more than once
-				{
-					Expr:          "#.Rule.Data.Values.F",
-					ExpectedValue: 1,
-				},
-
-				{
-					Expr:          "#.Rule.Data.Values.F",
-					ExpectedValue: 1,
-				},
-
-				{
-					Expr:          "#.Rule.Data.Values.F",
-					ExpectedValue: 1,
-				},
-			},
-		},
-
-		{
-			Name:         "No Result Caching",
-			Capabilities: []string{"rule"},
-			NewContextArgs: NewContextArgs{
-				Values: &MyCachedValueType{},
-			},
-			TestCases: []TestCase{
-				// F's call side effect is visible without caching
-				{
-					Expr:          "#.Rule.Data.Values.F",
-					ExpectedValue: 1,
-				},
-
-				{
-					Expr:          "#.Rule.Data.Values.F",
-					ExpectedValue: 2,
-				},
-
-				{
-					Expr:          "#.Rule.Data.Values.F",
-					ExpectedValue: 3,
-				},
-			},
-		},
-	} {
-		tc := tc
-		t.Run(tc.Name, func(t *testing.T) {
-			ctx, err := callback.NewReflectedCallbackBindingAccessorContext(tc.Capabilities, tc.NewContextArgs.Args, tc.NewContextArgs.Res, tc.NewContextArgs.Req, tc.NewContextArgs.Values)
-			require.NoError(t, err)
-
-			for _, tc := range tc.TestCases {
-				tc := tc
-				t.Run("", func(t *testing.T) {
-					ba, err := bindingaccessor.Compile(tc.Expr)
-					require.NoError(t, err)
-
-					v, err := ba(ctx)
-					if tc.ExpectedError {
-						require.Error(t, err)
-					} else {
+				for _, tc := range tc.TestCases {
+					tc := tc
+					t.Run("", func(t *testing.T) {
+						ba, err := bindingaccessor.Compile(tc.Expr)
 						require.NoError(t, err)
-					}
-					require.Equal(t, tc.ExpectedValue, v)
-				})
-			}
-		})
-	}
 
-	t.Run("Caching", func(t *testing.T) {
-		type MyCachedContext struct {
-			F func() (int, error)
-			callback.BindingAccessorResultCache
+						v, err := ba(ctx)
+						if tc.ExpectedError {
+							require.Error(t, err)
+						} else {
+							require.NoError(t, err)
+						}
+						require.Equal(t, tc.ExpectedValue, v)
+					})
+				}
+			})
 		}
 
-		t.Run("without execution error", func(t *testing.T) {
-			ctx := MyCachedContext{
-				F: func() (int, error) {
-					return 33, nil
-				},
-				BindingAccessorResultCache: callback.MakeBindingAccessorResultCache(),
+		t.Run("Caching", func(t *testing.T) {
+			type MyCachedContext struct {
+				F func() (int, error)
+				callback.BindingAccessorResultCache
 			}
 
-			p, err := bindingaccessor.Compile("#.F()")
-			require.NoError(t, err)
+			t.Run("without execution error", func(t *testing.T) {
+				ctx := MyCachedContext{
+					F: func() (int, error) {
+						return 33, nil
+					},
+					BindingAccessorResultCache: callback.MakeBindingAccessorResultCache(),
+				}
 
-			v, err := p(ctx)
-			require.NoError(t, err)
-			require.Equal(t, 33, v)
+				p, err := bindingaccessor.Compile("#.F()")
+				require.NoError(t, err)
 
-			ctx.F = func() (int, error) {
-				panic("should not be called")
-			}
-			v, err = p(ctx)
-			require.NoError(t, err)
-			require.Equal(t, 33, v)
+				v, err := p(ctx)
+				require.NoError(t, err)
+				require.Equal(t, 33, v)
+
+				ctx.F = func() (int, error) {
+					panic("should not be called")
+				}
+				v, err = p(ctx)
+				require.NoError(t, err)
+				require.Equal(t, 33, v)
+			})
+
+			t.Run("with execution error", func(t *testing.T) {
+				ctx := MyCachedContext{
+					F: func() (int, error) {
+						return 0, errors.New("some execution error")
+					},
+					BindingAccessorResultCache: callback.MakeBindingAccessorResultCache(),
+				}
+
+				p, err := bindingaccessor.Compile("#.F()")
+				require.NoError(t, err)
+
+				v, err := p(ctx)
+				require.Error(t, err)
+				require.Equal(t, nil, v)
+
+				ctx.F = func() (int, error) {
+					panic("should not be called")
+				}
+				v, err = p(ctx)
+				require.Error(t, err)
+				require.Equal(t, nil, v)
+			})
 		})
-
-		t.Run("with execution error", func(t *testing.T) {
-			ctx := MyCachedContext{
-				F: func() (int, error) {
-					return 0, errors.New("some execution error")
-				},
-				BindingAccessorResultCache: callback.MakeBindingAccessorResultCache(),
-			}
-
-			p, err := bindingaccessor.Compile("#.F()")
-			require.NoError(t, err)
-
-			v, err := p(ctx)
-			require.Error(t, err)
-			require.Equal(t, nil, v)
-
-			ctx.F = func() (int, error) {
-				panic("should not be called")
-			}
-			v, err = p(ctx)
-			require.Error(t, err)
-			require.Equal(t, nil, v)
-		})
-	})
+	}
 }
 
 type fakeSQLDriver struct{}
 
-func (f fakeSQLDriver) Open(string) (driver.Conn, error)             { return nil, nil }
-func (f fakeSQLDriver) Connect(context.Context) (driver.Conn, error) { return nil, nil }
-func (f fakeSQLDriver) Driver() driver.Driver                        { return f }
+func (f *fakeSQLDriver) Open(string) (driver.Conn, error)             { return nil, nil }
+func (f *fakeSQLDriver) Connect(context.Context) (driver.Conn, error) { return nil, nil }
+func (f *fakeSQLDriver) Driver() driver.Driver                        { return f }
+
+type fakeSQLDriver2 struct{}
+
+func (f fakeSQLDriver2) Open(string) (driver.Conn, error)             { return nil, nil }
+func (f fakeSQLDriver2) Connect(context.Context) (driver.Conn, error) { return nil, nil }
+func (f fakeSQLDriver2) Driver() driver.Driver                        { return f }
 
 type MyCachedValueType struct {
 	i           int
