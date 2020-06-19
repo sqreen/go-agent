@@ -12,7 +12,6 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
-	"github.com/sqreen/go-agent/internal/backend/api"
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
@@ -30,7 +29,7 @@ func NewJSExecCallback(rule RuleFace, cfg ReflectedCallbackConfig) (sqhook.Refle
 
 	return func(params []reflect.Value) (epilogFunc sqhook.ReflectedEpilogCallback, prologErr error) {
 		err := sqsafe.Call(func() error {
-			ctx := getProtectionContext(strategy.Protection, params)
+			ctx := getProtectionContext()
 			if ctx == nil {
 				return nil
 			}
@@ -215,7 +214,7 @@ func call(vm *goja.Runtime, descr *jsCallbackFunc, baCtx bindingaccessor.Context
 	return vm.ExportTo(v, result)
 }
 
-func getProtectionContext(protection *api.ReflectedCallbackProtectionConfig, params []reflect.Value) *httpprotection.RequestContext {
+func getProtectionContext() *httpprotection.RequestContext {
 	return httpprotection.FromGLS()
 }
 
