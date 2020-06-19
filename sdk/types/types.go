@@ -7,13 +7,17 @@ package types
 import "fmt"
 
 // SqreenError is the wrapper error type returned by every Sqreen protection.
-// It allows to implement specific error management when Sqreen has blocked a
-// function call by returning a non-nil error. For example, if SQL-injection
-// is detected and blocked by Sqreen, it is possible to avoid retrying the SQL
-// query when the error is a `SqreenError`. It is possible to test if an error
-// is a SqreenError by using `errors.As`.
-// This type also implements the `Unwrap()` so that more details can be
-// obtained by using `errors.As()`.
+// It allows to implement specific error management logic when Sqreen has
+// blocked a function call by returning a non-nil Go error.
+// For example, if a SQL injection was detected and blocked by Sqreen, it is
+// possible to avoid retrying the SQL query when the error is a `SqreenError`.
+// To do so, use `errors.As`:
+//     if errors.As(err, &types.SqreenError{}) {
+//         // Sqreen error logic
+//         log.Println("sqreen error detected")
+//     } else if err != nil {
+//         // Non-Sqreen error logic
+//     }
 type SqreenError struct {
 	Err error
 }
