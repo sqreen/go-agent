@@ -1,3 +1,40 @@
+# v0.11.0
+
+## New Features
+
+- (#119) RASP: add Shell Injection protection support. This protection is currently dynamically applied to `os.StartProcess()` which is the only entry point of the Go standard library to execute a process.  This protection can be configured at https://my.sqreen.com/application/goto/modules/rasp/details/shi.
+
+- (#119) RASP: add Local File Inclusion protection support. This protection is currently dynamically applied to `os.Open()` which is the only entry point of the Go standard library to open a file for reading. This protection can be configured at https://my.sqreen.com/application/goto/modules/rasp/details/lfi.
+
+- (#120) RASP: add Server-Side Request Forgery protection support. This protection is currently dynamically applied to `net/http.(*Client).do()` which is the only entry point of the Go standard library to perform an HTTP request. This protection can be configured at https://my.sqreen.com/application/goto/modules/rasp/details/ssrf.
+
+- (#125) RASP: enable SQL Injection protection for every MySQL, Oracle, SQLite and PostgreSQL drivers listed in the Go language wiki page https://github.com/golang/go/wiki/SQLDrivers.
+
+- (#115) RASP: store Sqreen's request protection context into the Goroutine Local Storage (GLS). Therefore, Sqreen can now protect every Go function without requiring the request Go context (eg. both `QueryContext()` and `Query()` can be now protected against SQL injections). For now, this protection context is only available in the goroutine handling the request, and sub-goroutines are not protected. Further support will be added very soon to remove this limitation.
+
+- (#121) Add IP denylist support: block every request performed by an IP address of the denylist. Every usage of whitelist and blacklist in the agent was also removed when possible. The IP denylist can be configured at https://my.sqreen.com/application/goto/settings/denylist.
+
+- (#122) Add path passlist support: requests performed on those paths are not monitored nor protected by Sqreen. The Path passlist can be configured at https://my.sqreen.com/application/goto/settings/passlist.
+
+- (#123) Export the error type returned by Sqreen protections when blocking in the new SDK package `github.com/sqreen/go-agent/sdk/types` in order to avoid retrying blocked function calls (eg. avoid retrying a blocked SQL query). It must be used along with `errors.As()` to detect such cases. Read more at https://godoc.org/github.com/sqreen/go-agent/sdk/types.
+
+- (#124) Allow to "quickly" remove the agent from a program by only removing it from the source code without disabling the program instrumentation. This is made possible by making the instrumentation fully autonomous to avoid compilation errors.
+
+## Fix
+
+- Gin Middleware: fix the HTTP status code monitoring that was possibly changed by Gin after having been already written.
+
+## Internal Changes
+
+- (#126) Cache request value lookups, mainly to accelerate the In-App WAF when lots of rulesets are enabled.
+
+- (#117) Simpler Go vendoring support implementation.
+
+- (#113) Significant JavaScript performance improvements by changing the virtual machine to `github.com/dop251/goja`.
+
+- (#114) Add Goroutine Local Storage (GLS) support through static instrumentation of the Go runtime.
+
+
 # v0.10.1
 
 ## Fix

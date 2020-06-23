@@ -61,14 +61,14 @@ func NewFunctionBindingAccessorContext(args []reflect.Value, rets []reflect.Valu
 	if l := len(args); l > 0 {
 		c.Args = make([]interface{}, l)
 		for i, arg := range args {
-			c.Args[i] = arg.Interface()
+			c.Args[i] = arg.Elem().Interface()
 		}
 	}
 
 	if l := len(rets); l > 0 {
 		c.Rets = make([]interface{}, l)
 		for i, ret := range rets {
-			c.Rets[i] = ret.Interface()
+			c.Rets[i] = ret.Elem().Interface()
 		}
 	}
 
@@ -79,9 +79,7 @@ func NewSQLBindingAccessorContext() *SQLBindingAccessorContextType {
 	return &SQLBindingAccessorContextType{}
 }
 
-func (*SQLBindingAccessorContextType) Dialect(dbPtr **sql.DB, dialects map[string]interface{}) (string, error) {
-	db := *dbPtr
-
+func (*SQLBindingAccessorContextType) Dialect(db *sql.DB, dialects map[string]interface{}) (string, error) {
 	// Get the actual unreferenced type so that we can get its package path.
 	drvType := reflect.ValueOf(db.Driver()).Type()
 loop:
