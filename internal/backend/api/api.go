@@ -364,13 +364,13 @@ type RequestRecord_Observed struct {
 }
 
 type RequestRecord_Observed_Attack struct {
-	RuleName  string       `json:"rule_name"`
-	Test      bool         `json:"test"`
-	Info      interface{}  `json:"infos"`
-	Time      time.Time    `json:"time"`
-	Block     bool         `json:"block"`
-	Backtrace []StackFrame `json:"backtrace,omitempty"`
-	Beta      bool         `json:"beta"`
+	RuleName   string       `json:"rule_name"`
+	AttackType string       `json:"attack_type"`
+	Test       bool         `json:"test"`
+	Info       interface{}  `json:"infos"`
+	Time       time.Time    `json:"time"`
+	Block      bool         `json:"block"`
+	Backtrace  []StackFrame `json:"backtrace,omitempty"`
 }
 
 type WAFAttackInfo struct {
