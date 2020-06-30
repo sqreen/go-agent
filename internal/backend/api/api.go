@@ -181,7 +181,7 @@ type Rule struct {
 	Callbacks  RuleCallbacks      `json:"callbacks"`
 	Test       bool               `json:"test"`
 	Block      bool               `json:"block"`
-	Beta       bool               `json:"beta"`
+	AttackType string             `json:"attack_type"`
 }
 
 type RuleConditions struct{}
@@ -488,13 +488,14 @@ type RequestRecord_Observed_SDKEvent_Args_Identify struct {
 }
 
 type RequestRecord_Observed_Exception struct {
-	Message   string    `json:"message"`
-	Klass     string    `json:"klass"`
-	RuleName  string    `json:"rule_name"`
-	Test      bool      `json:"test"`
-	Infos     string    `json:"infos"`
-	Backtrace []string  `json:"backtrace"`
-	Time      time.Time `json:"time"`
+	Message    string    `json:"message"`
+	Klass      string    `json:"klass"`
+	RuleName   string    `json:"rule_name"`
+	AttackType string    `json:"attack_type"`
+	Test       bool      `json:"test"`
+	Infos      string    `json:"infos"`
+	Backtrace  []string  `json:"backtrace"`
+	Time       time.Time `json:"time"`
 }
 
 type RequestRecord_Observed_Observation struct {
@@ -710,6 +711,7 @@ func NewRequestRecord_ObservedFromFace(that RequestRecord_ObservedFace) *Request
 
 type RequestRecord_Observed_AttackFace interface {
 	GetRuleName() string
+	GetAttackType() string
 	GetTest() bool
 	GetInfo() interface{}
 	GetTime() time.Time
@@ -725,6 +727,7 @@ func NewRequestRecord_Observed_AttackFromFace(that RequestRecord_Observed_Attack
 	this.Block = that.GetBlock()
 	this.Info = that.GetInfo()
 	this.Backtrace = that.GetBacktrace()
+	this.AttackType = that.GetAttackType()
 	return this
 }
 

@@ -36,7 +36,7 @@ type CallbackContext struct {
 	name                string
 	testMode            bool
 	config              callback.NativeCallbackConfig
-	beta                bool
+	attackType          string
 }
 
 func NewCallbackContext(r *api.Rule, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) (*CallbackContext, error) {
@@ -58,7 +58,7 @@ func NewCallbackContext(r *api.Rule, metricsEngine *metrics.Engine, errorMetrics
 		errorMetricsStore:   errorMetricsStore,
 		name:                r.Name,
 		testMode:            r.Test,
-		beta:                r.Beta,
+		attackType:          r.AttackType,
 	}, nil
 }
 
@@ -82,7 +82,7 @@ func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}, st erro
 	return &event.AttackEvent{
 		Rule:       d.name,
 		Test:       d.testMode,
-		Beta:       d.beta,
+		AttackType: d.attackType,
 		Blocked:    blocked,
 		Timestamp:  time.Now(),
 		Info:       info,

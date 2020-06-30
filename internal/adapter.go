@@ -176,6 +176,10 @@ func (a *attackEventAPIAdapter) unwrap() *event.AttackEvent {
 	return (*event.AttackEvent)(a)
 }
 
+func (a *attackEventAPIAdapter) GetAttackType() string {
+	return a.unwrap().AttackType
+}
+
 func (a *attackEventAPIAdapter) GetRuleName() string {
 	return a.unwrap().Rule
 }
