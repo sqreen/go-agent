@@ -301,6 +301,7 @@ func ClientIP(remoteAddr string, headers http.Header, prioritizedIPHeader string
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
 			ipStr := strings.Trim(ip, " ")
+			ipStr, _ = splitHostPort(ipStr)
 			ip := net.ParseIP(ipStr)
 			if ip == nil {
 				return nil
@@ -344,7 +345,8 @@ func ClientIP(remoteAddr string, headers http.Header, prioritizedIPHeader string
 			return ip
 		}
 	}
-	remoteIPStr, _ := splitHostPort(remoteAddr) // FIXME: replace by net.SplitHostPort?
+
+	remoteIPStr, _ := splitHostPort(remoteAddr)
 	if remoteIPStr == "" {
 		if privateIP != nil {
 			return privateIP

@@ -277,6 +277,14 @@ func TestGetClientIP(t *testing.T) {
 					"X-Forwarded-For": RandPrivateIPv4().String() + "," + RandPrivateIPv4().String() + "," + globalIP.String() + "," + RandPrivateIPv4().String(),
 				},
 			},
+
+			{
+				expected:   "152.23.231.25",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1, 152.23.231.25:98746, 10.1.2.3, 152.23.231.29, 8.8.8.8",
+				},
+			},
 		} {
 			tc := tc
 			t.Run(tc.expected, func(t *testing.T) {
