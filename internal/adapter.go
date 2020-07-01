@@ -87,10 +87,6 @@ func (a *httpRequestAPIAdapter) GetPath() string {
 	return a.adaptee.URL().Path
 }
 
-func (a *httpRequestAPIAdapter) GetRawPath() string {
-	return a.adaptee.RequestURI()
-}
-
 func (a *httpRequestAPIAdapter) GetHost() string {
 	return a.adaptee.Host()
 }
