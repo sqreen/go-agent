@@ -131,10 +131,15 @@ func (a *httpRequestAPIAdapter) GetParameters() api.RequestRecord_Request_Parame
 	// that we take what has been done during the request handling.
 	// So they can be nil even if there were form parameters in the
 	// body.
+	var rawBody string
+	if len(req.Body()) > 0 {
+		rawBody = "<Redacted By Sqreen>"
+	}
 	return api.RequestRecord_Request_Parameters{
-		Query:     req.Form(),
-		Form:      req.PostForm(),
-		Framework: req.FrameworkParams(),
+		Query:   req.Form(),
+		Form:    req.PostForm(),
+		Params:  req.Params(),
+		RawBody: rawBody,
 	}
 }
 

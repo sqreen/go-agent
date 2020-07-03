@@ -5,7 +5,7 @@
 package sqecho
 
 import (
-	"context"
+	"bytes"
 	"io"
 	"net"
 	"net/http"
