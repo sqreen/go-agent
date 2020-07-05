@@ -201,6 +201,7 @@ var (
 	limitedInstrumentationPkgPaths = []string{
 		"os",
 		"net/http",
+		"github.com/gin-gonic/gin",
 	}
 
 	// Optional list packages, files and functions we want to only instrument for
@@ -212,8 +213,13 @@ var (
 			// net/http is pretty performance sensitive and we want to only instrument
 			// what is needed.
 			// TODO: limit to the `(*Client).do(*Request) error` function (maybe we
-			//   can parse this string and compare the signature ASTs)
+			//   can parse this string and compare the signature ASTs) - and log when
+			//   not found
 			"client.go",
+		},
+		"github.com/gin-gonic/gin": {
+			// Same comment as net/http
+			"context.go", // context.go contains the body parsers
 		},
 	}
 )

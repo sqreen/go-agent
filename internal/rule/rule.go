@@ -20,13 +20,11 @@ package rule
 
 import (
 	"crypto/ecdsa"
-	"fmt"
 	"io"
 
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
-	"github.com/sqreen/go-agent/internal/rule/callback"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
@@ -146,7 +144,6 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 		r := rules[i]
 		// Verify the signature
 		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
-			// TODO: implement for reflected callbacks
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
 			continue
 		}
@@ -165,13 +162,6 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
 		}
 
-		// Instantiate the callback
-		//descr := hookDescriptors.Get(hook)
-		//var nextProlog sqhook.PrologCallback
-		//if next := descr.callback; next != nil {
-		//	nextProlog = next
-		//}
-
 		callbackContext, err := NewCallbackContext(&r, e.metricsEngine, e.errorMetricsStore)
 		if err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
@@ -186,7 +176,7 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 				continue
 			}
 
-			prolog, err := callback.NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
+			prolog, err := NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
@@ -196,15 +186,9 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			hookDescriptors.Set(hook, prolog)
 
 		case "reflected":
-			cfg, err := newReflectedCallbackConfig(&r)
+			prolog, err := NewReflectedCallback(hookpoint.Callback, callbackContext, &r)
 			if err != nil {
-				logger.Error(sqerrors.Wrap(err, "callback configuration"))
-				continue
-			}
-
-			prolog, err := callback.NewReflectedCallback(hookpoint.Callback, callbackContext, cfg)
-			if err != nil {
-				logger.Error(sqerrors.Wrap(err, fmt.Sprintf("security rules: rule `%s`: callback constructor", r.Name)))
+				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
 			}
 			// Create the descriptor with everything required to be able to enable or
@@ -261,58 +245,6 @@ func (c callbackWrapper) Close() error {
 	}
 	return nil
 }
-
-//type hookDescriptors map[HookFace]CallbackObject
-
-//type noopCloserCallbackObject struct {
-//	prolog sqhook.PrologCallback
-//}
-//
-//func (cbo noopCloserCallbackObject) Prolog() sqhook.PrologCallback {
-//	return cbo.prolog
-//}
-//
-//func (cbo noopCloserCallbackObject) Close() error {
-//	return nil
-//}
-
-// chainedCallbackObject is the set of callbacks attached to a hookpoint.
-// Callbacks already have a reference to the next callback, and it is their
-// responsibility to call it. But closing them is done agent-side using this
-// chain.
-// FIXME: better design to simplify and unify this
-//type chainedCallbackObject struct {
-//	current, next CallbackObject
-//}
-
-//func (c *chainedCallbackObject) Prolog() sqhook.PrologCallback {
-//	return c.current.Prolog()
-//}
-//
-//func (c *chainedCallbackObject) Close() error {
-//	err1 := c.current.Close()
-//	var err2 error
-//	if c.next != nil {
-//		err2 = c.next.Close()
-//	}
-//	// FIXME: create a "error set" error type
-//	if err1 != nil {
-//		return err1
-//	}
-//	return err2
-//}
-
-//
-//func (m hookDescriptors) Set(hook HookFace, prolog interface{}) {
-//	var callback CallbackObject
-//	if cbo, ok := prolog.(CallbackObject); ok {
-//		callback = cbo
-//	} else {
-//		callback = noopCloserCallbackObject{prolog}
-//	}
-//	current := m[hook]
-//	m[hook] = &chainedCallbackObject{current: callback, next: current}
-//}
 
 type hookDescriptors map[HookFace]callbackWrapper
 

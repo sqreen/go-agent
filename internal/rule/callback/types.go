@@ -35,6 +35,10 @@ type NativeCallbackConfig interface {
 type ReflectedCallbackConfig interface {
 	NativeCallbackConfig
 	Strategy() *api.ReflectedCallbackConfig
+}
+
+type JSReflectedCallbackConfig interface {
+	ReflectedCallbackConfig
 	Pre() (funcDecl *goja.Program, funcCallParams []bindingaccessor.BindingAccessorFunc)
 	Post() (funcDecl *goja.Program, funcCallParams []bindingaccessor.BindingAccessorFunc)
 }

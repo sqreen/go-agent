@@ -5,7 +5,7 @@
 package sqecho
 
 import (
-	"context"
+	"bytes"
 	"io"
 	"net"
 	"net/http"
@@ -89,19 +89,21 @@ func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc,
 	requestReader := &requestReaderImpl{c: c}
 	responseWriter := &responseWriterImpl{c: c}
 
-	reqCtx, cancelHandlerContext := context.WithCancel(c.Request().Context())
-	defer cancelHandlerContext()
+	req := c.Request()
 
-	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(req.Context(), agent, responseWriter, requestReader)
 	if ctx == nil {
 		return next(c)
 	}
 
 	defer func() {
+		cancelHandlerContext()
 		_ = ctx.Close(responseWriter.closeResponseWriter())
 	}()
 
-	c.SetRequest(c.Request().WithContext(context.WithValue(reqCtx, protectioncontext.ContextKey, ctx)))
+	req = ctx.WrapRequest(reqCtx, req)
+	c.SetRequest(req)
+	c.Set(protectioncontext.ContextKey.String, ctx)
 
 	if err := ctx.Before(); err != nil {
 		return err
@@ -119,7 +121,12 @@ func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc,
 }
 
 type requestReaderImpl struct {
-	c echo.Context
+	c              echo.Context
+	bodyReadBuffer bytes.Buffer
+}
+
+func (r *requestReaderImpl) Body() []byte {
+	return nil
 }
 
 func (r *requestReaderImpl) UserAgent() string {
@@ -154,12 +161,18 @@ func (r *requestReaderImpl) IsTLS() bool {
 	return r.c.IsTLS()
 }
 
-func (r *requestReaderImpl) FrameworkParams() url.Values {
-	res := url.Values{}
-	for _, key := range r.c.ParamNames() {
-		res[key] = []string{r.c.Param(key)}
+func (r *requestReaderImpl) Params() types.RequestParamMap {
+	params := r.c.ParamNames()
+	l := len(params)
+	if l == 0 {
+		return nil
 	}
-	return res
+
+	m := make(types.RequestParamMap, l)
+	for _, key := range params {
+		m.Add(key, r.c.Param(key))
+	}
+	return m
 }
 
 func (r *requestReaderImpl) Form() url.Values {

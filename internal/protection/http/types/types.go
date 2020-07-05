@@ -28,16 +28,39 @@ type RequestReader interface {
 	Form() url.Values
 	PostForm() url.Values
 	ClientIP() net.IP
-	FrameworkParams() url.Values
+	// Params returns the request parameters parsed by the handler so far at the
+	// moment of the call.
+	Params() RequestParamMap
+	// Body returns the body bytes read by the handler so far at the moment of the
+	// call.
+	Body() []byte
+}
+
+type (
+	// RequestParamValueMap is the map of request param values per param name.
+	// The slice of values allows to have multiple values per param name. For
+	// example, the same request parameter name can be use both in the query and
+	// form parameters.
+	RequestParamMap map[string]RequestParamValueSlice
+	// RequestParamValueSlice is the slice of request param values.
+	// Note that this is a type alias to allow conversions to []interface{},
+	// so that map[string]RequestParamValueSlice and map[string][]interface{} are
+	// considered the same type.
+	RequestParamValueSlice = []interface{}
+)
+
+func (m *RequestParamMap) Add(key string, value interface{}) {
+	if *m == nil {
+		*m = make(RequestParamMap)
+	}
+	params := (*m)[key]
+	(*m)[key] = append(params, value)
 }
 
 // ResponseWriter is the response writer interface.
 type ResponseWriter interface {
 	http.ResponseWriter
 	io.StringWriter
-	// Close the response writer and return the written response.
-	// Any writer methods following this call should be ignored.
-	//closeResponseWriter() ResponseFace
 }
 
 // ResponseFace is the interface to the response that was sent by the handler.

@@ -111,23 +111,19 @@ func (identify *RequestRecord_Observed_SDKEvent_Args_Identify) MarshalJSON() ([]
 	return args.MarshalJSON()
 }
 
-func (v *RuleData) UnmarshalJSON(data []byte) error {
-	var asArray struct {
-		Values []RuleDataEntry `json:"values"`
-	}
+func (v *RuleDataValues) UnmarshalJSON(data []byte) error {
+	var asArray []RuleDataEntry
 	if err := json.Unmarshal(data, &asArray); err == nil {
-		v.Values = asArray.Values
+		*v = asArray
 		return nil
 	}
 
-	var asStruct struct {
-		Values RuleDataEntry `json:"values"`
-	}
+	var asStruct RuleDataEntry
 	if err := json.Unmarshal(data, &asStruct); err != nil {
 		return err
 	}
 
-	v.Values = []RuleDataEntry{asStruct.Values}
+	*v = []RuleDataEntry{asStruct}
 	return nil
 }
 
@@ -186,6 +182,63 @@ func (v *RuleDataEntry) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(discriminant)
+}
+
+func (c *RuleCallbacks) UnmarshalJSON(data []byte) error {
+	var discriminant struct {
+		Type string `json:"type"`
+	}
+
+	if err := json.Unmarshal(data, &discriminant); err != nil {
+		return err
+	}
+
+	var v RuleCallbacksNode
+	switch discriminant.Type {
+	case "function_waf":
+		v = &RuleFunctionWAFCallbacks{}
+	default:
+		v = &RuleJSCallbacks{}
+	}
+
+	if err := json.Unmarshal(data, v); err != nil {
+		return err
+	}
+
+	c.RuleCallbacksNode = v
+	return nil
+}
+
+func (c *RuleFunctionWAFCallbacks) UnmarshalJSON(data []byte) error {
+	type paramBindingAccessorDescr struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	}
+
+	var payload struct {
+		Pre  []paramBindingAccessorDescr `json:"pre"`
+		Post []paramBindingAccessorDescr `json:"post"`
+	}
+
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+
+	if len(payload.Pre) > 0 {
+		c.Pre = make(map[string]string, len(payload.Pre))
+		for _, p := range payload.Pre {
+			c.Pre[p.Name] = p.Value
+		}
+	}
+
+	if len(payload.Post) > 0 {
+		c.Post = make(map[string]string, len(payload.Post))
+		for _, p := range payload.Post {
+			c.Post[p.Name] = p.Value
+		}
+	}
+
+	return nil
 }
 
 func (r *Rule) UnmarshalJSON(data []byte) error {

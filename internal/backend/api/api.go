@@ -185,7 +185,29 @@ type Rule struct {
 }
 
 type RuleConditions struct{}
-type RuleCallbacks map[string][]string
+
+type (
+	RuleCallbacks struct {
+		RuleCallbacksNode
+	}
+
+	RuleCallbacksNode interface {
+		isRuleCallbacks()
+	}
+
+	RuleJSCallbacks struct {
+		Pre  []string `json:"pre"`
+		Post []string `json:"post"`
+	}
+
+	RuleFunctionWAFCallbacks struct {
+		Pre  map[string]string `json:"pre"`
+		Post map[string]string `json:"post"`
+	}
+)
+
+func (r RuleJSCallbacks) isRuleCallbacks()          {}
+func (r RuleFunctionWAFCallbacks) isRuleCallbacks() {}
 
 type ECDSASignature struct {
 	Keys  []string `json:"keys"`
@@ -214,8 +236,10 @@ type Hookpoint struct {
 }
 
 type RuleData struct {
-	Values []RuleDataEntry `json:"values"`
+	Values RuleDataValues `json:"values"`
 }
+
+type RuleDataValues []RuleDataEntry
 
 type RuleDataEntry Struct
 
@@ -328,7 +352,6 @@ type RequestRecord_Request struct {
 	Headers    []RequestRecord_Request_Header   `json:"headers"`
 	Verb       string                           `json:"verb"`
 	Path       string                           `json:"path"`
-	RawPath    string                           `json:"raw_path"`
 	Host       string                           `json:"host"`
 	Port       string                           `json:"port"`
 	RemoteIp   string                           `json:"remote_ip"`
@@ -348,8 +371,11 @@ type RequestRecord_Request_Parameters struct {
 	// Query parameters
 	Query map[string][]string `json:"query,omitempty"`
 	// application/x-www-form-urlencoded or multipart/form-data parameters
-	Form      map[string][]string `json:"form,omitempty"`
-	Framework map[string][]string `json:"framework,omitempty"`
+	Form map[string][]string `json:"form,omitempty"`
+	// Framework-specific parameters
+	Params map[string][]interface{} `json:"params,omitempty"`
+	// Raw body string
+	RawBody string `json:"rawbody,omitempty"`
 }
 
 type RequestRecord_Response struct {
@@ -646,7 +672,6 @@ type RequestRecord_RequestFace interface {
 	GetHeaders() []RequestRecord_Request_Header
 	GetVerb() string
 	GetPath() string
-	GetRawPath() string
 	GetHost() string
 	GetPort() string
 	GetRemoteIp() string
@@ -663,7 +688,6 @@ func NewRequestRecord_RequestFromFace(that RequestRecord_RequestFace) *RequestRe
 		Headers:    that.GetHeaders(),
 		Verb:       that.GetVerb(),
 		Path:       that.GetPath(),
-		RawPath:    that.GetRawPath(),
 		Host:       that.GetHost(),
 		Port:       that.GetPort(),
 		RemoteIp:   that.GetRemoteIp(),

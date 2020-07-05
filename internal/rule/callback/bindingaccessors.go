@@ -17,12 +17,12 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
-func NewReflectedCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, values interface{}) (*BindingAccessorContextType, error) {
+func NewReflectedCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, ruleValues interface{}) (*BindingAccessorContextType, error) {
 	var c = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
 		case "rule":
-			c.Rule = NewRuleBindingAccessorContext(values)
+			c.Rule = NewRuleBindingAccessorContext(ruleValues)
 		case "sql":
 			c.SQL = NewSQLBindingAccessorContext()
 		case "func":

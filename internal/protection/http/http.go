@@ -5,8 +5,10 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -29,12 +31,15 @@ type RequestContext struct {
 	events                     event.Record
 	cancelHandlerContextFunc   context.CancelFunc
 	contextHandlerCanceledLock sync.RWMutex
+
 	// We are intentionally not using the Context.Err() method here in order to
 	// be sure it was canceled by a call to CancelHandlerContext(). Using
 	// Context.Err() in order to know this would be also true if for example
 	// the parent context timeouts, in which case we mustn't write the blocking
 	// response.
 	contextHandlerCanceled bool
+
+	requestReader *requestReader
 }
 
 // Helper types for callbacks who must be designed for this protection so that
@@ -46,6 +51,12 @@ type (
 
 	NonBlockingPrologCallbackType = func(**RequestContext) (NonBlockingEpilogCallbackType, error)
 	NonBlockingEpilogCallbackType = func()
+
+	WAFPrologCallbackType = BlockingPrologCallbackType
+	WAFEpilogCallbackType = BlockingEpilogCallbackType
+
+	BodyWAFPrologCallbackType = WAFPrologCallbackType
+	BodyWAFEpilogCallbackType = WAFEpilogCallbackType
 
 	IdentifyUserPrologCallbackType = func(**RequestContext, *map[string]string) (BlockingEpilogCallbackType, error)
 
@@ -60,10 +71,36 @@ func (c *RequestContext) EventRecorder() protectioncontext.EventRecorder { retur
 
 type requestReader struct {
 	types.RequestReader
+
+	// clientIP is the actual IP address of the client performing the request.
 	clientIP net.IP
+
+	// requestParams is the set of HTTP request parameters taken from the HTTP
+	// request. The map key is the source (eg. json, query, multipart-form, etc.)
+	// so that we can report it and make it clearer to understand where the value
+	// comes from.
+	requestParams types.RequestParamMap
+
+	// bodyReadBuffer is the buffers body reads
+	bodyReadBuffer bytes.Buffer
 }
 
-func (r requestReader) ClientIP() net.IP { return r.clientIP }
+func (r *requestReader) ClientIP() net.IP { return r.clientIP }
+
+func (r *requestReader) Params() types.RequestParamMap {
+	params := r.RequestReader.Params()
+	if len(params) == 0 {
+		return r.requestParams
+	} else if len(r.requestParams) == 0 {
+		return params
+	}
+
+	res := make(types.RequestParamMap, len(params)+len(r.requestParams))
+	for n, v := range params {
+		res[n] = v
+	}
+	return res
+}
 
 func (c *RequestContext) AddAttackEvent(attack *event.AttackEvent) {
 	c.events.AddAttackEvent(attack)
@@ -102,25 +139,39 @@ func FromGLS() *RequestContext {
 	return ctx.(*RequestContext)
 }
 
-func NewRequestContext(agent protectioncontext.AgentFace, w types.ResponseWriter, r types.RequestReader, cancelHandlerContextFunc context.CancelFunc) *RequestContext {
-	if r.ClientIP() == nil {
-		cfg := agent.Config()
-		r = requestReader{
-			clientIP:      ClientIP(r.RemoteAddr(), r.Headers(), cfg.PrioritizedIPHeader(), cfg.PrioritizedIPHeaderFormat()),
-			RequestReader: r,
-		}
-	}
-	if agent.IsIPAllowed(r.ClientIP()) || agent.IsPathAllowed(r.URL().Path) {
-		return nil
+func NewRequestContext(ctx context.Context, agent protectioncontext.AgentFace, w types.ResponseWriter, r types.RequestReader) (*RequestContext, context.Context, context.CancelFunc) {
+	if agent.IsPathAllowed(r.URL().Path) {
+		return nil, nil, nil
 	}
 
-	ctx := &RequestContext{
+	clientIP := r.ClientIP()
+	if clientIP == nil {
+		cfg := agent.Config()
+		clientIP = ClientIP(r.RemoteAddr(), r.Headers(), cfg.PrioritizedIPHeader(), cfg.PrioritizedIPHeaderFormat())
+	}
+
+	if agent.IsIPAllowed(clientIP) {
+		return nil, nil, nil
+	}
+
+	reqCtx, cancelHandlerContextFunc := context.WithCancel(ctx)
+
+	rr := &requestReader{
+		clientIP:      clientIP,
+		RequestReader: r,
+		requestParams: make(types.RequestParamMap),
+	}
+
+	protCtx := &RequestContext{
 		RequestContext:           protectioncontext.NewRequestContext(agent),
 		ResponseWriter:           w,
-		RequestReader:            r,
+		RequestReader:            rr,
 		cancelHandlerContextFunc: cancelHandlerContextFunc,
+		// Keep a reference to the request param map to be able to add more params
+		// to it.
+		requestReader: rr,
 	}
-	return ctx
+	return protCtx, reqCtx, cancelHandlerContextFunc
 }
 
 // When a non-nil error is returned, the request handler shouldn't be called
@@ -150,6 +201,9 @@ func (c *RequestContext) isIPBlocked() error { /* dynamically instrumented */ re
 
 //go:noinline
 func (c *RequestContext) waf() error { /* dynamically instrumented */ return nil }
+
+//go:noinline
+func (c *RequestContext) bodyWAF() error { /* dynamically instrumented */ return nil }
 
 //go:noinline
 func (c *RequestContext) addSecurityHeaders() { /* dynamically instrumented */ }
@@ -230,51 +284,54 @@ func (c *RequestContext) Close(response types.ResponseFace) error {
 
 func copyRequest(reader types.RequestReader) types.RequestReader {
 	return &handledRequest{
-		headers:         reader.Headers(),
-		method:          reader.Method(),
-		url:             reader.URL(),
-		requestURI:      reader.RequestURI(),
-		host:            reader.Host(),
-		remoteAddr:      reader.RemoteAddr(),
-		isTLS:           reader.IsTLS(),
-		userAgent:       reader.UserAgent(),
-		referer:         reader.Referer(),
-		form:            reader.Form(),
-		postForm:        reader.PostForm(),
-		clientIP:        reader.ClientIP(),
-		frameworkParams: reader.FrameworkParams(),
+		headers:    reader.Headers(),
+		method:     reader.Method(),
+		url:        reader.URL(),
+		requestURI: reader.RequestURI(),
+		host:       reader.Host(),
+		remoteAddr: reader.RemoteAddr(),
+		isTLS:      reader.IsTLS(),
+		userAgent:  reader.UserAgent(),
+		referer:    reader.Referer(),
+		form:       reader.Form(),
+		postForm:   reader.PostForm(),
+		clientIP:   reader.ClientIP(),
+		params:     reader.Params(),
+		body:       reader.Body(),
 	}
 }
 
 type handledRequest struct {
-	headers         http.Header
-	method          string
-	url             *url.URL
-	requestURI      string
-	host            string
-	remoteAddr      string
-	isTLS           bool
-	userAgent       string
-	referer         string
-	form            url.Values
-	postForm        url.Values
-	clientIP        net.IP
-	frameworkParams url.Values
+	headers    http.Header
+	method     string
+	url        *url.URL
+	requestURI string
+	host       string
+	remoteAddr string
+	isTLS      bool
+	userAgent  string
+	referer    string
+	form       url.Values
+	postForm   url.Values
+	clientIP   net.IP
+	params     types.RequestParamMap
+	body       []byte
 }
 
-func (h *handledRequest) Headers() http.Header        { return h.headers }
-func (h *handledRequest) Method() string              { return h.method }
-func (h *handledRequest) URL() *url.URL               { return h.url }
-func (h *handledRequest) RequestURI() string          { return h.requestURI }
-func (h *handledRequest) Host() string                { return h.host }
-func (h *handledRequest) RemoteAddr() string          { return h.remoteAddr }
-func (h *handledRequest) IsTLS() bool                 { return h.isTLS }
-func (h *handledRequest) UserAgent() string           { return h.userAgent }
-func (h *handledRequest) Referer() string             { return h.referer }
-func (h *handledRequest) Form() url.Values            { return h.form }
-func (h *handledRequest) PostForm() url.Values        { return h.postForm }
-func (h *handledRequest) ClientIP() net.IP            { return h.clientIP }
-func (h *handledRequest) FrameworkParams() url.Values { return h.frameworkParams }
+func (h *handledRequest) Headers() http.Header          { return h.headers }
+func (h *handledRequest) Method() string                { return h.method }
+func (h *handledRequest) URL() *url.URL                 { return h.url }
+func (h *handledRequest) RequestURI() string            { return h.requestURI }
+func (h *handledRequest) Host() string                  { return h.host }
+func (h *handledRequest) RemoteAddr() string            { return h.remoteAddr }
+func (h *handledRequest) IsTLS() bool                   { return h.isTLS }
+func (h *handledRequest) UserAgent() string             { return h.userAgent }
+func (h *handledRequest) Referer() string               { return h.referer }
+func (h *handledRequest) Form() url.Values              { return h.form }
+func (h *handledRequest) PostForm() url.Values          { return h.postForm }
+func (h *handledRequest) ClientIP() net.IP              { return h.clientIP }
+func (h *handledRequest) Params() types.RequestParamMap { return h.params }
+func (h *handledRequest) Body() []byte                  { return h.body }
 func (h *handledRequest) Header(header string) (value *string) {
 	headers := h.headers
 	if headers == nil {
@@ -295,6 +352,55 @@ func (c *RequestContext) WriteDefaultBlockingResponse() { /* dynamically instrum
 
 //go:noinline
 func (c *RequestContext) monitorObservedResponse(response types.ResponseFace) { /* dynamically instrumented */ }
+
+// WrapRequest is a helper method to prepare an http.Request with its
+// new context, the protection context, and a body buffer.
+func (c *RequestContext) WrapRequest(ctx context.Context, r *http.Request) *http.Request {
+	r = r.WithContext(context.WithValue(ctx, protectioncontext.ContextKey, c))
+	if r.Body != nil {
+		r.Body = c.wrapBody(r.Body)
+	}
+	return r
+}
+
+func (c *RequestContext) wrapBody(body io.ReadCloser) io.ReadCloser {
+	return rawBodyWAF{
+		ReadCloser: body,
+		c:          c,
+	}
+}
+
+// AddRequestParam adds a new request parameter to the set. Request parameters
+// are taken from the HTTP request and parsed into a Go value. It can be the
+// result of a JSON parsing, query-string parsing, etc. The source allows to
+// specify where it was taken from.
+func (c *RequestContext) AddRequestParam(name string, param interface{}) {
+	params := c.requestReader.requestParams[name]
+	c.requestReader.requestParams[name] = append(params, param)
+}
+
+type rawBodyWAF struct {
+	io.ReadCloser
+	c *RequestContext
+}
+
+// Read buffers what has been read and ultimately calls the WAF on EOF.
+func (t rawBodyWAF) Read(p []byte) (n int, err error) {
+	n, err = t.ReadCloser.Read(p)
+	if n > 0 {
+		t.c.requestReader.bodyReadBuffer.Write(p[:n])
+	}
+	fmt.Println(err)
+	if err == io.EOF {
+		if wafErr := t.c.bodyWAF(); wafErr != nil {
+			err = wafErr
+		}
+	}
+	return
+}
+
+//go:noinline
+func (c *RequestContext) onEOF() error { return nil /* dynamically instrumented */ }
 
 func ClientIP(remoteAddr string, headers http.Header, prioritizedIPHeader string, prioritizedIPHeaderFormat string) net.IP {
 	var privateIP net.IP

@@ -8,7 +8,6 @@ package http
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
@@ -35,21 +34,17 @@ type (
 	// methods. Casting the type solves the issue, but it is not possible to cast
 	// nested type definitions like `RequestParamsSet` without copying the map and
 	// casting its values. To avoid this, we decided to change the type we return
-	// from binding accessors to types not having method helpers.
-	RequestParamsSet = map[string]RequestParams
-	RequestParams    = map[string][]string
+	// from binding accessors to types not having methods.
+	RequestParamMap = map[string][]interface{}
 )
-
-// Static assert that `url.Values` can be assigned to `RequestParams`.
-var _ RequestParams = url.Values(nil)
 
 func NewRequestBindingAccessorContext(r types.RequestReader) *RequestBindingAccessorContext {
 	return &RequestBindingAccessorContext{RequestReader: r}
 }
 
-func (c *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBindingAccessorContext, error) {
-	if c.RequestReader != nil {
-		return c, nil
+func (r *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBindingAccessorContext, error) {
+	if r.RequestReader != nil {
+		return r, nil
 	}
 	ctx, ok := v.(context.Context)
 	if !ok {
@@ -59,27 +54,38 @@ func (c *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBind
 	if reqCtx == nil {
 		return nil, sqerrors.Errorf("could not get the http protection context from the context value `%#+v`: did you pass the request context?", v)
 	}
-	c.RequestReader = reqCtx.RequestReader
-	return c, nil
+	r.RequestReader = reqCtx.RequestReader
+	return r, nil
 }
 
-func (r *RequestBindingAccessorContext) FilteredParams() RequestParamsSet {
-	set := RequestParamsSet{}
-	if form := r.RequestReader.Form(); len(form) > 0 {
-		set["Form"] = form
+func (r *RequestBindingAccessorContext) FilteredParams() RequestParamMap {
+	form := r.Form()
+	params := r.RequestReader.Params()
+	if len(form) == 0 {
+		return params
 	}
-	if framework := r.RequestReader.FrameworkParams(); len(framework) > 0 {
-		set["Framework"] = framework
+
+	res := make(types.RequestParamMap, len(form)+len(params))
+	res.Add("Form", form)
+	for k, v := range params {
+		res.Add(k, v)
 	}
-	return set
+	return res
 }
 
-func (r *RequestBindingAccessorContext) Params() RequestParamsSet {
-	params := r.FilteredParams()
-	// TODO: cookies, etc.
-	return params
+func (r *RequestBindingAccessorContext) Params() RequestParamMap {
+	return r.FilteredParams()
 }
 
 func (r *RequestBindingAccessorContext) Header(h string) (*string, error) {
 	return r.RequestReader.Header(h), nil
 }
+
+func (r *RequestBindingAccessorContext) Body() RequestBodyBindingAccessorContext {
+	return r.RequestReader.Body()
+}
+
+type RequestBodyBindingAccessorContext []byte
+
+func (b RequestBodyBindingAccessorContext) String() string { return string(b) }
+func (b RequestBodyBindingAccessorContext) Bytes() []byte  { return b }

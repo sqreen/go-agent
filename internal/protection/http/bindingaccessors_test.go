@@ -18,9 +18,9 @@ import (
 
 	"github.com/sqreen/go-agent/internal/binding-accessor"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/tools/testlib"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/go-playground/assert.v1"
 )
 
 func TestRequestBindingAccessors(t *testing.T) {
@@ -34,14 +34,16 @@ func TestRequestBindingAccessors(t *testing.T) {
 	f1.Write([]byte("value 1"))
 	mp.Close()
 	multipartContentTypeHeader := mp.FormDataContentType()
+	multipartExpectedBody := multipartFormBody.Bytes()
 
 	for _, tc := range []struct {
 		Title            string
 		Method           string
 		URL              string
 		Headers          http.Header
-		BindingAccessors map[string]interface{}
 		Body             io.Reader
+		RequestParams    types.RequestParamMap
+		BindingAccessors map[string]interface{}
 	}{
 		{
 			Title:  "GET with URL parameters",
@@ -54,6 +56,8 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.URL.RequestURI`:               "/admin?user=root&password=root",
 				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root"},
 				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password"},
+				`#.Body.String`:                  "",
+				`#.Body.Bytes`:                   []byte(nil),
 			},
 		},
 		{
@@ -67,6 +71,8 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.URL.RequestURI`:               "/admin",
 				`#.FilteredParams | flat_values`: []interface{}(nil),
 				`#.FilteredParams | flat_keys`:   []interface{}(nil),
+				`#.Body.String`:                  "",
+				`#.Body.Bytes`:                   []byte(nil),
 			},
 		},
 		{
@@ -74,7 +80,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 			Method: "POST",
 			URL:    "http://sqreen.com/admin/news?user=root&password=root",
 			Headers: http.Header{
-				"Content-Type": []string{mp.FormDataContentType()},
+				"Content-Type": []string{multipartContentTypeHeader},
 			},
 			Body: &multipartFormBody,
 			BindingAccessors: map[string]interface{}{
@@ -83,8 +89,10 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.ClientIP`:                     expectedClientIP,
 				`#.Headers['Content-Type']`:      []string{multipartContentTypeHeader},
 				`#.URL.RequestURI`:               "/admin/news?user=root&password=root",
-				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root"},             // The multipart form data is not included for now
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password"}, // The multipart form data is not included for now
+				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root", "value 1"},             // The multipart form data is not included for now
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password", "field 1"}, // The multipart form data is not included for now
+				`#.Body.String`:                  string(multipartExpectedBody),
+				`#.Body.Bytes`:                   multipartExpectedBody,
 			},
 		},
 		{
@@ -103,6 +111,8 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.URL.RequestURI`:               "/admin/news",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", ""},
 				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "z", "both", "prio", "", "orphan", "empty"},
+				`#.Body.String`:                  `z=post&both=y&prio=2&=nokey&orphan;empty=&`,
+				`#.Body.Bytes`:                   []byte(`z=post&both=y&prio=2&=nokey&orphan;empty=&`),
 			},
 		},
 		{
@@ -121,6 +131,8 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.URL.RequestURI`:               "/admin/news?sqreen=okay",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", "", "okay"},
 				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "empty", "z", "both", "prio", "", "orphan", "sqreen"},
+				`#.Body.String`:                  `z=post&both=y&prio=2&=nokey&orphan;empty=&`,
+				`#.Body.Bytes`:                   []byte(`z=post&both=y&prio=2&=nokey&orphan;empty=&`),
 			},
 		},
 		{
@@ -149,17 +161,75 @@ func TestRequestBindingAccessors(t *testing.T) {
 				},
 				`#.Header['do not exist']`: nil,
 				`#.Header['rand-STRING']`:  &randString,
+				// The body should not be read by ParseForm when the request method is
+				// GET
+				`#.Body.String`: ``,
+				`#.Body.Bytes`:  []byte(nil),
+			},
+		},
+
+		{
+			Title:  "Extra request params",
+			Method: "GET",
+			URL:    "http://sqreen.com/admin?user=root&password=root",
+			RequestParams: types.RequestParamMap{
+				"json": types.RequestParamValueSlice{
+					map[string]interface{}{
+						"k1": 1,
+						"k2": "2",
+						"k3": []bool{true, false},
+					},
+				},
+			},
+			BindingAccessors: map[string]interface{}{
+				`#.Method`:         "GET",
+				`#.Host`:           "sqreen.com",
+				`#.ClientIP`:       expectedClientIP,
+				`#.URL.RequestURI`: "/admin?user=root&password=root",
+				`#.FilteredParams`: http_protection.RequestParamMap{
+					"Form": []interface{}{
+						url.Values{
+							"user":     []string{"root"},
+							"password": []string{"root"},
+						},
+					},
+					"json": types.RequestParamValueSlice{
+						[]interface{}{
+							map[string]interface{}{
+								"k1": 1,
+								"k2": "2",
+								"k3": []bool{true, false},
+							},
+						},
+					},
+				},
+				`#.Body.String`: "",
+				`#.Body.Bytes`:  []byte(nil),
 			},
 		},
 	} {
 		tc := tc
 		t.Run(tc.Title, func(t *testing.T) {
-			req := httptest.NewRequest(tc.Method, tc.URL, tc.Body)
+			var rawBodyBuffer bytes.Buffer
+			body := io.TeeReader(tc.Body, &rawBodyBuffer)
+			req := httptest.NewRequest(tc.Method, tc.URL, body)
 			for k, v := range tc.Headers {
 				req.Header[k] = v
 			}
-			req.ParseForm()
-			ctx := http_protection.NewRequestBindingAccessorContext(requestReaderImpl{r: req, clientIP: expectedClientIP})
+			require.NoError(t, req.ParseForm())
+			if req.Header.Get("Content-Type") == multipartContentTypeHeader {
+				require.NoError(t, req.ParseMultipartForm(1024))
+			}
+
+			var rr types.RequestReader = requestReaderImpl{
+				r:             req,
+				clientIP:      expectedClientIP,
+				rawBodyBuffer: rawBodyBuffer,
+				requestParams: tc.RequestParams,
+			}
+
+			ctx := http_protection.NewRequestBindingAccessorContext(rr)
+
 			for expr, expected := range tc.BindingAccessors {
 				expr := expr
 				expected := expected
@@ -173,7 +243,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 					// cannot be compared to the expected value because the order of the map
 					// accesses is not stable
 					if flattened, ok := expected.(FlattenedResult); ok {
-						requireEqualFlatResult(t, flattened, value)
+						require.ElementsMatch(t, flattened, value)
 					} else {
 						require.Equal(t, expected, value)
 					}
@@ -185,28 +255,20 @@ func TestRequestBindingAccessors(t *testing.T) {
 
 type FlattenedResult []interface{}
 
-func requireEqualFlatResult(t *testing.T, expected FlattenedResult, value interface{}) {
-	got := value.([]interface{})
-	require.Equal(t, len(expected), len(got), got)
-loop:
-	for _, f := range expected {
-		for _, g := range got {
-			if assert.IsEqual(g, f) {
-				continue loop
-			}
-		}
-		require.Failf(t, "missing expected value", "expected `%v` having type `%T`", f, f)
-	}
-}
-
 type requestReaderImpl struct {
-	r               *http.Request
-	clientIP        net.IP
-	frameworkParams url.Values
+	r        *http.Request
+	clientIP net.IP
+	// The body read so far
+	rawBodyBuffer bytes.Buffer
+	requestParams types.RequestParamMap
 }
 
-func (r requestReaderImpl) FrameworkParams() url.Values {
-	return r.frameworkParams
+func (r requestReaderImpl) Params() types.RequestParamMap {
+	return r.requestParams
+}
+
+func (r requestReaderImpl) Body() []byte {
+	return r.rawBodyBuffer.Bytes()
 }
 
 func (r requestReaderImpl) UserAgent() string {

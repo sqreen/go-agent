@@ -50,7 +50,6 @@ func TestCall(t *testing.T) {
 		var panicErr *sqsafe.PanicError
 		require.Error(t, err)
 		require.True(t, xerrors.As(err, &panicErr))
-		require.True(t, xerrors.Is(err, origErr))
 	})
 
 	t.Run("with another panic argument type", func(t *testing.T) {
