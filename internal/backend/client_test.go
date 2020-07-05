@@ -22,7 +22,7 @@ import (
 
 var (
 	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
-	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue, FuzzRule)
+	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue, FuzzRuleSignature)
 )
 
 func TestClient(t *testing.T) {
@@ -110,25 +110,6 @@ func TestClient(t *testing.T) {
 		defer server.Close()
 
 		res, err := client.ActionsPack()
-		g.Expect(err).NotTo(HaveOccurred())
-		// A request has been received
-		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
-		g.Expect(res).Should(Equal(response))
-	})
-
-	t.Run("RulesPack", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-
-		statusCode := http.StatusOK
-
-		endpointCfg := &config.BackendHTTPAPIEndpoint.RulesPack
-
-		response := NewRandomRulesPackResponse()
-
-		client, server := initFakeServerSession(endpointCfg, nil, response, statusCode, nil)
-		defer server.Close()
-
-		res, err := client.RulesPack()
 		g.Expect(err).NotTo(HaveOccurred())
 		// A request has been received
 		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
@@ -293,7 +274,6 @@ func FuzzRuleDataValue(e *api.RuleDataEntry, c fuzz.Continue) {
 	e.Value = v
 }
 
-func FuzzRule(e *api.Rule, c fuzz.Continue) {
-	c.Fuzz(e)
-	e.Signature = api.RuleSignature{ECDSASignature: api.ECDSASignature{Message: []byte(`{}`)}}
+func FuzzRuleSignature(s *api.RuleSignature, c fuzz.Continue) {
+	*s = api.RuleSignature{ECDSASignature: api.ECDSASignature{Message: []byte(`{}`)}}
 }
