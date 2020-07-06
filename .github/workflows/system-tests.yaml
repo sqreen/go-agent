@@ -1,0 +1,44 @@
+name: System tests
+
+on:
+  push:
+    branches: # eacch commit, on each branh
+      - "**"
+  schedule:
+    - cron:  '00 03 * * *' # every days, at 3:00 AM
+
+jobs:
+  System-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Clone system tests
+        run: cd .. && git clone https://${{ secrets.GH_TOKEN }}@github.com/sqreen/SystemTests.git
+  
+      - name: Build system tests
+        run: ./build.sh
+        working-directory: ../SystemTests
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          TEST_AGENT: golang
+          TEST_TARGETS: go-agent
+      - name: Run system tests
+        run: ./run.sh
+        working-directory: ../SystemTests
+
+      - name: Report to slack
+        run: ./utils/scripts/slack/report.sh ${{ job.status }} ${{ secrets.SLACK_WEBHOOK }} "<https://github.com/sqreen/go-agent/actions/runs/${{ github.run_id }}|Golang system tests>"
+        working-directory: ../SystemTests
+        if: ${{ always() }}
+
+      - name: Move logs # artifact action does not allow folders outside worksapce
+        run: mv logs/ ${{ github.workspace }}/__LOGS__ 
+        working-directory: ../SystemTests
+        if: ${{ always() }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: logs
+          path: ${{ github.workspace }}/__LOGS__
