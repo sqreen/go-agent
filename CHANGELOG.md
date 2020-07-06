@@ -1,3 +1,37 @@
+# v0.12.0
+
+## New Features
+
+- (#130) In-App WAF protection of the HTTP request body:  
+  Since the HTTP request handler needs to explicitly read the request body, and
+  ultimately parse it into a Go value, the In-App WAF is now applied to new
+  points in the request lifecycle:
+
+    1. Reading the request body is now monitored until EOF is reached, and the
+       raw body bytes are made available to the In-App WAF rules via a new
+       In-App WAF field `Body`. Note that such In-App WAF rules can be created
+       on custom In-App WAF rulesets only.
+
+    1. Parsers can be now protected by the In-App WAF once they have parsed a
+       request input into a Go value. The parsed value is made available to the
+       In-App WAF rules via the `GET/POST parameters` field. Every
+       existing In-App WAF rule using this field therefore applies.  
+       This new feature is firstly deployed on Gin's [`ShouldBind()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.ShouldBind)
+       method which is Gin's function to parse HTTP request values. It allows to
+       cover every parser Gin provides such as [`BindJSON()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.BindJSON),
+       [`BindXML()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.BindXML), etc.
+
+       When blocked, the function returns a non-nil [`SqreenError` value](https://godoc.org/github.com/sqreen/go-agent/sdk/types#SqreenError)
+       and the caller should immediately return.  
+       Read more about the blocking behavior of Sqreen for Go at <https://docs.sqreen.com/go/integration>.
+
+- (#129) Update Sqreen's blocking HTML page with a clearer description of what users getting it should do.
+
+## Fix
+
+- (794d6e2) Allow port numbers in the `X-Forwarded-For` header.
+
+
 # v0.11.0
 
 ## New Features

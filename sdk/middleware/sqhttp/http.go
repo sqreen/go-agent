@@ -5,7 +5,6 @@
 package sqhttp
 
 import (
-	"context"
 	"io"
 	"net"
 	"net/http"
@@ -67,20 +66,17 @@ func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w 
 	requestReader := &requestReaderImpl{Request: r}
 	responseWriter := &responseWriterImpl{ResponseWriter: w}
 
-	reqCtx, cancelHandlerContext := context.WithCancel(r.Context())
-	defer cancelHandlerContext()
-
-	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(r.Context(), agent, responseWriter, requestReader)
 	if ctx == nil {
 		next.ServeHTTP(w, r)
 		return
 	}
 	defer func() {
+		cancelHandlerContext()
 		ctx.Close(responseWriter.closeResponseWriter())
 	}()
 
-	reqCtx = context.WithValue(reqCtx, protection_context.ContextKey, ctx)
-	requestReader.Request = r.WithContext(reqCtx)
+	requestReader.Request = ctx.WrapRequest(reqCtx, requestReader.Request)
 
 	if err := ctx.Before(); err != nil {
 		return
@@ -93,6 +89,10 @@ func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w 
 
 type requestReaderImpl struct {
 	*http.Request
+}
+
+func (r *requestReaderImpl) Body() []byte {
+	return nil
 }
 
 func (r *requestReaderImpl) Header(h string) (value *string) {
@@ -109,11 +109,11 @@ func (r *requestReaderImpl) Header(h string) (value *string) {
 
 const urlSegmentsFrameworkParamsKey = "URL Segments"
 
-// FrameworkParams makes its best to return framework parameters, often
+// Params makes its best to return framework parameters, often
 // taken from the URL path (eg. a parametrized endpoint `/posts/:id`),
 // by returning the list of segments in the URL path. This allows to better cover frameworks using this `net/http`
 // middleware, such as Gorilla and Beego.
-func (r *requestReaderImpl) FrameworkParams() url.Values {
+func (r *requestReaderImpl) Params() types.RequestParamMap {
 	reqURL := r.URL()
 	segments := strings.FieldsFunc(reqURL.Path, func(c rune) bool {
 		return c == '/'
@@ -121,7 +121,11 @@ func (r *requestReaderImpl) FrameworkParams() url.Values {
 	if len(segments) == 0 {
 		return nil
 	}
-	return url.Values{urlSegmentsFrameworkParamsKey: segments}
+	return types.RequestParamMap{
+		urlSegmentsFrameworkParamsKey: {
+			segments,
+		},
+	}
 }
 
 func (r *requestReaderImpl) ClientIP() net.IP {

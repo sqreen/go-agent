@@ -5,6 +5,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -43,6 +45,11 @@ func (r *ResponseWriterMockup) WriteString(s string) (n int, err error) {
 
 type RequestReaderMockup struct {
 	mock.Mock
+}
+
+func (r *RequestReaderMockup) Body() []byte {
+	value, _ := r.Called().Get(0).([]byte)
+	return value
 }
 
 func (r *RequestReaderMockup) Header(header string) (value *string) {
@@ -111,8 +118,8 @@ func (r *RequestReaderMockup) ExpectClientIP() *mock.Call {
 	return r.On("ClientIP")
 }
 
-func (r *RequestReaderMockup) FrameworkParams() url.Values {
-	v, _ := r.Called().Get(0).(url.Values)
+func (r *RequestReaderMockup) Params() types.RequestParamMap {
+	v, _ := r.Called().Get(0).(types.RequestParamMap)
 	return v
 }
 
@@ -131,9 +138,13 @@ func TestProtectionAPI(t *testing.T) {
 			requestReaderMockup.ExpectClientIP().Return(ip)
 			agentMockup.ExpectIsIPAllowed(ip).Return(true)
 
-			ctx := NewRequestContext(agentMockup, responseWriterMockup, requestReaderMockup, func() {
-				panic("unexpected call to cancel")
-			})
+			// The request path is not passlisted
+			u, err := url.Parse("https://test.com/foo/bar/")
+			require.NoError(t, err)
+			requestReaderMockup.ExpectURL().Return(u)
+			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
+
+			ctx, _, _ := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
 			require.Nil(t, ctx)
 		})
 
@@ -147,20 +158,13 @@ func TestProtectionAPI(t *testing.T) {
 			requestReaderMockup := &RequestReaderMockup{}
 			defer requestReaderMockup.AssertExpectations(t)
 
-			// The IP is not allowed
-			ip := net.ParseIP("1.2.3.4")
-			requestReaderMockup.ExpectClientIP().Return(ip)
-			agentMockup.ExpectIsIPAllowed(ip).Return(false)
-
 			// The request path is allowed
 			u, err := url.Parse("https://test.com/foo/bar/")
 			require.NoError(t, err)
 			requestReaderMockup.ExpectURL().Return(u)
 			agentMockup.ExpectIsPathAllowed(u.Path).Return(true)
 
-			ctx := NewRequestContext(agentMockup, responseWriterMockup, requestReaderMockup, func() {
-				panic("unexpected call to cancel")
-			})
+			ctx, _, _ := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
 			require.Nil(t, ctx)
 		})
 
@@ -185,11 +189,11 @@ func TestProtectionAPI(t *testing.T) {
 			requestReaderMockup.ExpectURL().Return(u)
 			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
 
-			ctx := NewRequestContext(agentMockup, responseWriterMockup, requestReaderMockup, func() {
-				panic("unexpected call to cancel")
-			})
+			ctx, reqCtx, cancel := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
 
 			require.NotNil(t, ctx)
+			require.NotNil(t, reqCtx)
+			require.NotNil(t, cancel)
 		})
 	})
 
@@ -275,6 +279,14 @@ func TestGetClientIP(t *testing.T) {
 				remoteAddr: RandPrivateIPv4().String(),
 				extraHeaders: map[string]string{
 					"X-Forwarded-For": RandPrivateIPv4().String() + "," + RandPrivateIPv4().String() + "," + globalIP.String() + "," + RandPrivateIPv4().String(),
+				},
+			},
+
+			{
+				expected:   "152.23.231.25",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1, 152.23.231.25:98746, 10.1.2.3, 152.23.231.29, 8.8.8.8",
 				},
 			},
 		} {

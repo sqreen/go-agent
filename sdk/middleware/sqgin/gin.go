@@ -7,7 +7,6 @@
 package sqgin
 
 import (
-	"context"
 	"io"
 	"net"
 	"net/http"
@@ -77,21 +76,18 @@ func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) 
 	requestReader := &requestReaderImpl{c: c}
 	responseWriter := &responseWriterImpl{c: c}
 
-	reqCtx, cancelHandlerContext := context.WithCancel(c.Request.Context())
-	defer cancelHandlerContext()
-
-	ctx := http_protection.NewRequestContext(agent, responseWriter, requestReader, cancelHandlerContext)
+	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(c, agent, responseWriter, requestReader)
 	if ctx == nil {
 		c.Next()
 		return
 	}
-
 	defer func() {
+		cancelHandlerContext()
 		_ = ctx.Close(responseWriter.closeResponseWriter())
 	}()
 
+	c.Request = ctx.WrapRequest(reqCtx, c.Request)
 	c.Set(protection_context.ContextKey.String, ctx)
-	c.Request = c.Request.WithContext(context.WithValue(reqCtx, protection_context.ContextKey, ctx))
 
 	if err := ctx.Before(); err != nil {
 		c.Abort()
@@ -111,6 +107,12 @@ func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) 
 
 type requestReaderImpl struct {
 	c *gingonic.Context
+}
+
+func (r *requestReaderImpl) Body() []byte {
+	// not called
+	// TODO: rework the interfaces to avoid that useless method
+	return nil
 }
 
 func (r *requestReaderImpl) UserAgent() string {
@@ -145,13 +147,18 @@ func (r *requestReaderImpl) IsTLS() bool {
 	return r.c.Request.TLS != nil
 }
 
-func (r *requestReaderImpl) FrameworkParams() url.Values {
+func (r *requestReaderImpl) Params() types.RequestParamMap {
 	params := r.c.Params
-	res := url.Values{}
-	for _, param := range params {
-		res[param.Key] = []string{param.Value}
+	l := len(params)
+	if l == 0 {
+		return nil
 	}
-	return res
+
+	m := make(types.RequestParamMap, l)
+	for _, param := range params {
+		m.Add(param.Key, param.Value)
+	}
+	return m
 }
 
 func (r *requestReaderImpl) Form() url.Values {

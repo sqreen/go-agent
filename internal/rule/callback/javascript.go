@@ -12,7 +12,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
-	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
+	"github.com/sqreen/go-agent/internal/binding-accessor"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
@@ -21,7 +21,7 @@ import (
 	"github.com/sqreen/go-agent/sdk/types"
 )
 
-func NewJSExecCallback(rule RuleFace, cfg ReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
+func NewJSExecCallback(rule RuleFace, cfg JSReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
 	pool := newVMPool(cfg)
 	sqassert.NotNil(pool)
 	strategy := cfg.Strategy()
@@ -108,7 +108,18 @@ type jsCallbackFunc struct {
 	funcCallParams []bindingaccessor.BindingAccessorFunc
 }
 
-func newVMPool(cfg ReflectedCallbackConfig) *vmPool {
+type fileNameMapper struct {
+	goja.FieldNameMapper
+}
+
+func (m fileNameMapper) FieldName(t reflect.Type, f reflect.StructField) string {
+	if n := m.FieldNameMapper.FieldName(t, f); n != "" {
+		return n
+	}
+	return f.Name
+}
+
+func newVMPool(cfg JSReflectedCallbackConfig) *vmPool {
 	preFuncDecl, preFuncCallParams := cfg.Pre()
 	postFuncDecl, postFuncCallParams := cfg.Post()
 	sqassert.True(preFuncDecl != nil || postFuncDecl != nil)
@@ -118,7 +129,7 @@ func newVMPool(cfg ReflectedCallbackConfig) *vmPool {
 			var pre, post goja.Callable
 
 			vm := goja.New()
-			vm.SetFieldNameMapper(goja.TagFieldNameMapper("goja", false))
+			vm.SetFieldNameMapper(fileNameMapper{goja.TagFieldNameMapper("goja", false)})
 
 			if preFuncDecl != nil {
 				_, err := vm.RunProgram(preFuncDecl)

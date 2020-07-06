@@ -13,11 +13,10 @@ import (
 	"github.com/dop251/goja"
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/backend/api"
-	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
+	"github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 )
 
@@ -36,7 +35,7 @@ type CallbackContext struct {
 	name                string
 	testMode            bool
 	config              callback.NativeCallbackConfig
-	beta                bool
+	attackType          string
 }
 
 func NewCallbackContext(r *api.Rule, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) (*CallbackContext, error) {
@@ -58,7 +57,7 @@ func NewCallbackContext(r *api.Rule, metricsEngine *metrics.Engine, errorMetrics
 		errorMetricsStore:   errorMetricsStore,
 		name:                r.Name,
 		testMode:            r.Test,
-		beta:                r.Beta,
+		attackType:          r.AttackType,
 	}, nil
 }
 
@@ -82,7 +81,7 @@ func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}, st erro
 	return &event.AttackEvent{
 		Rule:       d.name,
 		Test:       d.testMode,
-		Beta:       d.beta,
+		AttackType: d.attackType,
 		Blocked:    blocked,
 		Timestamp:  time.Now(),
 		Info:       info,
@@ -92,38 +91,44 @@ func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}, st erro
 
 type (
 	reflectedCallbackConfig struct {
-		pre  *JSCallbackFuncConfig
-		post *JSCallbackFuncConfig
 		callback.NativeCallbackConfig
 		strategy *api.ReflectedCallbackConfig
 	}
 
-	JSCallbackFuncConfig struct {
+	jsReflectedCallbackConfig struct {
+		callback.ReflectedCallbackConfig
+		pre  *jsCallbackFuncConfig
+		post *jsCallbackFuncConfig
+	}
+
+	jsCallbackFuncConfig struct {
 		FuncCallParams []bindingaccessor.BindingAccessorFunc
 		FuncDecl       *goja.Program
 	}
 )
 
-// Static assert that the callback.ReflectedCallbackConfig interface is
-// implemented.
+// Static assert that interface callback.ReflectedCallbackConfig is implemented.
+var _ callback.ReflectedCallbackConfig = &jsReflectedCallbackConfig{}
+
+// Static assert that interface callback.ReflectedCallbackConfig is implemented.
 var _ callback.ReflectedCallbackConfig = &reflectedCallbackConfig{}
 
-func (c *reflectedCallbackConfig) Pre() (*goja.Program, []bindingaccessor.BindingAccessorFunc) {
+func (c *reflectedCallbackConfig) Strategy() *api.ReflectedCallbackConfig {
+	return c.strategy
+}
+
+func (c *jsReflectedCallbackConfig) Pre() (*goja.Program, []bindingaccessor.BindingAccessorFunc) {
 	if c.pre == nil {
 		return nil, nil
 	}
 	return c.pre.FuncDecl, c.pre.FuncCallParams
 }
 
-func (c *reflectedCallbackConfig) Post() (*goja.Program, []bindingaccessor.BindingAccessorFunc) {
+func (c *jsReflectedCallbackConfig) Post() (*goja.Program, []bindingaccessor.BindingAccessorFunc) {
 	if c.post == nil {
 		return nil, nil
 	}
 	return c.post.FuncDecl, c.post.FuncCallParams
-}
-
-func (c *reflectedCallbackConfig) Strategy() *api.ReflectedCallbackConfig {
-	return c.strategy
 }
 
 type nativeCallbackConfig struct {
@@ -149,18 +154,35 @@ func newNativeCallbackConfig(r *api.Rule) (callback.NativeCallbackConfig, error)
 }
 
 func newReflectedCallbackConfig(r *api.Rule) (callback.ReflectedCallbackConfig, error) {
-	sqassert.True(r.Hookpoint.Strategy == "reflected")
+	if s := r.Hookpoint.Strategy; s != "reflected" {
+		return nil, sqerrors.Errorf("callback config: unexpected hookpoint strategy `%s`", s)
+	}
 	nativeCfg, err := newNativeCallbackConfig(r)
 	if err != nil {
 		return nil, err
 	}
 
-	callbacks := r.Callbacks
-	pre, err := newJSCallbackFuncConfig("pre", callbacks["pre"])
+	return &reflectedCallbackConfig{
+		NativeCallbackConfig: nativeCfg,
+		strategy:             r.Hookpoint.Config,
+	}, nil
+}
+
+func newJSReflectedCallbackConfig(r *api.Rule) (callback.JSReflectedCallbackConfig, error) {
+	reflectedCfg, err := newReflectedCallbackConfig(r)
 	if err != nil {
 		return nil, err
 	}
-	post, err := newJSCallbackFuncConfig("post", callbacks["post"])
+
+	callbacks, ok := r.Callbacks.RuleCallbacksNode.(*api.RuleJSCallbacks)
+	if !ok {
+		return nil, sqerrors.Errorf("unexpected callbacks type `%T` instead of `%T`", r.Callbacks.RuleCallbacksNode, callbacks)
+	}
+	pre, err := newJSCallbackFuncConfig("pre", callbacks.Pre)
+	if err != nil {
+		return nil, err
+	}
+	post, err := newJSCallbackFuncConfig("post", callbacks.Post)
 	if err != nil {
 		return nil, err
 	}
@@ -169,11 +191,10 @@ func newReflectedCallbackConfig(r *api.Rule) (callback.ReflectedCallbackConfig, 
 		return nil, sqerrors.New("undefined javascript callbacks `pre` or `post`")
 	}
 
-	return &reflectedCallbackConfig{
-		NativeCallbackConfig: nativeCfg,
-		pre:                  pre,
-		post:                 post,
-		strategy:             r.Hookpoint.Config,
+	return &jsReflectedCallbackConfig{
+		ReflectedCallbackConfig: reflectedCfg,
+		pre:                     pre,
+		post:                    post,
 	}, nil
 }
 
@@ -198,7 +219,7 @@ func newCallbackConfigData(ruleData []api.RuleDataEntry) interface{} {
 	return dataArray
 }
 
-func newJSCallbackFuncConfig(name string, rule []string) (*JSCallbackFuncConfig, error) {
+func newJSCallbackFuncConfig(name string, rule []string) (*jsCallbackFuncConfig, error) {
 	if len(rule) == 0 {
 		return nil, nil
 	}
@@ -233,7 +254,7 @@ func newJSCallbackFuncConfig(name string, rule []string) (*JSCallbackFuncConfig,
 		return nil, sqerrors.Wrapf(err, "could not compile the binding accessors of the js function call to `%s`", name)
 	}
 
-	return &JSCallbackFuncConfig{
+	return &jsCallbackFuncConfig{
 		FuncCallParams: bindingAccessors,
 		FuncDecl:       program,
 	}, nil

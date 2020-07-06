@@ -6,7 +6,6 @@ package callback_test
 
 import (
 	"net/http"
-	"reflect"
 	"testing"
 
 	"github.com/dop251/goja"
@@ -167,8 +166,9 @@ function foo() {
 		v, err := vm.RunProgram(program)
 		require.NoError(t, err)
 
+		vm.SetFieldNameMapper(goja.TagFieldNameMapper("goja", false))
+
 		v = vm.Get("foo")
-		vm.SetFieldNameMapper(tagFieldNameMapper{"goja"})
 		require.NotNil(t, v)
 
 		var foo goja.Callable
@@ -194,19 +194,31 @@ function foo() {
 			},
 		}, s)
 	})
-}
 
-type tagFieldNameMapper struct {
-	tag string
-}
+	t.Run("binding a structure", func(t *testing.T) {
+		var s = struct {
+			Field1 string `goja:"jsField"`
+			Field2 int
+		}{
+			Field1: "hey",
+			Field2: 33,
+		}
 
-func (n tagFieldNameMapper) FieldName(_ reflect.Type, field reflect.StructField) string {
-	if tag := field.Tag.Get(n.tag); tag != "" {
-		return tag
-	}
-	return field.Name
-}
+		vm := goja.New()
 
-func (tagFieldNameMapper) MethodName(_ reflect.Type, method reflect.Method) string {
-	return method.Name
+		vm.SetFieldNameMapper(goja.TagFieldNameMapper("goja", false))
+		vm.Set("s", s)
+
+		res, err := vm.RunString("Object.keys(s)")
+		require.NoError(t, err)
+		// Field2 has no goja field tag and therefore has been hidden by the
+		// field name mapper
+		require.Equal(t, []interface{}{"jsField"}, res.Export())
+
+		vm.SetFieldNameMapper(nil)
+		vm.Set("s", s)
+		res, err = vm.RunString("Object.keys(s)")
+		require.NoError(t, err)
+		require.ElementsMatch(t, []interface{}{"Field1", "Field2"}, res.Export())
+	})
 }

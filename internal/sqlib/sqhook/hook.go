@@ -250,11 +250,16 @@ func (h *Hook) Attach(prolog PrologCallback) error {
 		return nil
 	}
 
-	switch actual := prolog.(type) {
-	case ReflectedPrologCallback:
-		prolog = makePrologCallback(h, actual)
-	case PrologCallbackGetter:
-		prolog = actual.PrologCallback()
+loop:
+	for {
+		switch actual := prolog.(type) {
+		case ReflectedPrologCallback:
+			prolog = makePrologCallback(h, actual)
+		case PrologCallbackGetter:
+			prolog = actual.PrologCallback()
+		default:
+			break loop
+		}
 	}
 
 	if h.prologFuncType != reflect.TypeOf(prolog) {

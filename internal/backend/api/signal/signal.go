@@ -128,29 +128,27 @@ func fromLegacyAttack(a *legacy_api.RequestRecord_Observed_Attack, rulePackID st
 	var name, source strings.Builder
 
 	name.WriteString("sq.agent.attack.")
-	name.WriteString(a.RuleName)
+	name.WriteString(a.AttackType)
 
 	source.WriteString("sqreen:rule:")
 	source.WriteString(rulePackID)
 	source.WriteString(":")
 	source.WriteString(a.RuleName)
 
-	payload := newAttackPayload(a.Test, a.Block, a.Beta, a.Info)
+	payload := newAttackPayload(a.Test, a.Block, a.Info)
 	return (*Attack)(api.NewPoint(name.String(), source.String(), a.Time, nil, nil, nil, fromLegacyBacktrace(a.Backtrace), nil, payload))
 }
 
 type AttackPayload struct {
 	Test  bool        `json:"test"`
 	Block bool        `json:"block"`
-	Beta  bool        `json:"beta"`
 	Infos interface{} `json:"infos"`
 }
 
-func newAttackPayload(test, block, beta bool, infos interface{}) *api.SignalPayload {
+func newAttackPayload(test, block bool, infos interface{}) *api.SignalPayload {
 	return api.NewPayload("attack/2020-01-01T00:00:00.000Z", AttackPayload{
 		Test:  test,
 		Block: block,
-		Beta:  beta,
 		Infos: infos,
 	})
 }

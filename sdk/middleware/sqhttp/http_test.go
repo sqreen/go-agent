@@ -223,7 +223,7 @@ func TestRequestReaderImpl(t *testing.T) {
 			require.NoError(t, err)
 			reqReader := requestReaderImpl{req}
 
-			frameworkParams := reqReader.FrameworkParams()
+			frameworkParams := reqReader.Params()
 			require.Empty(t, frameworkParams)
 		})
 
@@ -232,10 +232,10 @@ func TestRequestReaderImpl(t *testing.T) {
 			require.NoError(t, err)
 			reqReader := requestReaderImpl{req}
 
-			frameworkParams := reqReader.FrameworkParams()
+			frameworkParams := reqReader.Params()
 			require.NotEmpty(t, frameworkParams)
 
-			require.Equal(t, []string{`a`, `bb`, `cc`, `foo`, `bar`, `zyz`, `"\"\\"\\\"`}, frameworkParams[urlSegmentsFrameworkParamsKey])
+			require.Equal(t, []interface{}{[]string{`a`, `bb`, `cc`, `foo`, `bar`, `zyz`, `"\"\\"\\\"`}}, frameworkParams[urlSegmentsFrameworkParamsKey])
 		})
 	})
 }

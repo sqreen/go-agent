@@ -46,17 +46,10 @@ func execFieldAccess(value interface{}, field string) (interface{}, error) {
 	for {
 		switch v.Kind() {
 		case reflect.Interface, reflect.Ptr:
-			if m := v.MethodByName(field); m.IsValid() {
-				// Call the the method which is expected to take no argument and to return a
-				// single value. This line can panic on purpose as this is the primary way
-				// of the `reflect` package for error management. Panics are therefore caught
-				// by the root binding accessor function and returned as an error.
-				if m.Type().NumIn() == 0 {
-					// TODO: validate and return instead an error if not possible
-					return m.Call(nil)[0].Interface(), nil
-				} else {
-					return m.Interface(), nil
-				}
+			if value, ok, err := tryExecMethodAccess(v, field); ok {
+				return value, nil
+			} else if err != nil {
+				return nil, err
 			}
 			v = v.Elem()
 			continue
@@ -66,30 +59,45 @@ func execFieldAccess(value interface{}, field string) (interface{}, error) {
 			if f := v.FieldByName(field); f.IsValid() {
 				return f.Interface(), nil
 			}
-
-			if m := v.MethodByName(field); m.IsValid() {
-				// Call the the method which is expected to take no argument and to return a
-				// single value. This line can panic on purpose as this is the primary way
-				// of the `reflect` package for error management. Panics are therefore caught
-				// by the root binding accessor function and returned as an error.
-				if m.Type().NumIn() == 0 {
-					// TODO: validate and return instead an error if not possible
-					return m.Call(nil)[0].Interface(), nil
-				} else {
-					return m.Interface(), nil
-				}
-			}
 			fallthrough
 
 		default:
+			if value, ok, err := tryExecMethodAccess(v, field); ok {
+				return value, nil
+			} else if err != nil {
+				return nil, err
+			}
 			return nil, sqerrors.Errorf("no field nor method `%s` found in value of type `%T`", field, value)
 		}
 	}
 }
 
+func tryExecMethodAccess(v reflect.Value, method string) (result interface{}, ok bool, err error) {
+	m := v.MethodByName(method)
+
+	if !m.IsValid() {
+		return nil, false, nil
+	}
+
+	mt := m.Type()
+	if mt.NumIn() != 0 {
+		// Return the method interface value
+		return m.Interface(), true, nil
+	}
+
+	res, err := execCall(m.Interface())
+	return res, true, err
+}
+
 func execCall(fn interface{}, args ...interface{}) (interface{}, error) {
 	fnValue := reflect.ValueOf(fn)
 	fnType := fnValue.Type()
+
+	if nbResults := fnType.NumOut(); nbResults != 1 && nbResults != 2 {
+		return nil, sqerrors.Errorf("unexpected number of function results of function `%s`", fnType)
+	} else if nbResults == 2 && !fnType.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		return nil, sqerrors.Errorf("unexpected second function results type of function `%s`: expected `error`", fnType)
+	}
 
 	argValues := make([]reflect.Value, len(args))
 	for i, a := range args {
@@ -103,10 +111,14 @@ func execCall(fn interface{}, args ...interface{}) (interface{}, error) {
 	}
 	results := fnValue.Call(argValues)
 
-	if r1 := results[1]; !r1.IsNil() {
-		return nil, r1.Interface().(error)
+	// return nil, err in case of an error
+	if len(results) == 2 {
+		if r1 := results[1]; !r1.IsNil() {
+			return nil, r1.Interface().(error)
+		}
 	}
 
+	// return the value otherwise
 	var value interface{}
 	switch r0 := results[0]; r0.Kind() {
 	case reflect.Interface, reflect.Ptr:
@@ -171,9 +183,7 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 			}
 		}
 
-	case reflect.Array:
-		fallthrough
-	case reflect.Slice:
+	case reflect.Array, reflect.Slice:
 		if depth == 0 {
 			// do not traverse this value
 			break

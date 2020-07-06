@@ -30,9 +30,7 @@ func NewPanicError(in func() error, err error) *PanicError {
 }
 
 func (e *PanicError) Unwrap() error {
-	// TODO: not precise until the new go 1.13 error interface is integrated into
-	//  package errors.
-	return errors.Cause(e.Err)
+	return e.Err
 }
 
 func (e *PanicError) Cause() error {
@@ -44,7 +42,7 @@ func (e *PanicError) inName() string {
 }
 
 func (e *PanicError) Error() string {
-	return fmt.Sprintf("panic while executing %s: %v", e.inName(), e.Err)
+	return fmt.Sprintf("panic while executing %s: %#+v", e.inName(), e.Err)
 }
 
 // Call calls function `f` and recovers from any panic occurring while it
@@ -63,7 +61,7 @@ func Call(f func() error) (err error) {
 		case string:
 			err = sqerrors.New(actual)
 		default:
-			err = sqerrors.New(fmt.Sprint(r))
+			err = sqerrors.Errorf("%v", r)
 		}
 
 		err = NewPanicError(f, err)

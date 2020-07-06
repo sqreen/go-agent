@@ -15,6 +15,7 @@ import (
 	"github.com/sqreen/go-agent/internal/plog"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/rule/callback"
 	sdktypes "github.com/sqreen/go-agent/sdk/types"
 	"github.com/stretchr/testify/mock"
@@ -133,8 +134,13 @@ func (r *RequestReaderMock) ExpectClientIP() *mock.Call {
 	return r.On("ClientIP")
 }
 
-func (r *RequestReaderMock) FrameworkParams() (v url.Values) {
-	v, _ = r.Called().Get(0).(url.Values)
+func (r *RequestReaderMock) Params() (v types.RequestParamMap) {
+	v, _ = r.Called().Get(0).(types.RequestParamMap)
+	return
+}
+
+func (r *RequestReaderMock) Body() (body []byte) {
+	body, _ = r.Called().Get(0).([]byte)
 	return
 }
 

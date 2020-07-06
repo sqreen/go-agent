@@ -87,10 +87,6 @@ func (a *httpRequestAPIAdapter) GetPath() string {
 	return a.adaptee.URL().Path
 }
 
-func (a *httpRequestAPIAdapter) GetRawPath() string {
-	return a.adaptee.RequestURI()
-}
-
 func (a *httpRequestAPIAdapter) GetHost() string {
 	return a.adaptee.Host()
 }
@@ -135,10 +131,15 @@ func (a *httpRequestAPIAdapter) GetParameters() api.RequestRecord_Request_Parame
 	// that we take what has been done during the request handling.
 	// So they can be nil even if there were form parameters in the
 	// body.
+	var rawBody string
+	if len(req.Body()) > 0 {
+		rawBody = "<Redacted By Sqreen>"
+	}
 	return api.RequestRecord_Request_Parameters{
-		Query:     req.Form(),
-		Form:      req.PostForm(),
-		Framework: req.FrameworkParams(),
+		Query:   req.Form(),
+		Form:    req.PostForm(),
+		Params:  req.Params(),
+		RawBody: rawBody,
 	}
 }
 
@@ -174,6 +175,10 @@ type attackEventAPIAdapter event.AttackEvent
 
 func (a *attackEventAPIAdapter) unwrap() *event.AttackEvent {
 	return (*event.AttackEvent)(a)
+}
+
+func (a *attackEventAPIAdapter) GetAttackType() string {
+	return a.unwrap().AttackType
 }
 
 func (a *attackEventAPIAdapter) GetRuleName() string {
