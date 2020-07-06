@@ -85,6 +85,8 @@ type requestReader struct {
 	bodyReadBuffer bytes.Buffer
 }
 
+func (r *requestReader) Body() []byte { return r.bodyReadBuffer.Bytes() }
+
 func (r *requestReader) ClientIP() net.IP { return r.clientIP }
 
 func (r *requestReader) Params() types.RequestParamMap {
