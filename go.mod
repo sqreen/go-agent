@@ -28,7 +28,7 @@ require (
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.3.2
-	github.com/sqreen/go-libsqreen v0.6.1
+	github.com/sqreen/go-libsqreen v0.7.0
 	github.com/sqreen/go-sdk/signal v1.0.0
 	github.com/stretchr/testify v1.5.1
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37 // indirect
