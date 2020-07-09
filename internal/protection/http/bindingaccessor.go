@@ -65,7 +65,7 @@ func (r *RequestBindingAccessorContext) FilteredParams() RequestParamMap {
 		return params
 	}
 
-	res := make(types.RequestParamMap, len(form)+len(params))
+	res := make(types.RequestParamMap, 1+len(params))
 	res.Add("Form", form)
 	for k, v := range params {
 		res.Add(k, v)
