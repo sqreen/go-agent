@@ -208,6 +208,9 @@ func flatValues(v reflect.Value, depth int, elements *int) (values []interface{}
 		return flatValues(v.Elem(), depth, elements)
 
 	default:
+		if !v.IsValid() || !v.CanInterface() {
+			break
+		}
 		*elements -= 1
 		values = []interface{}{v.Interface()}
 	}
