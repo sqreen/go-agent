@@ -400,7 +400,7 @@ type RequestRecord_Observed_Attack struct {
 }
 
 type WAFAttackInfo struct {
-	WAFData string `json:"waf_data"`
+	WAFData json.RawMessage `json:"waf_data"`
 }
 
 type WAFInfoFilter struct {
@@ -456,7 +456,7 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 	if err != nil {
 		return false, err
 	}
-	i.WAFData = string(buf)
+	i.WAFData = buf
 	return scrubbed, nil
 }
 
