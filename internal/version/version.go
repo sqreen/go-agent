@@ -4,8 +4,6 @@
 
 package version
 
-const version = "0.12.0"
+const version = "0.12.1"
 
-func Version() string {
-	return version
-}
+func Version() string { return version }
