@@ -162,7 +162,7 @@ func TestCustomScrubber(t *testing.T) {
 		}
 		buf, err := json.Marshal(&winfo)
 		require.NoError(t, err)
-		winfoJSONStr := string(buf)
+		winfoJSON := buf
 
 		rr := &api.RequestRecord{
 			Request: api.RequestRecord_Request{
@@ -176,7 +176,7 @@ func TestCustomScrubber(t *testing.T) {
 			Observed: api.RequestRecord_Observed{
 				Attacks: []*api.RequestRecord_Observed_Attack{
 					{
-						Info: api.WAFAttackInfo{WAFData: winfoJSONStr},
+						Info: api.WAFAttackInfo{WAFData: winfoJSON},
 					},
 				},
 			},
