@@ -93,12 +93,17 @@ func (r *requestReader) Params() types.RequestParamMap {
 	params := r.RequestReader.Params()
 	if len(params) == 0 {
 		return r.requestParams
-	} else if len(r.requestParams) == 0 {
+	}
+
+	if len(r.requestParams) == 0 {
 		return params
 	}
 
 	res := make(types.RequestParamMap, len(params)+len(r.requestParams))
 	for n, v := range params {
+		res[n] = v
+	}
+	for n, v := range r.requestParams {
 		res[n] = v
 	}
 	return res

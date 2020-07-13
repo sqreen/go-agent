@@ -140,7 +140,7 @@ func runWAF(ctx *httpprotection.RequestContext, bindingAccessors map[string]bind
 		return false, nil
 	}
 
-	attackInfo := api.WAFAttackInfo{WAFData: string(info)}
+	attackInfo := api.WAFAttackInfo{WAFData: info}
 	blocked = false
 
 	if blockingMode && action == waftypes.BlockAction {

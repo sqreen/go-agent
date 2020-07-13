@@ -1,3 +1,24 @@
+# v0.12.1
+
+## Fixes
+
+- (d81222d) Add missing request parameters when both JSON values and form values
+  were present - only the form values were taken into account.
+
+- (ee22b77) Upgrade to libsqreen v0.7.0:
+    - Fix false positives in libinjection SQL heuristics.
+    - Fix a false positive in libinjection XSS heuristics.
+    - Add support for boolean values.
+    - Add support for float values.
+    - Fix memory deallocator of scalar values.
+
+- (c425760) Fix data bindings with null values.
+
+## Internal Changes
+
+- (eeb1dca) Avoid copying the metadata returned by the In-App WAF.
+
+
 # v0.12.0
 
 ## New Features

@@ -289,6 +289,17 @@ func TestBindingAccessor(t *testing.T) {
 		{
 			Title:      "flat values transformation",
 			Expression: "# | flat_values",
+			Context: []interface{}{
+				map[string]interface{}{
+					"k1": "hello",
+				},
+				nil,
+			},
+			ExpectedValue: FlattenedResult{"hello"},
+		},
+		{
+			Title:      "flat values transformation",
+			Expression: "# | flat_values",
 			Context: struct {
 				A int
 				B struct {
@@ -335,6 +346,18 @@ func TestBindingAccessor(t *testing.T) {
 				},
 			},
 			ExpectedValue: FlattenedResult{"A", "B", "C", "D", "E", "One", 2, "Three"},
+		},
+		{
+			Title:      "flat keys transformation",
+			Expression: "# | flat_keys",
+			Context: []interface{}{
+				map[*string]interface{}{
+					new(string): "hello",
+					nil:         "hello nil",
+				},
+				nil,
+			},
+			ExpectedValue: FlattenedResult{new(string), (*string)(nil)},
 		},
 		{
 			Title:      "field value transformation",
