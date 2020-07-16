@@ -19,8 +19,7 @@ import (
 // to be attached to compatible HTTP protection middlewares such as
 // `protection/http`. It adds HTTP headers provided by the rule's configuration.
 func NewAddSecurityHeadersCallback(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
-	sqassert.NotNil(rule)
-	sqassert.NotNil(cfg)
+	sqassert.NotNil(rule, cfg)
 	var headers http.Header
 	data, ok := cfg.Data().([]interface{})
 	if !ok {

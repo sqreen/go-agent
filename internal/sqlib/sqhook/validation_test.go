@@ -105,33 +105,33 @@ func TestPrologVarValidation(t *testing.T) {
 		},
 
 		{ // wrong prolog type: wrong arg count
-			fn: (func(int) (chan struct{}, error))(nil),
+			fn:     (func(int) (chan struct{}, error))(nil),
 			prolog: (func(*int) (func(*chan struct{}, *error, *int), error))(nil),
 		},
 
 		{ // wrong prolog type: wrong arg count
-			fn: (func(int) (chan struct{}, error))(nil),
+			fn:     (func(int) (chan struct{}, error))(nil),
 			prolog: (func(*int) (func(*chan struct{}), error))(nil),
 		},
 
 		{ // wrong prolog type: wrong arg count
-			fn: (func(int) (chan struct{}, error))(nil),
+			fn:     (func(int) (chan struct{}, error))(nil),
 			prolog: (func(*int) (func(), error))(nil),
 		},
 
 		{ // wrong prolog type: wrong arg types
-			fn: (func(int) (chan struct{}, error))(nil),
+			fn:     (func(int) (chan struct{}, error))(nil),
 			prolog: (func(*int) (func(interface{}, interface{}, interface{}), error))(nil),
 		},
 
 		{ // wrong prolog type: wrong arg types
-			fn: (func(int) (chan struct{}, error))(nil),
+			fn:     (func(int) (chan struct{}, error))(nil),
 			prolog: (func(*int) (func(chan struct{}, *error), error))(nil),
 		},
 
 		{
-			fn: (func(int) (chan struct{}, error))(nil),
-			prolog: (func(*int) (func(*chan struct{}, *error), error))(nil),
+			fn:            (func(int) (chan struct{}, error))(nil),
+			prolog:        (func(*int) (func(*chan struct{}, *error), error))(nil),
 			shouldSucceed: true,
 		},
 

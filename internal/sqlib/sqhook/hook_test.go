@@ -36,14 +36,16 @@ func (example) myMethod()                     {}
 func (example) MyExportedMethod()             {}
 func (*example) myMethodWithPointerReceiver() {}
 
-func myFunction(_ int, _ string, _ bool) (float32, error) { return 0, nil }
-func MyExportedFunction(_ int, _ string, _ bool) error    { return nil }
+func myFunction(_ int, _ string, _ bool) (float32, error)  { return 0, nil }
+func myFunction2(_ int, _ string, _ bool) (float32, error) { return 0, nil }
+func MyExportedFunction(_ int, _ string, _ bool) error     { return nil }
 
 var (
 	MyMethodSymbol                = runtime.FuncForPC(reflect.ValueOf(example.myMethod).Pointer()).Name()
 	MyMethodWithPointerRecvSymbol = runtime.FuncForPC(reflect.ValueOf((*example).myMethodWithPointerReceiver).Pointer()).Name()
 	MyExportedMethodSymbol        = runtime.FuncForPC(reflect.ValueOf(example.MyExportedMethod).Pointer()).Name()
 	MyFunctionSymbol              = runtime.FuncForPC(reflect.ValueOf(myFunction).Pointer()).Name()
+	MyFunction2Symbol             = runtime.FuncForPC(reflect.ValueOf(myFunction2).Pointer()).Name()
 	MyExportedFunctionSymbol      = runtime.FuncForPC(reflect.ValueOf(MyExportedFunction).Pointer()).Name()
 )
 
@@ -53,6 +55,7 @@ var sortedSymbols = []string{ // Sorted by normalized name
 	MyMethodSymbol,
 	MyMethodWithPointerRecvSymbol,
 	MyFunctionSymbol,
+	MyFunction2Symbol,
 }
 
 var expectedSymbols = map[string]internal.HookDescriptorFuncType{
@@ -80,6 +83,13 @@ var expectedSymbols = map[string]internal.HookDescriptorFuncType{
 	MyFunctionSymbol: func(d *internal.HookDescriptorType) {
 		*d = internal.HookDescriptorType{
 			Func:      myFunction,
+			PrologVar: &MyFunctionProlog,
+		}
+	},
+
+	MyFunction2Symbol: func(d *internal.HookDescriptorType) {
+		*d = internal.HookDescriptorType{
+			Func:      myFunction2,
 			PrologVar: &MyFunctionProlog,
 		}
 	},
@@ -135,7 +145,7 @@ func TestGoAssumptions(t *testing.T) {
 		require.Equal(t, (*sqhook.PrologCallback)(nil), cb)
 	})
 
-	t.Run("the first argument of a myMethod is the method receiver", func(t *testing.T) {
+	t.Run("the first argument of a method is the method receiver", func(t *testing.T) {
 		require.Equal(t, reflect.TypeOf(example{}).Name(), reflect.TypeOf(example.myMethod).In(0).Name())
 	})
 
@@ -166,6 +176,14 @@ func TestFind(t *testing.T) {
 			require.NotNil(t, hook)
 		})
 	}
+}
+
+type prologCallbackGetter struct {
+	prolog sqhook.PrologCallback
+}
+
+func (p prologCallbackGetter) PrologCallback() sqhook.PrologCallback {
+	return p.prolog
 }
 
 func TestAttach(t *testing.T) {
@@ -255,10 +273,16 @@ func TestAttach(t *testing.T) {
 			return []reflect.Value{{}, {}} // not used by the test
 		})
 
-		checkProlog := func(t *testing.T) {
+		checkPrologAddr := func(t *testing.T, expected uintptr) {
 			// Read barrier using the prolog var
 			_ = atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(reflect.ValueOf(descr.PrologVar).Pointer())))
-			require.Equal(t, expectedProlog.Pointer(), reflect.ValueOf(descr.PrologVar).Elem().Elem().Pointer())
+			require.Equal(t, expected, reflect.ValueOf(descr.PrologVar).Elem().Elem().Pointer())
+		}
+
+		checkPrologAddrNotNil := func(t *testing.T) {
+			// Read barrier using the prolog var
+			_ = atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(reflect.ValueOf(descr.PrologVar).Pointer())))
+			require.NotZero(t, reflect.ValueOf(descr.PrologVar).Elem().Elem().Pointer())
 		}
 
 		t.Run(tc.Symbol, func(t *testing.T) {
@@ -269,21 +293,84 @@ func TestAttach(t *testing.T) {
 				hook, err := sqhook.Find(tc.Symbol)
 				require.NoError(t, err)
 				require.NotNil(t, hook)
-				// Attach the expected prolog function
-				err = hook.Attach(expectedProlog.Interface())
-				require.NoError(t, err)
-				// Read back the prolog variable
-				checkProlog(t)
+
+				t.Run("native prolog callback", func(t *testing.T) {
+					// Attach the expected prolog function
+					err = hook.Attach(expectedProlog.Interface())
+					require.NoError(t, err)
+					// Read back the prolog variable
+					checkPrologAddr(t, expectedProlog.Pointer())
+				})
+
+				t.Run("reflected prolog callback", func(t *testing.T) {
+					var reflected sqhook.ReflectedPrologCallback = func(params []reflect.Value) (epilog sqhook.ReflectedEpilogCallback, err error) {
+						return nil, nil
+					}
+					// Attach the expected prolog function
+					err = hook.Attach(reflected)
+					require.NoError(t, err)
+					// Read back the prolog variable
+					checkPrologAddrNotNil(t)
+				})
+
+				t.Run("prolog callback getter", func(t *testing.T) {
+					t.Run("returning a native prolog", func(t *testing.T) {
+						// Attach the expected prolog function
+						err = hook.Attach(prologCallbackGetter{prolog: expectedProlog.Interface()})
+						require.NoError(t, err)
+						// Read back the prolog variable
+						checkPrologAddrNotNil(t)
+					})
+
+					t.Run("returning a reflected prolog", func(t *testing.T) {
+						var reflected sqhook.ReflectedPrologCallback = func(params []reflect.Value) (epilog sqhook.ReflectedEpilogCallback, err error) {
+							return nil, nil
+						}
+						// Attach the expected prolog function
+						err = hook.Attach(prologCallbackGetter{
+							prolog: reflected,
+						})
+						require.NoError(t, err)
+						// Read back the prolog variable
+						checkPrologAddrNotNil(t)
+					})
+				})
+
+				t.Run("multiple prolog callbacks", func(t *testing.T) {
+					var reflected sqhook.ReflectedPrologCallback = func(params []reflect.Value) (epilog sqhook.ReflectedEpilogCallback, err error) {
+						return nil, nil
+					}
+					// Attach the expected prolog function
+					native := expectedProlog.Interface()
+					err = hook.Attach(reflected, native, reflected, native, reflected, native, prologCallbackGetter{prolog: reflected}, prologCallbackGetter{prolog: expectedProlog.Interface()})
+					require.NoError(t, err)
+					// Read back the prolog variable
+					checkPrologAddrNotNil(t)
+				})
 			})
+
 			t.Run("not expected prolog types", func(t *testing.T) {
+				hook, err := sqhook.Find(tc.Symbol)
+				require.NoError(t, err)
+				require.NotNil(t, hook)
+				require.NoError(t, hook.Attach(nil))
+
 				for _, invalidProlog := range tc.InvalidPrologs {
 					invalidProlog := invalidProlog
 					t.Run(fmt.Sprintf("%T", invalidProlog), func(t *testing.T) {
-						hook, err := sqhook.Find(tc.Symbol)
-						require.NoError(t, err)
-						require.NotNil(t, hook)
 						err = hook.Attach(invalidProlog)
 						require.Error(t, err)
+						//checkPrologAddr(t, 0)
+					})
+
+					t.Run(fmt.Sprintf("%T along with the expected prolog callback", invalidProlog), func(t *testing.T) {
+						err = hook.Attach(expectedProlog.Interface(), invalidProlog)
+						require.Error(t, err)
+						//checkPrologAddr(t, 0)
+
+						err = hook.Attach(invalidProlog, expectedProlog.Interface())
+						require.Error(t, err)
+						//checkPrologAddr(t, 0)
 					})
 				}
 			})

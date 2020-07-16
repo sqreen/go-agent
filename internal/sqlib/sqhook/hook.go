@@ -186,7 +186,7 @@ func normalizedHookID(symbol string) string {
 
 // add creates the hook object for function `fn`, adds it to the find map and
 // returns it. It returns an error if it is not possible.
-func (t symbolIndexType) add(fn, prologVar interface{}) (*Hook, error) {
+func (t symbolIndexType) add(fn, prologVar interface{}) (h *Hook, err error) {
 	// Check fn is a non-nil function value
 	if fn == nil {
 		return nil, sqerrors.New("unexpected function argument value `nil`")
@@ -194,17 +194,24 @@ func (t symbolIndexType) add(fn, prologVar interface{}) (*Hook, error) {
 	fnValue := reflect.ValueOf(fn)
 	fnType := fnValue.Type()
 	if fnType.Kind() != reflect.Func {
-		return nil, sqerrors.Errorf("unexpected function argument type: expecting a function value but got `%v`", fn)
+		return nil, sqerrors.Errorf("unexpected function argument type: expecting a function value but got `%T`", fn)
 	}
 
 	// Get the symbol name
 	symbol := runtime.FuncForPC(fnValue.Pointer()).Name()
 	if symbol == "" {
-		return nil, sqerrors.Errorf("could not read the symbol name of function `%#v`", fn)
+		return nil, sqerrors.Errorf("could not read the symbol name of function `%T`", fn)
 	}
 
 	// Unvendor it so that it is not prefixed by `<app>/vendor/`
 	symbol = sqgo.Unvendor(symbol)
+
+	// Use the symbol name for better error messages
+	defer func() {
+		if err != nil {
+			err = sqerrors.Wrapf(err, "symbol `%s`", symbol)
+		}
+	}()
 
 	// The hook may have been already added by a previous lookup
 	if hook, exists := t[symbol]; exists {
@@ -241,29 +248,44 @@ func (h *Hook) String() string {
 
 // Attach atomically attaches a prolog function to the hook. The hook can be
 // disabled with a `nil` prolog value.
-func (h *Hook) Attach(prolog PrologCallback) error {
+func (h *Hook) Attach(prologs ...PrologCallback) error {
 	addr := h.prologVarAddr
-	if prolog == nil {
+	if l := len(prologs); l == 0 || (l == 1 && prologs[0] == nil) {
 		// Disable
 		atomic.StorePointer(addr, nil)
-		// TODO: should we check if the attach cb has a Close() method?
 		return nil
 	}
 
-loop:
-	for {
-		switch actual := prolog.(type) {
-		case ReflectedPrologCallback:
-			prolog = makePrologCallback(h, actual)
-		case PrologCallbackGetter:
-			prolog = actual.PrologCallback()
-		default:
-			break loop
+	prologCallbacks := make([]PrologCallback, len(prologs))
+	for i, prolog := range prologs {
+		// Loop until the prolog type is not one of the above
+	loop:
+		for {
+			switch actual := prolog.(type) {
+			case ReflectedPrologCallback:
+				prolog = makePrologCallback(h, actual)
+			case PrologCallbackGetter:
+				prolog = actual.PrologCallback()
+			default:
+				// Final type
+				break loop
+			}
 		}
+
+		if h.prologFuncType != reflect.TypeOf(prolog) {
+			return sqerrors.Errorf("unexpected prolog type for hook `%s`: got `%T`, wanted `%s`", h, prolog, h.prologFuncType)
+		}
+
+		prologCallbacks[i] = prolog
 	}
 
-	if h.prologFuncType != reflect.TypeOf(prolog) {
-		return sqerrors.Errorf("unexpected prolog type for hook `%s`: got `%T`, wanted `%s`", h, prolog, h.prologFuncType)
+	// Create the prolog out of the prologCallbacks
+	var prolog PrologCallback
+	if l := len(prologCallbacks); l == 1 {
+		prolog = prologCallbacks[0]
+	} else {
+		// Create a dynamic function calling the prolog
+		prolog = makeMultiPrologCallback(h, prologCallbacks)
 	}
 
 	// Create a value having type "pointer to the prolog function"
@@ -273,6 +295,46 @@ loop:
 	// Atomically store it: *addr = ptr
 	atomic.StorePointer(addr, unsafe.Pointer(ptr.Pointer()))
 	return nil
+}
+
+func makeMultiPrologCallback(h *Hook, prologs []PrologCallback) PrologCallback {
+	return makePrologCallback(h, func(params []reflect.Value) (epilog ReflectedEpilogCallback, err error) {
+		safeCallErr := sqsafe.Call(func() error {
+			epilogs := make([]reflect.Value, 0, len(prologs))
+			for _, prolog := range prologs {
+				prologValue := reflect.ValueOf(prolog)
+				results := prologValue.Call(params)
+				if r0 := results[0]; !r0.IsNil() {
+					epilogs = append(epilogs, r0)
+				}
+				if r1 := results[1]; !r1.IsNil() {
+					if len(epilogs) > 0 {
+						epilog = func(results []reflect.Value) {
+							for _, epilog := range epilogs {
+								epilog.Call(results)
+							}
+						}
+					}
+					err = r1.Interface().(error)
+					return nil
+				}
+			}
+
+			if len(epilogs) > 0 {
+				epilog = func(results []reflect.Value) {
+					for _, epilog := range epilogs {
+						epilog.Call(results)
+					}
+				}
+			}
+
+			return nil
+		})
+		if safeCallErr != nil {
+			// TODO: log this error once
+		}
+		return epilog, err
+	})
 }
 
 func makePrologCallback(h *Hook, prolog ReflectedPrologCallback) PrologCallback {
