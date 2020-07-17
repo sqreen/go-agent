@@ -301,6 +301,15 @@ func makeMultiPrologCallback(h *Hook, prologs []PrologCallback) PrologCallback {
 	return makePrologCallback(h, func(params []reflect.Value) (epilog ReflectedEpilogCallback, err error) {
 		safeCallErr := sqsafe.Call(func() error {
 			epilogs := make([]reflect.Value, 0, len(prologs))
+			defer func() {
+				if len(epilogs) > 0 {
+					epilog = func(results []reflect.Value) {
+						for _, epilog := range epilogs {
+							epilog.Call(results)
+						}
+					}
+				}
+			}()
 			for _, prolog := range prologs {
 				prologValue := reflect.ValueOf(prolog)
 				results := prologValue.Call(params)
@@ -308,26 +317,10 @@ func makeMultiPrologCallback(h *Hook, prologs []PrologCallback) PrologCallback {
 					epilogs = append(epilogs, r0)
 				}
 				if r1 := results[1]; !r1.IsNil() {
-					if len(epilogs) > 0 {
-						epilog = func(results []reflect.Value) {
-							for _, epilog := range epilogs {
-								epilog.Call(results)
-							}
-						}
-					}
 					err = r1.Interface().(error)
 					return nil
 				}
 			}
-
-			if len(epilogs) > 0 {
-				epilog = func(results []reflect.Value) {
-					for _, epilog := range epilogs {
-						epilog.Call(results)
-					}
-				}
-			}
-
 			return nil
 		})
 		if safeCallErr != nil {

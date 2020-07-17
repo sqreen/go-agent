@@ -182,6 +182,7 @@ type Rule struct {
 	Test       bool               `json:"test"`
 	Block      bool               `json:"block"`
 	AttackType string             `json:"attack_type"`
+	Priority   int                `json:"priority"`
 }
 
 type RuleConditions struct{}
