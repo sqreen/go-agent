@@ -21,6 +21,7 @@ package rule
 import (
 	"crypto/ecdsa"
 	"io"
+	"sort"
 
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/metrics"
@@ -35,7 +36,7 @@ type Engine struct {
 	// at run time by atomically replacing a running rule.
 	// TODO: write a test to check two HookFaces are correctly comparable
 	//   to find back a hook
-	hooks                 hookDescriptors
+	hooks                 hookDescriptorMap
 	packID                string
 	enabled               bool
 	metricsEngine         *metrics.Engine
@@ -79,7 +80,7 @@ func (e *Engine) PackID() string {
 // them by atomically modifying the hooks, and removing what is left.
 func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	// Create the new rule descriptors and replace the existing ones
-	var ruleDescriptors hookDescriptors
+	var ruleDescriptors hookDescriptorMap
 	if len(rules) > 0 {
 		e.logger.Debugf("security rules: loading rules from pack `%s`", packID)
 		ruleDescriptors = newHookDescriptors(e, rules)
@@ -87,7 +88,7 @@ func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	e.setRules(packID, ruleDescriptors)
 }
 
-func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
+func (e *Engine) setRules(packID string, descriptors hookDescriptorMap) {
 	// Firstly update already enabled hookpoints with their new callbacks in order
 	// to avoid having a blank moment without any callback set. This case happens
 	// when a rule is updated.
@@ -96,7 +97,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 		if e.enabled {
 			// Attach the callback to the hook, possibly overwriting the previous one.
 			e.logger.Debugf("security rules: attaching callback to `%s`", hook)
-			err := hook.Attach(descr.callback)
+			err := hook.Attach(descr.callbacks...)
 			if err != nil {
 				e.logger.Error(sqerrors.Wrapf(err, "security rules: could not attach the prolog callback to `%s`", hook))
 				continue
@@ -135,11 +136,11 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptors) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
+func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptorMap {
 	logger := e.logger
 
 	// Create and configure the list of callbacks according to the given rules
-	var hookDescriptors = make(hookDescriptors)
+	var hookDescriptors = make(hookDescriptorMap)
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := rules[i]
 		// Verify the signature
@@ -168,6 +169,8 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 			continue
 		}
 
+		// Create the prolog callback
+		var prolog sqhook.PrologCallback
 		switch hookpoint.Strategy {
 		case "", "native":
 			cfg, err := newNativeCallbackConfig(&r)
@@ -176,26 +179,23 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 				continue
 			}
 
-			prolog, err := NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
+			prolog, err = NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
 			}
-			// Create the descriptor with everything required to be able to enable or
-			// disable it afterwards.
-			hookDescriptors.Set(hook, prolog)
 
 		case "reflected":
-			prolog, err := NewReflectedCallback(hookpoint.Callback, callbackContext, &r)
+			prolog, err = NewReflectedCallback(hookpoint.Callback, callbackContext, &r)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
 			}
-			// Create the descriptor with everything required to be able to enable or
-			// disable it afterwards.
-			hookDescriptors.Set(hook, prolog)
 		}
 
+		// Create the descriptor with everything required to be able to enable or
+		// disable it afterwards.
+		hookDescriptors.Add(hook, prolog, r.Priority)
 	}
 	// Nothing in the end
 	if len(hookDescriptors) == 0 {
@@ -207,9 +207,8 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptors {
 // Enable the hooks of the ongoing configured rules.
 func (e *Engine) Enable() {
 	for hook, descr := range e.hooks {
-		prolog := descr.callback
 		e.logger.Debugf("security rules: attaching callback to hook `%s`", hook)
-		if err := hook.Attach(prolog); err != nil {
+		if err := hook.Attach(descr.callbacks...); err != nil {
 			e.logger.Error(sqerrors.Wrapf(err, "security rules: could not attach the callback to hook `%v`", hook))
 		}
 	}
@@ -235,23 +234,66 @@ func (e *Engine) Count() int {
 	return len(e.hooks)
 }
 
-type callbackWrapper struct {
-	callback sqhook.PrologCallback
-}
+type (
+	hookDescriptorMap map[HookFace]hookDescriptor
 
-func (c callbackWrapper) Close() error {
-	if closer, ok := c.callback.(io.Closer); ok {
-		return closer.Close()
+	hookDescriptor struct {
+		priorities []int
+		callbacks  []sqhook.PrologCallback
+		closers    []io.Closer
 	}
-	return nil
+)
+
+func (m hookDescriptorMap) Add(hook HookFace, callback sqhook.PrologCallback, priority int) {
+	d, exists := m[hook]
+	closer, _ := callback.(io.Closer)
+
+	if !exists {
+		// First insertion
+		var closers []io.Closer
+		if closer != nil {
+			closers = []io.Closer{closer}
+		}
+		m[hook] = hookDescriptor{
+			priorities: []int{priority},
+			callbacks:  []sqhook.PrologCallback{callback},
+			closers:    closers,
+		}
+		return
+	}
+
+	// Not the first insertion.
+	// Look for the callback position i per ascending priority order
+	i := sort.Search(len(d.priorities), func(i int) bool {
+		return d.priorities[i] > priority
+	})
+
+	// Update the list of priorities
+	d.priorities = append(d.priorities, 0)
+	copy(d.priorities[i+1:], d.priorities[i:])
+	d.priorities[i] = priority
+
+	// Update the list of closers
+	if closer != nil {
+		d.closers = append(d.closers, closer)
+	}
+
+	// Update the list of callbacks
+	d.callbacks = append(d.callbacks, nil)
+	copy(d.callbacks[i+1:], d.callbacks[i:])
+	d.callbacks[i] = callback
+
+	// Update the hook descriptor map entry with the new value
+	m[hook] = d
 }
 
-type hookDescriptors map[HookFace]callbackWrapper
-
-func (m hookDescriptors) Set(hook HookFace, prolog sqhook.PrologCallback) {
-	m[hook] = callbackWrapper{prolog}
-}
-
-func (m hookDescriptors) Get(hook HookFace) callbackWrapper {
-	return m[hook]
+func (d hookDescriptor) Close() error {
+	var errs sqerrors.ErrorCollection
+	for _, c := range d.closers {
+		err := c.Close()
+		if err != nil {
+			errs.Add(err)
+		}
+	}
+	return errs.ToError()
 }

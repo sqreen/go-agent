@@ -34,6 +34,8 @@ func (i *instrumentationMockup) Health(expectedVersion string) error {
 
 type hookMockup struct{ mock.Mock }
 
+var _ rule.HookFace = &hookMockup{}
+
 func (i *instrumentationMockup) Find(symbol string) (rule.HookFace, error) {
 	res := i.Called(symbol)
 	err := res.Error(1)
@@ -47,12 +49,22 @@ func (i *instrumentationMockup) ExpectFind(symbol string) *mock.Call {
 	return i.On("Find", symbol)
 }
 
-func (h *hookMockup) Attach(prolog sqhook.PrologCallback) error {
-	return h.Called(prolog).Error(0)
+func (h *hookMockup) Attach(prologs ...sqhook.PrologCallback) error {
+	return h.Called(prologs).Error(0)
 }
 
-func (h *hookMockup) ExpectAttach(prolog interface{}) *mock.Call {
-	return h.On("Attach", prolog)
+func (h *hookMockup) ExpectAttach(prologs ...interface{}) *mock.Call {
+	var args interface{}
+	if l := len(prologs); l == 1 && prologs[0] == mock.Anything {
+		args = prologs[0]
+	} else {
+		prologArgs := make([]sqhook.PrologCallback, l)
+		for i, p := range prologs {
+			prologArgs[i] = p
+		}
+		args = prologArgs
+	}
+	return h.On("Attach", args)
 }
 
 func (h *hookMockup) PrologFuncType() reflect.Type {

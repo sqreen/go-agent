@@ -20,9 +20,11 @@ func NoError(err error) {
 	}
 }
 
-func NotNil(v interface{}) {
-	if v == nil {
-		doPanic(sqerrors.New("sqassert: unexpected nil value"))
+func NotNil(v ...interface{}) {
+	for _, v := range v {
+		if v == nil {
+			doPanic(sqerrors.New("sqassert: unexpected nil value"))
+		}
 	}
 }
 
