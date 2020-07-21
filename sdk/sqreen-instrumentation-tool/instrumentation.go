@@ -202,6 +202,7 @@ var (
 		"os",
 		"net/http",
 		"github.com/gin-gonic/gin",
+		"go.mongodb.org/mongo-driver/mongo",
 	}
 
 	// Optional list packages, files and functions we want to only instrument for
@@ -220,6 +221,10 @@ var (
 		"github.com/gin-gonic/gin": {
 			// Same comment as net/http
 			"context.go", // context.go contains the body parsers
+		},
+		"go.mongodb.org/mongo-driver/mongo": {
+			// Limited for performance reasons to:
+			"mongo.go", // mongo.go contains the bson transformation function
 		},
 	}
 )
