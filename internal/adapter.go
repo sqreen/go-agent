@@ -334,6 +334,15 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*me
 	return metricsArray
 }
 
+type variousInfoAPIAdapter struct {
+	*appInfoAPIAdapter
+	sqreenDomains api.SqreenDomainStatusMap
+}
+
+func (v variousInfoAPIAdapter) GetSqreenDomains() api.SqreenDomainStatusMap {
+	return v.sqreenDomains
+}
+
 type appInfoAPIAdapter app.Info
 
 func (a *appInfoAPIAdapter) unwrap() *app.Info { return (*app.Info)(a) }

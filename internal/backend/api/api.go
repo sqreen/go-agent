@@ -11,6 +11,10 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
 )
 
+type PingResponse struct {
+	Status bool `json:"status"`
+}
+
 type AppLoginRequest struct {
 	BundleSignature  string                       `json:"bundle_signature"`
 	VariousInfos     AppLoginRequest_VariousInfos `json:"various_infos"`
@@ -26,18 +30,27 @@ type AppLoginRequest struct {
 }
 
 type AppLoginRequest_VariousInfos struct {
-	Time             time.Time `json:"time"`
-	Pid              uint32    `json:"pid"`
-	Ppid             uint32    `json:"ppid"`
-	Euid             uint32    `json:"euid"`
-	Egid             uint32    `json:"egid"`
-	Uid              uint32    `json:"uid"`
-	Gid              uint32    `json:"gid"`
-	Name             string    `json:"name"`
-	LibSqreenVersion *string   `json:"libsqreen_version"`
-	HasDependencies  bool      `json:"has_dependencies"`
-	HasLibsqreen     bool      `json:"has_libsqreen"`
+	Time             time.Time             `json:"time"`
+	Pid              uint32                `json:"pid"`
+	Ppid             uint32                `json:"ppid"`
+	Euid             uint32                `json:"euid"`
+	Egid             uint32                `json:"egid"`
+	Uid              uint32                `json:"uid"`
+	Gid              uint32                `json:"gid"`
+	Name             string                `json:"name"`
+	LibSqreenVersion *string               `json:"libsqreen_version"`
+	HasDependencies  bool                  `json:"has_dependencies"`
+	HasLibsqreen     bool                  `json:"has_libsqreen"`
+	SqreenDomains    SqreenDomainStatusMap `json:"sqreen_domains"`
 }
+
+type (
+	SqreenDomainStatusMap map[string]SqreenDomainStatus
+	SqreenDomainStatus    struct {
+		Status bool   `json:"status,omitempty"`
+		Error  string `json:"error,omitempty"`
+	}
+)
 
 type AppLoginResponse struct {
 	Error     string                   `json:"error"`
@@ -565,6 +578,7 @@ type AppLoginRequest_VariousInfosFace interface {
 	GetLibSqreenVersion() *string
 	GetHasDependencies() bool
 	GetHasLibsqreen() bool
+	GetSqreenDomains() SqreenDomainStatusMap
 }
 
 func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFace) *AppLoginRequest_VariousInfos {
@@ -580,6 +594,7 @@ func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFa
 	this.LibSqreenVersion = that.GetLibSqreenVersion()
 	this.HasDependencies = that.GetHasDependencies()
 	this.HasLibsqreen = that.GetHasLibsqreen()
+	this.SqreenDomains = that.GetSqreenDomains()
 	return this
 }
 
