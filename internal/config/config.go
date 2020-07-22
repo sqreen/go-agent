@@ -57,7 +57,7 @@ var (
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
 		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack, RulesPack,
-		Bundle, AgentMessage, AppAgentMessage HTTPAPIEndpoint
+		Bundle, AgentMessage, AppAgentMessage, Ping HTTPAPIEndpoint
 	}{
 		AppLogin:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
 		AppLogout:       HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
@@ -69,6 +69,7 @@ var (
 		Bundle:          HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/bundle"},
 		AgentMessage:    HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/agent_message"},
 		AppAgentMessage: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_agent_message"},
+		Ping:            HTTPAPIEndpoint{http.MethodGet, "/ping"},
 	}
 
 	// Header name of the API token.

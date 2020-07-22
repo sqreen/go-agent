@@ -258,8 +258,7 @@ func TestStripRegexp(t *testing.T) {
 		require.NotNil(t, cfg.StripSensitiveKeyRegexp())
 		require.NotNil(t, cfg.StripSensitiveValueRegexp())
 
-		scrubber, err := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), ScrubberRedactedString)
-		require.NoError(t, err)
+		scrubber := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), ScrubberRedactedString)
 
 		t.Run("the key regexp should match", func(t *testing.T) {
 			for _, key := range []string{

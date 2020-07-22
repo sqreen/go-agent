@@ -228,9 +228,9 @@ func New(cfg *config.Config) *AgentType {
 		logger.Info(message)
 		return nil
 	}
-	// TODO: agent.Health() + waf.Health()
+
 	if waf.Version() == nil {
-		message := fmt.Sprintf("in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf")
+		message := "in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf"
 		backend.SendAgentMessage(logger, cfg, message)
 		logger.Info("agent: ", message)
 	}
@@ -240,9 +240,11 @@ func New(cfg *config.Config) *AgentType {
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
 	logger.Debugf("agent: using sdk metrics store time period of %s", sdkMetricsPeriod)
 
-	piiScrubber, err := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), config.ScrubberRedactedString)
+	piiScrubber := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), config.ScrubberRedactedString)
+
+	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg.BackendHTTPAPIProxy(), logger)
 	if err != nil {
-		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
+		logger.Error(sqerrors.Wrap(err, "agent: could not create the backend client"))
 		return nil
 	}
 
@@ -264,7 +266,7 @@ func New(cfg *config.Config) *AgentType {
 		cancel:      cancel,
 		config:      cfg,
 		appInfo:     app.NewInfo(logger),
-		client:      backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg.BackendHTTPAPIProxy(), logger),
+		client:      client,
 		actors:      actor.NewStore(logger),
 		rules:       rulesEngine,
 		piiScrubber: piiScrubber,

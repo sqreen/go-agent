@@ -59,8 +59,14 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 		logger.Error(withNotificationError{sqerrors.Wrap(err, "could not retrieve the program dependencies")})
 	}
 
+	backendHealth := client.Health()
+	variousInfoAPIAdapter := variousInfoAPIAdapter{
+		appInfoAPIAdapter: (*appInfoAPIAdapter)(appInfo),
+		sqreenDomains:     backendHealth.DomainStatus,
+	}
+
 	appLoginReq := api.AppLoginRequest{
-		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace((*appInfoAPIAdapter)(appInfo)),
+		VariousInfos:    *api.NewAppLoginRequest_VariousInfosFromFace(variousInfoAPIAdapter),
 		BundleSignature: bundleSignature,
 		AgentType:       "golang",
 		AgentVersion:    version.Version(),

@@ -10,7 +10,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -31,19 +30,20 @@ import (
 
 type Client struct {
 	client       *http.Client
-	backendURL   string
+	backendURL   *url.URL
 	logger       *plog.Logger
 	session      string
 	signalClient *client.Client
 	infra        *signal.AgentInfra
+	health       *HealthStatus
 }
 
-func NewClient(backendURL string, proxy string, logger *plog.Logger) *Client {
+func NewClient(baseURL string, proxy string, logger *plog.Logger) (*Client, error) {
 	var transport *http.Transport
 	if proxy == "" {
 		// No user settings. The default transport uses standard global proxy
 		// settings *_PROXY environment variables.
-		dummyReq, _ := http.NewRequest("GET", backendURL, nil)
+		dummyReq, _ := http.NewRequest("GET", baseURL, nil)
 		if proxyURL, _ := http.ProxyFromEnvironment(dummyReq); proxyURL != nil {
 			logger.Infof("client: using system http proxy `%s` as indicated by the system environment variables http_proxy, https_proxy and no_proxy (or their uppercase alternatives)", proxyURL)
 		}
@@ -64,6 +64,11 @@ func NewClient(backendURL string, proxy string, logger *plog.Logger) *Client {
 		transport.Proxy = proxy
 	}
 
+	backendURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, sqerrors.Wrapf(err, "could not parse the URL `%s`", backendURL)
+	}
+
 	client := &Client{
 		client: &http.Client{
 			Timeout:   config.BackendHTTPAPIRequestTimeout,
@@ -73,7 +78,41 @@ func NewClient(backendURL string, proxy string, logger *plog.Logger) *Client {
 		logger:     logger,
 	}
 
-	return client
+	return client, nil
+}
+
+type HealthStatus struct {
+	DomainStatus api.SqreenDomainStatusMap
+}
+
+func (c *Client) Health() HealthStatus {
+	if c.health != nil {
+		return *c.health
+	}
+
+	health := HealthStatus{
+		DomainStatus: api.SqreenDomainStatusMap{},
+	}
+
+	var (
+		domain = client.DefaultBaseURL
+		res    api.PingResponse
+		err    error
+	)
+	req, err := http.NewRequest(config.BackendHTTPAPIEndpoint.Ping.Method, domain+config.BackendHTTPAPIEndpoint.Ping.URL, nil)
+	if err == nil {
+		err = c.Do(req, nil, &res)
+	}
+	status := api.SqreenDomainStatus{
+		Status: res.Status,
+	}
+	if err != nil {
+		status.Error = err.Error()
+	}
+	health.DomainStatus[domain] = status
+
+	c.health = &health
+	return health
 }
 
 func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string, useSignalBackend bool) (*api.AppLoginResponse, error) {
@@ -99,6 +138,13 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 
 	if useSignalBackend || res.Features.UseSignals {
 		c.signalClient = client.NewClient(c.client, c.session)
+
+		// If the default signal URL is not healthy, fallback to the general
+		// backend URL.
+		if !c.Health().DomainStatus[client.DefaultBaseURL].Status {
+			c.signalClient.BaseURL = c.backendURL
+		}
+
 		c.signalClient.Logger = c.logger
 		c.infra = signal.NewAgentInfra(req.AgentVersion, req.OsType, req.Hostname, req.RuntimeVersion)
 	}
@@ -221,9 +267,9 @@ func (c *Client) Do(req *http.Request, pbs ...interface{}) error {
 		// involved ip addresses
 		if urlErr, ok := err.(*url.Error); ok {
 			if netErr, ok := urlErr.Err.(*net.OpError); ok {
-				// TODO: update the api to pass these dropped extra details (involved
-				//  ip addresses) as error metadata
-				err = sqerrors.Wrap(netErr.Err, fmt.Sprintf("%s %s", urlErr.Op, urlErr.URL))
+				err = sqerrors.WithInfo(err, netErr)
+			} else {
+				err = sqerrors.WithInfo(err, urlErr)
 			}
 		}
 		return err
@@ -271,16 +317,19 @@ func (r *HTTPResponseStringer) String() string {
 
 // Helper method to build an API endpoint request structure.
 func (c *Client) newRequest(descriptor *config.HTTPAPIEndpoint) (*http.Request, error) {
+	url, err := c.backendURL.Parse(descriptor.URL)
+	if err != nil {
+		return nil, sqerrors.Wrap(err, "could not parse the request url")
+	}
 	req, err := http.NewRequest(
 		descriptor.Method,
-		c.backendURL+descriptor.URL,
+		url.String(),
 		nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-
 	return req, nil
 }
 
