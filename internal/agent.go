@@ -588,11 +588,14 @@ func stopTimer(t *time.Timer) {
 
 func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	var (
-		stalenessTimer = time.NewTimer(m.maxStaleness)
+		// We can't create a stopped timer so we initializae it with a large value
+		// of 24 hours and stop it immediately. Calls to Reset() will correctly
+		// set the configured timer value.
+		stalenessTimer = time.NewTimer(24 * time.Hour)
 		stalenessChan  <-chan time.Time
 	)
-	defer stopTimer(stalenessTimer)
 	stopTimer(stalenessTimer)
+	defer stopTimer(stalenessTimer)
 
 	batch := make([]Event, 0, m.count)
 	for {
@@ -649,7 +652,7 @@ func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, ba
 		if _, err := m.agent.piiScrubber.Scrub(event, nil); err != nil {
 			// Only log this unexpected error and keep the event that may have been
 			// partially scrubbed.
-			m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
+			m.agent.logger.Error(errors.Wrap(err, "could not scrub the event"))
 		}
 		req.Batch = append(req.Batch, *api.NewBatchRequest_EventFromFace(event))
 	}

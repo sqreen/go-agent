@@ -60,12 +60,12 @@ func NewAgentInfra(agentVersion, osType, hostname, runtimeVersion string) *Agent
 func fromLegacyRequestRecord(record *legacy_api.RequestRecord, infra *AgentInfra) (*http_trace.Trace, error) {
 	port, err := strconv.ParseUint(record.Request.Port, 10, 64)
 	if err != nil {
-		return nil, sqerrors.Wrap(err, "could not parse the request port number as an int64 value")
+		return nil, sqerrors.Wrap(err, "could not parse the request port number as an uint64 value")
 	}
 
 	remotePort, err := strconv.ParseUint(record.Request.RemotePort, 10, 64)
 	if err != nil {
-		return nil, sqerrors.Wrap(err, "could not parse the request remote port number as an int64 value")
+		return nil, sqerrors.Wrap(err, "could not parse the request remote port number as an uint64 value")
 	}
 
 	headers := make([][]string, len(record.Request.Headers))
@@ -182,7 +182,7 @@ func FromLegacyBatch(b []legacy_api.BatchRequest_Event, infra *AgentInfra, logge
 		case legacy_api.RequestRecordEvent:
 			trace, err := fromLegacyRequestRecord(evt.RequestRecord, infra)
 			if err != nil {
-				logger.Error(sqerrors.Wrap(err, "could not create the HTTP trace"))
+				logger.Error(sqerrors.WithInfo(sqerrors.Wrap(err, "could not create the HTTP trace"), evt))
 				continue
 			}
 			signal = trace
