@@ -115,7 +115,7 @@ func (c *Client) Health() HealthStatus {
 	return health
 }
 
-func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string, useSignalBackend bool) (*api.AppLoginResponse, error) {
+func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string, disableSignalBackend bool) (*api.AppLoginResponse, error) {
 	httpReq, err := c.newRequest(&config.BackendHTTPAPIEndpoint.AppLogin)
 	if err != nil {
 		return nil, err
@@ -136,7 +136,7 @@ func (c *Client) AppLogin(req *api.AppLoginRequest, token string, appName string
 
 	c.session = res.SessionId
 
-	if useSignalBackend || res.Features.UseSignals {
+	if !disableSignalBackend && res.Features.UseSignals {
 		c.signalClient = client.NewClient(c.client, c.session)
 
 		// If the default signal URL is not healthy, fallback to the general

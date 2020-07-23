@@ -343,7 +343,7 @@ func (a *AgentType) Serve() error {
 
 	token := a.config.BackendHTTPAPIToken()
 	appName := a.config.AppName()
-	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.UseSignalBackend())
+	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.DisableSignalBackend())
 	if err != nil {
 		if xerrors.Is(err, context.Canceled) {
 			a.logger.Debug(err)

@@ -53,7 +53,7 @@ func (e LoginError) Unwrap() error {
 
 // Login to the backend. When the API request fails, retry for ever and after
 // sleeping some time.
-func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, token string, appName string, appInfo *app.Info, useSignalBackend bool) (*api.AppLoginResponse, error) {
+func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, token string, appName string, appInfo *app.Info, disableSignalBackend bool) (*api.AppLoginResponse, error) {
 	_, bundleSignature, err := appInfo.Dependencies()
 	if err != nil {
 		logger.Error(withNotificationError{sqerrors.Wrap(err, "could not retrieve the program dependencies")})
@@ -83,7 +83,7 @@ func appLogin(ctx context.Context, logger *plog.Logger, client *backend.Client, 
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			appLoginRes, err = client.AppLogin(&appLoginReq, token, appName, useSignalBackend)
+			appLoginRes, err = client.AppLogin(&appLoginReq, token, appName, disableSignalBackend)
 			if err == nil && appLoginRes.Status {
 				return appLoginRes, nil
 			}
