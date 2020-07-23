@@ -47,7 +47,7 @@ type AppLoginRequest_VariousInfos struct {
 type (
 	SqreenDomainStatusMap map[string]SqreenDomainStatus
 	SqreenDomainStatus    struct {
-		Status bool   `json:"status,omitempty"`
+		Status bool   `json:"status"`
 		Error  string `json:"error,omitempty"`
 	}
 )
