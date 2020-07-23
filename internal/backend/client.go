@@ -199,10 +199,7 @@ func (c *Client) Batch(ctx context.Context, req *api.BatchRequest) error {
 			return err
 		}
 		httpReq.Header.Set(config.BackendHTTPAPIHeaderSession, c.session)
-		if err := c.Do(httpReq, req); err != nil {
-			return err
-		}
-		return nil
+		return c.Do(httpReq, req)
 	}
 
 	batch := signal.FromLegacyBatch(req.Batch, c.infra, c.logger)
