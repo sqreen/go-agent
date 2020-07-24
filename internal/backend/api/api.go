@@ -6,6 +6,7 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
@@ -451,12 +452,17 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 	redactedString := scrubber.RedactedValueMask()
 	for e := range wafInfo {
 		for f := range wafInfo[e].Filter {
-			if info.Contains(wafInfo[e].Filter[f].ResolvedValue) {
-				wafInfo[e].Filter[f].ResolvedValue = redactedString
-				if wafInfo[e].Filter[f].MatchStatus != "" {
-					wafInfo[e].Filter[f].MatchStatus = redactedString
+			for v := range info {
+				resolvedValue := wafInfo[e].Filter[f].ResolvedValue
+				newStr := strings.ReplaceAll(resolvedValue, v, redactedString)
+				if newStr != resolvedValue {
+					// The string was changed
+					wafInfo[e].Filter[f].ResolvedValue = newStr
+					if wafInfo[e].Filter[f].MatchStatus != "" {
+						wafInfo[e].Filter[f].MatchStatus = strings.ReplaceAll(wafInfo[e].Filter[f].MatchStatus, v, redactedString)
+					}
+					scrubbed = true
 				}
-				scrubbed = true
 			}
 		}
 	}

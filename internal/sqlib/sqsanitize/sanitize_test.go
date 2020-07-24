@@ -935,6 +935,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{"everything", randString},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					}
 				},
 				expected: expectedValues{
@@ -948,6 +956,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{expectedMask, randString},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 					withKeyRE: map[string]interface{}{
 						"apikey": expectedMask,
@@ -959,6 +975,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{expectedMask, expectedMask},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 					withBothRE: map[string]interface{}{
 						"apikey": expectedMask,
@@ -970,6 +994,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{expectedMask, expectedMask},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 					withBothDisabled: map[string]interface{}{
 						"apikey": randString,
@@ -981,6 +1013,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{"everything", randString},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 				},
 			},

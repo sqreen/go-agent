@@ -220,7 +220,7 @@ func TestCustomScrubber(t *testing.T) {
 						OperatorValue:   "trigger",
 						BindingAccessor: "#.request_params",
 						ResolvedValue:   expectedMask,
-						MatchStatus:     expectedMask,
+						MatchStatus:     "forbidden",
 					},
 				},
 			},
