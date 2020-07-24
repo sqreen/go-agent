@@ -1,4 +1,27 @@
-# v0.12.1
+# v0.13.0 - 24 July 2020
+
+## New Feature
+
+- (#137) RASP: add noSQL Injection protection support for the Go MongoDB driver
+  `go.mongodb.org/mongo-driver/mongo`. This protection can be configured at
+  <https://my.sqreen.com/application/goto/modules/rasp/details/nosql_injection>.
+
+## Internal Changes
+
+- (#138) Health-check the HTTPS connectivity to the new backend API
+  `ingestion.sqreen.com` before using it. Fallback to the usual
+  `back.sqreen.com` in case of a connection issue. Therefore, the agent can take
+  up to 30 seconds to connect to Sqreen if the health-check timeouts. Please
+  make sure to add this new  firewall and proxy configurations. 
+
+- (#136) Add support to attach multiple security protections per hook point.
+
+## Fixes
+
+- (#140) Fix the In-App WAF metadata PII scrubbing to also match substrings.
+
+
+# v0.12.1 - 13 July 2020
 
 ## Fixes
 
@@ -19,7 +42,7 @@
 - (eeb1dca) Avoid copying the metadata returned by the In-App WAF.
 
 
-# v0.12.0
+# v0.12.0 - 6 July 2020
 
 ## New Features
 
@@ -53,7 +76,7 @@
 - (794d6e2) Allow port numbers in the `X-Forwarded-For` header.
 
 
-# v0.11.0
+# v0.11.0 - 19 June 2020
 
 ## New Features
 
@@ -90,14 +113,14 @@
 - (#114) Add Goroutine Local Storage (GLS) support through static instrumentation of the Go runtime.
 
 
-# v0.10.1
+# v0.10.1 - 5 June 2020
 
 ## Fix
 
 - (#116) Fix the instrumentation tool ignoring vendored packages, leading to
   missing hook points in the agent.
 
-# v0.10.0
+# v0.10.0 - 20 May 2020
 
 ## New Features
 
@@ -136,7 +159,7 @@
 
 - Document PII scrubbing configuration at <https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing>.
 
-# v0.9.1
+# v0.9.1 - 31 March 2020
 
 ## Fixes
 
@@ -150,7 +173,7 @@
 - (#101) Prevent starting the agent when the instrumentation tool and agent
   versions are not the same.
 
-# v0.9.0
+# v0.9.0 - 19 February 2020
 
 This new major version says farewell to the `beta` and adds SQL-injection
 run time protection thanks the first building blocks of [RASP][RASP-Wikipedia]
@@ -233,7 +256,7 @@ Because we now want a stable public API, find below the breaking changes:
     compiled as a Go module. This is also shown by the dashboard when the list
     of dependencies is empty.
 
-# v0.1.0-beta.10
+# v0.1.0-beta.10 - 24 January 2020
 
 ## Breaking Change
 
@@ -264,7 +287,7 @@ Because we now want a stable public API, find below the breaking changes:
 - (#92) Vendoring using `go mod vendor` could lead to compilation errors due to
   missing files.
 
-# v0.1.0-beta.9
+# v0.1.0-beta.9 - 19 December 2019
 
 ## New Features
 
@@ -283,7 +306,7 @@ Because we now want a stable public API, find below the breaking changes:
 - The In-App WAF has been intensively optimized so that large requests can no longer impact
   its execution time. (#83)
 
-# v0.1.0-beta.8
+# v0.1.0-beta.8 - 15 October 2019
 
 ## Internal Changes
 
@@ -292,7 +315,7 @@ Because we now want a stable public API, find below the breaking changes:
   - Ignore WAF timeout errors and add more context when reporting an error (#80).
   - Update the libsqreen to v0.4.0 to add support for the `@pm` operator.
 
-# v0.1.0-beta.7
+# v0.1.0-beta.7 - 26 September 2019
 
 ## Breaking Changes
 
@@ -319,7 +342,7 @@ Because we now want a stable public API, find below the breaking changes:
 - Fix a compilation error on 32-bit target architectures.
 
 
-# v0.1.0-beta.6
+# v0.1.0-beta.6 - 25 July 2019
 
 ## New Features
 
@@ -354,7 +377,7 @@ Because we now want a stable public API, find below the breaking changes:
   log-level.
 
 
-# v0.1.0-beta.5
+# v0.1.0-beta.5 - 23 May 2019
 
 ## New Features
 
@@ -380,7 +403,7 @@ Because we now want a stable public API, find below the breaking changes:
     processing loop.
 
 
-# v0.1.0-beta.4
+# v0.1.0-beta.4 - 16 April 2019
 
 This release adds the ability to block IP addresses or users into your Go web
 services by adding support for [Security Automation] according to your
@@ -440,7 +463,7 @@ Note that redirecting users or IP addresses is not supported yet.
 - Avoid performing multiple times commands within the same command batch. (51)
 
 
-# v0.1.0-beta.3
+# v0.1.0-beta.3 - 22 March 2019
 
 ## New Features
 
@@ -477,7 +500,7 @@ Note that redirecting users or IP addresses is not supported yet.
   self-managing the initializations. (#28)
 
 
-# v0.1.0-beta.2
+# v0.1.0-beta.2 - 14 February 2019
 
 ## New feature
 
@@ -485,7 +508,7 @@ Note that redirecting users or IP addresses is not supported yet.
 current request. As soon as we add the support for the security reponses, it
 will allow to block users (#26).
 
-# v0.1.0-beta.1
+# v0.1.0-beta.1 - 7 February 2019
 
 This version is a new major version towards the v0.1.0 as it proposes a new and
 stable SDK API, that now will only be updated upon user feedback. So please,
