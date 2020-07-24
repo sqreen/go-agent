@@ -108,8 +108,7 @@ func TestJSON(t *testing.T) {
 
 func TestCustomScrubber(t *testing.T) {
 	expectedMask := "scrubbed"
-	scrubber, err := sqsanitize.NewScrubber(regexp.MustCompile("password"), regexp.MustCompile("forbidden"), expectedMask)
-	require.NoError(t, err)
+	scrubber := sqsanitize.NewScrubber(regexp.MustCompile("password"), regexp.MustCompile("forbidden"), expectedMask)
 
 	t.Run("without attack", func(t *testing.T) {
 		rr := &api.RequestRecord{
@@ -221,7 +220,7 @@ func TestCustomScrubber(t *testing.T) {
 						OperatorValue:   "trigger",
 						BindingAccessor: "#.request_params",
 						ResolvedValue:   expectedMask,
-						MatchStatus:     expectedMask,
+						MatchStatus:     "forbidden",
 					},
 				},
 			},

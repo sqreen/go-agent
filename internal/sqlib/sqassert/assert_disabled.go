@@ -6,6 +6,6 @@
 
 package sqassert
 
-func True(bool)          {}
-func NoError(error)      {}
-func NotNil(interface{}) {}
+func True(bool)             {}
+func NoError(error)         {}
+func NotNil(...interface{}) {}

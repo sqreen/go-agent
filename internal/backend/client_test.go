@@ -18,6 +18,7 @@ import (
 	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -49,7 +50,8 @@ func TestClient(t *testing.T) {
 		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
 		defer server.Close()
 
-		client := backend.NewClient(server.URL(), "", logger)
+		client, err := backend.NewClient(server.URL(), "", logger)
+		require.NoError(t, err)
 
 		res, err := client.AppLogin(request, token, appName, false)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -163,11 +165,14 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 	loginRes.Status = true
 	server.AppendHandlers(ghttp.RespondWithJSONEncoded(http.StatusOK, loginRes))
 
-	client = backend.NewClient(server.URL(), "", logger)
+	client, err := backend.NewClient(server.URL(), "", logger)
+	if err != nil {
+		panic(err)
+	}
 
 	token := testlib.RandHTTPHeaderValue(2, 50)
 	appName := testlib.RandHTTPHeaderValue(2, 50)
-	_, err := client.AppLogin(loginReq, token, appName, false)
+	_, err = client.AppLogin(loginReq, token, appName, false)
 	if err != nil {
 		panic(err)
 	}

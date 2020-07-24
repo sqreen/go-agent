@@ -46,3 +46,12 @@ func TestWithInfo(t *testing.T) {
 		require.Equal(t, info, got)
 	})
 }
+
+func TestErrorCollection(t *testing.T) {
+	var errs sqerrors.ErrorCollection
+	errs.Add(errors.New("error 1"))
+	errs.Add(errors.New("error 2"))
+	errs.Add(errors.New("error 3"))
+	errs.Add(errors.New("error 4"))
+	require.Equal(t, "multiple errors occurred: (error 1) error 1; (error 2) error 2; (error 3) error 3; (error 4) error 4", errs.Error())
+}

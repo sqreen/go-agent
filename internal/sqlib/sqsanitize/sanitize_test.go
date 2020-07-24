@@ -72,10 +72,9 @@ func TestScrubber(t *testing.T) {
 			redactedValueMask string
 		}
 		tests := []struct {
-			name    string
-			args    args
-			want    *sqsanitize.Scrubber
-			wantErr bool
+			name string
+			args args
+			want *sqsanitize.Scrubber
 		}{
 			{
 				name: "no regexps",
@@ -105,13 +104,8 @@ func TestScrubber(t *testing.T) {
 		for _, tc := range tests {
 			tc := tc
 			t.Run(tc.name, func(t *testing.T) {
-				got, err := sqsanitize.NewScrubber(tc.args.keyRegexp, tc.args.valueRegexp, tc.args.redactedValueMask)
-				if tc.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-					require.NotNil(t, got)
-				}
+				got := sqsanitize.NewScrubber(tc.args.keyRegexp, tc.args.valueRegexp, tc.args.redactedValueMask)
+				require.NotNil(t, got)
 			})
 		}
 	})
@@ -168,8 +162,7 @@ func TestScrubber(t *testing.T) {
 					valueRE = regexp.MustCompile(tc.valueRegexp)
 				}
 
-				s, err := sqsanitize.NewScrubber(regexp.MustCompile(testlib.RandUTF8String()), valueRE, expectedMask)
-				require.NoError(t, err)
+				s := sqsanitize.NewScrubber(regexp.MustCompile(testlib.RandUTF8String()), valueRE, expectedMask)
 				info := sqsanitize.Info{}
 				scrubbed, err := s.Scrub(&tc.value, info)
 				require.NoError(t, err)
@@ -942,6 +935,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{"everything", randString},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					}
 				},
 				expected: expectedValues{
@@ -955,6 +956,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{expectedMask, randString},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 					withKeyRE: map[string]interface{}{
 						"apikey": expectedMask,
@@ -966,6 +975,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{expectedMask, expectedMask},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 					withBothRE: map[string]interface{}{
 						"apikey": expectedMask,
@@ -977,6 +994,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{expectedMask, expectedMask},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 					withBothDisabled: map[string]interface{}{
 						"apikey": randString,
@@ -988,6 +1013,14 @@ func TestScrubber(t *testing.T) {
 						},
 						"e":      33,
 						"passwd": []interface{}{"everything", randString},
+						"g":      nil,
+						"h":      (*string)(nil),
+						"i":      []interface{}{nil},
+						"j":      []interface{}{(*string)(nil)},
+						"password": map[string]interface{}{
+							"a": nil,
+							"b": []interface{}{nil},
+						},
 					},
 				},
 			},
@@ -1086,8 +1119,7 @@ func TestScrubber(t *testing.T) {
 							valRegex = regexp.MustCompile(valueRE)
 						}
 
-						s, err := sqsanitize.NewScrubber(keyRegex, valRegex, expectedMask)
-						require.NoError(t, err)
+						s := sqsanitize.NewScrubber(keyRegex, valRegex, expectedMask)
 
 						for _, tc := range tests {
 							tc := tc
@@ -1150,8 +1182,7 @@ func TestScrubber(t *testing.T) {
 	})
 
 	t.Run("Usage", func(t *testing.T) {
-		s, err := sqsanitize.NewScrubber(regexp.MustCompile("(?i)password"), regexp.MustCompile("forbidden"), expectedMask)
-		require.NoError(t, err)
+		s := sqsanitize.NewScrubber(regexp.MustCompile("(?i)password"), regexp.MustCompile("forbidden"), expectedMask)
 
 		t.Run("URL Values", func(t *testing.T) {
 			values := url.Values{
@@ -1184,8 +1215,7 @@ func TestScrubber(t *testing.T) {
 		})
 
 		t.Run("HTTP Request", func(t *testing.T) {
-			s, err := sqsanitize.NewScrubber(regexp.MustCompile(`(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`), regexp.MustCompile(`(?:\d[ -]*?){13,16}`), expectedMask)
-			require.NoError(t, err)
+			s := sqsanitize.NewScrubber(regexp.MustCompile(`(?i)(passw(or)?d)|(secret)|(authorization)|(api_?key)|(access_?token)`), regexp.MustCompile(`(?:\d[ -]*?){13,16}`), expectedMask)
 
 			t.Run("zero value", func(t *testing.T) {
 				var req http.Request

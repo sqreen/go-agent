@@ -6,10 +6,15 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/sqreen/go-agent/internal/sqlib/sqsanitize"
 )
+
+type PingResponse struct {
+	Status bool `json:"status"`
+}
 
 type AppLoginRequest struct {
 	BundleSignature  string                       `json:"bundle_signature"`
@@ -26,18 +31,27 @@ type AppLoginRequest struct {
 }
 
 type AppLoginRequest_VariousInfos struct {
-	Time             time.Time `json:"time"`
-	Pid              uint32    `json:"pid"`
-	Ppid             uint32    `json:"ppid"`
-	Euid             uint32    `json:"euid"`
-	Egid             uint32    `json:"egid"`
-	Uid              uint32    `json:"uid"`
-	Gid              uint32    `json:"gid"`
-	Name             string    `json:"name"`
-	LibSqreenVersion *string   `json:"libsqreen_version"`
-	HasDependencies  bool      `json:"has_dependencies"`
-	HasLibsqreen     bool      `json:"has_libsqreen"`
+	Time             time.Time             `json:"time"`
+	Pid              uint32                `json:"pid"`
+	Ppid             uint32                `json:"ppid"`
+	Euid             uint32                `json:"euid"`
+	Egid             uint32                `json:"egid"`
+	Uid              uint32                `json:"uid"`
+	Gid              uint32                `json:"gid"`
+	Name             string                `json:"name"`
+	LibSqreenVersion *string               `json:"libsqreen_version"`
+	HasDependencies  bool                  `json:"has_dependencies"`
+	HasLibsqreen     bool                  `json:"has_libsqreen"`
+	SqreenDomains    SqreenDomainStatusMap `json:"sqreen_domains"`
 }
+
+type (
+	SqreenDomainStatusMap map[string]SqreenDomainStatus
+	SqreenDomainStatus    struct {
+		Status bool   `json:"status"`
+		Error  string `json:"error,omitempty"`
+	}
+)
 
 type AppLoginResponse struct {
 	Error     string                   `json:"error"`
@@ -182,6 +196,7 @@ type Rule struct {
 	Test       bool               `json:"test"`
 	Block      bool               `json:"block"`
 	AttackType string             `json:"attack_type"`
+	Priority   int                `json:"priority"`
 }
 
 type RuleConditions struct{}
@@ -437,12 +452,17 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 	redactedString := scrubber.RedactedValueMask()
 	for e := range wafInfo {
 		for f := range wafInfo[e].Filter {
-			if info.Contains(wafInfo[e].Filter[f].ResolvedValue) {
-				wafInfo[e].Filter[f].ResolvedValue = redactedString
-				if wafInfo[e].Filter[f].MatchStatus != "" {
-					wafInfo[e].Filter[f].MatchStatus = redactedString
+			for v := range info {
+				resolvedValue := wafInfo[e].Filter[f].ResolvedValue
+				newStr := strings.ReplaceAll(resolvedValue, v, redactedString)
+				if newStr != resolvedValue {
+					// The string was changed
+					wafInfo[e].Filter[f].ResolvedValue = newStr
+					if wafInfo[e].Filter[f].MatchStatus != "" {
+						wafInfo[e].Filter[f].MatchStatus = strings.ReplaceAll(wafInfo[e].Filter[f].MatchStatus, v, redactedString)
+					}
+					scrubbed = true
 				}
-				scrubbed = true
 			}
 		}
 	}
@@ -564,6 +584,7 @@ type AppLoginRequest_VariousInfosFace interface {
 	GetLibSqreenVersion() *string
 	GetHasDependencies() bool
 	GetHasLibsqreen() bool
+	GetSqreenDomains() SqreenDomainStatusMap
 }
 
 func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFace) *AppLoginRequest_VariousInfos {
@@ -579,6 +600,7 @@ func NewAppLoginRequest_VariousInfosFromFace(that AppLoginRequest_VariousInfosFa
 	this.LibSqreenVersion = that.GetLibSqreenVersion()
 	this.HasDependencies = that.GetHasDependencies()
 	this.HasLibsqreen = that.GetHasLibsqreen()
+	this.SqreenDomains = that.GetSqreenDomains()
 	return this
 }
 

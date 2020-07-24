@@ -57,7 +57,7 @@ var (
 	// List of endpoint addresses, relative to the base URL.
 	BackendHTTPAPIEndpoint = struct {
 		AppLogin, AppLogout, AppBeat, AppException, Batch, ActionsPack, RulesPack,
-		Bundle, AgentMessage, AppAgentMessage HTTPAPIEndpoint
+		Bundle, AgentMessage, AppAgentMessage, Ping HTTPAPIEndpoint
 	}{
 		AppLogin:        HTTPAPIEndpoint{http.MethodPost, "/sqreen/v1/app-login"},
 		AppLogout:       HTTPAPIEndpoint{http.MethodGet, "/sqreen/v0/app-logout"},
@@ -69,6 +69,7 @@ var (
 		Bundle:          HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/bundle"},
 		AgentMessage:    HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/agent_message"},
 		AppAgentMessage: HTTPAPIEndpoint{http.MethodPost, "/sqreen/v0/app_agent_message"},
+		Ping:            HTTPAPIEndpoint{http.MethodGet, "/ping"},
 	}
 
 	// Header name of the API token.
@@ -221,7 +222,7 @@ const (
 	configKeyRules                     = `rules`
 	configKeySDKMetricsPeriod          = `sdk_metrics_period`
 	configKeyMaxMetricsStoreLength     = `max_metrics_store_length`
-	configKeyUseSignalBackend          = `use_signal_backend`
+	configKeyDisableSignalBackend      = `disable_signal_backend`
 	configKeyStripSensitiveKeyRegexp   = `strip_sensitive_key_regexp`
 	configKeyStripSensitiveValueRegexp = `strip_sensitive_value_regexp`
 )
@@ -270,7 +271,7 @@ func New(logger *plog.Logger) (*Config, error) {
 		{key: configKeyRules, defaultValue: "", hidden: true},
 		{key: configKeySDKMetricsPeriod, defaultValue: configDefaultSDKMetricsPeriod, hidden: true},
 		{key: configKeyMaxMetricsStoreLength, defaultValue: configDefaultMaxMetricsStoreLength, hidden: true},
-		{key: configKeyUseSignalBackend, defaultValue: "", hidden: true},
+		{key: configKeyDisableSignalBackend, defaultValue: "", hidden: true},
 		{key: configKeyStripSensitiveKeyRegexp, defaultValue: configDefaultStripSensitiveKeyRegexp},
 		{key: configKeyStripSensitiveValueRegexp, defaultValue: configDefaultStripSensitiveValueRegexp},
 	}
@@ -412,8 +413,8 @@ func (c *Config) MaxMetricsStoreLength() uint {
 // UseSignalBackend returns true to force the agent to use the signal backend
 // no matter the feature flag. When false, the app-login feature flag tells
 // whether or not to use the signal backend.
-func (c *Config) UseSignalBackend() bool {
-	strip := sanitizeString(c.GetString(configKeyUseSignalBackend))
+func (c *Config) DisableSignalBackend() bool {
+	strip := sanitizeString(c.GetString(configKeyDisableSignalBackend))
 	return strip != ""
 }
 

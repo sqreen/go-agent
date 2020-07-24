@@ -228,9 +228,9 @@ func New(cfg *config.Config) *AgentType {
 		logger.Info(message)
 		return nil
 	}
-	// TODO: agent.Health() + waf.Health()
+
 	if waf.Version() == nil {
-		message := fmt.Sprintf("in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf")
+		message := "in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf"
 		backend.SendAgentMessage(logger, cfg, message)
 		logger.Info("agent: ", message)
 	}
@@ -240,9 +240,11 @@ func New(cfg *config.Config) *AgentType {
 	sdkMetricsPeriod := time.Duration(cfg.SDKMetricsPeriod()) * time.Second
 	logger.Debugf("agent: using sdk metrics store time period of %s", sdkMetricsPeriod)
 
-	piiScrubber, err := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), config.ScrubberRedactedString)
+	piiScrubber := sqsanitize.NewScrubber(cfg.StripSensitiveKeyRegexp(), cfg.StripSensitiveValueRegexp(), config.ScrubberRedactedString)
+
+	client, err := backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg.BackendHTTPAPIProxy(), logger)
 	if err != nil {
-		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
+		logger.Error(sqerrors.Wrap(err, "agent: could not create the backend client"))
 		return nil
 	}
 
@@ -264,7 +266,7 @@ func New(cfg *config.Config) *AgentType {
 		cancel:      cancel,
 		config:      cfg,
 		appInfo:     app.NewInfo(logger),
-		client:      backend.NewClient(cfg.BackendHTTPAPIBaseURL(), cfg.BackendHTTPAPIProxy(), logger),
+		client:      client,
 		actors:      actor.NewStore(logger),
 		rules:       rulesEngine,
 		piiScrubber: piiScrubber,
@@ -341,7 +343,7 @@ func (a *AgentType) Serve() error {
 
 	token := a.config.BackendHTTPAPIToken()
 	appName := a.config.AppName()
-	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.UseSignalBackend())
+	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.DisableSignalBackend())
 	if err != nil {
 		if xerrors.Is(err, context.Canceled) {
 			a.logger.Debug(err)
@@ -586,11 +588,14 @@ func stopTimer(t *time.Timer) {
 
 func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	var (
-		stalenessTimer = time.NewTimer(m.maxStaleness)
+		// We can't create a stopped timer so we initializae it with a large value
+		// of 24 hours and stop it immediately. Calls to Reset() will correctly
+		// set the configured timer value.
+		stalenessTimer = time.NewTimer(24 * time.Hour)
 		stalenessChan  <-chan time.Time
 	)
-	defer stopTimer(stalenessTimer)
 	stopTimer(stalenessTimer)
+	defer stopTimer(stalenessTimer)
 
 	batch := make([]Event, 0, m.count)
 	for {
@@ -647,7 +652,7 @@ func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, ba
 		if _, err := m.agent.piiScrubber.Scrub(event, nil); err != nil {
 			// Only log this unexpected error and keep the event that may have been
 			// partially scrubbed.
-			m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
+			m.agent.logger.Error(errors.Wrap(err, "could not scrub the event"))
 		}
 		req.Batch = append(req.Batch, *api.NewBatchRequest_EventFromFace(event))
 	}

@@ -48,12 +48,12 @@ type CustomScrubber interface {
 //     scrubbed regardless of `valueRegexp` - any string in the associated
 //     value is replaced by `redactedValue`.
 // An error can be returned if the regular expressions cannot be compiled.
-func NewScrubber(keyRegexp, valueRegexp *regexp.Regexp, redactedValueMask string) (*Scrubber, error) {
+func NewScrubber(keyRegexp, valueRegexp *regexp.Regexp, redactedValueMask string) *Scrubber {
 	return &Scrubber{
 		keyRegexp:         keyRegexp,
 		valueRegexp:       valueRegexp,
 		redactedValueMask: redactedValueMask,
-	}, nil
+	}
 }
 
 // RedactedValueMask returns the configured redactedValueMask
@@ -236,6 +236,9 @@ func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
 		// When the current value is an interface value, we scrub its underlying
 		// value.
 		if hasInterfaceValueType {
+			if val.IsNil() {
+				continue
+			}
 			val = val.Elem()
 			valT = val.Type()
 		}
@@ -335,14 +338,6 @@ func (i Info) Add(value string) {
 		return
 	}
 	i[value] = struct{}{}
-}
-
-func (i Info) Contains(value string) bool {
-	if len(i) == 0 {
-		return false
-	}
-	_, exists := i[value]
-	return exists
 }
 
 func (i Info) Append(info Info) {

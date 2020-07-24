@@ -6,6 +6,7 @@ package sqerrors
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -170,4 +171,27 @@ func Timestamp(err error) (t time.Time, ok bool) {
 		return t.Timestamp(), true
 	}
 	return time.Time{}, false
+}
+
+type ErrorCollection []error
+
+func (c ErrorCollection) Error() string {
+	var s strings.Builder
+	s.WriteString("multiple errors occurred:")
+	for i, e := range c {
+		fmt.Fprintf(&s, " (error %d) %s;", i+1, e.Error())
+	}
+	// Return the build string without the trailing `;`
+	return s.String()[:s.Len()-1]
+}
+
+func (c *ErrorCollection) Add(e error) {
+	*c = append(*c, e)
+}
+
+func (c ErrorCollection) ToError() error {
+	if len(c) == 0 {
+		return nil
+	}
+	return c
 }

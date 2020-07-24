@@ -29,8 +29,8 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.3.2
 	github.com/sqreen/go-libsqreen v0.7.0
-	github.com/sqreen/go-sdk/signal v1.0.0
-	github.com/stretchr/testify v1.5.1
+	github.com/sqreen/go-sdk/signal v1.1.0
+	github.com/stretchr/testify v1.6.1
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37 // indirect
 	golang.org/x/net v0.0.0-20200513185701-a91f0712d120
 	golang.org/x/sys v0.0.0-20200515095857-1151b9dac4a9 // indirect
@@ -40,4 +40,5 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
+	gopkg.in/yaml.v2 v2.3.0 // indirect
 )
