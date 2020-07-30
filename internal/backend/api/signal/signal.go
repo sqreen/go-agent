@@ -276,7 +276,7 @@ func convertLegacyMetrics(metric *legacy_api.MetricResponse, agentVersion string
 
 	values, ok := metric.Observation.Value.(map[string]int64)
 	if !ok {
-		return nil, sqerrors.Errorf("unexpected type of metric values `%T` instead of `map[string]intr64`", metric.Observation.Value)
+		return nil, sqerrors.Errorf("unexpected type of metric values `%T` instead of `%T`", metric.Observation.Value, values)
 	}
 
 	return api.NewSumMetric(name.String(), source, metric.Start, metric.Finish, metric.Finish.Sub(metric.Start), values), nil
