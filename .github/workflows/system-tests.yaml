@@ -1,4 +1,4 @@
-name: Example App Builds
+name: System Tests
 on:
   pull_request:
     branches:
