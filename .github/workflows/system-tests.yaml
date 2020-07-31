@@ -1,0 +1,20 @@
+name: System Tests
+on:
+  pull_request:
+    branches:
+      - feature/*
+      - fix/*
+      - hotfix/*
+      - release/*
+jobs:
+  system-tests:
+    name: System Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run System Tests
+        uses: peter-evans/repository-dispatch@v1
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          repository: sqreen/AgentGoTests
+          event-type: go-agent-commit
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
