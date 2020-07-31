@@ -11,8 +11,10 @@ jobs:
     name: System Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: convictional/trigger-workflow-and-wait
+      - name: Run System Tests
+        uses: peter-evans/repository-dispatch@v1
         with:
-          owner: sqreen
-          repo: SystemTests
-          github_token: ${{ secrets.GH_TOKEN }}
+          token: ${{ secrets.GH_TOKEN }}
+          repository: sqreen/AgentGoTests
+          event-type: go-agent-commit
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
