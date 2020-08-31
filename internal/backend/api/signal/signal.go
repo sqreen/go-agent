@@ -58,15 +58,11 @@ func NewAgentInfra(agentVersion, osType, hostname, runtimeVersion string) *Agent
 }
 
 func fromLegacyRequestRecord(record *legacy_api.RequestRecord, infra *AgentInfra) (*http_trace.Trace, error) {
-	port, err := strconv.ParseUint(record.Request.Port, 10, 64)
-	if err != nil {
-		return nil, sqerrors.Wrap(err, "could not parse the request port number as an uint64 value")
-	}
-
-	remotePort, err := strconv.ParseUint(record.Request.RemotePort, 10, 64)
-	if err != nil {
-		return nil, sqerrors.Wrap(err, "could not parse the request remote port number as an uint64 value")
-	}
+	// Parse the port numbers by ignoring parsing errors and keeping the default
+	// zero value otherwise anyway to avoid dropping the the trace for that error.
+	// For example, the port number can be possibly empty.
+	port, _ := strconv.ParseUint(record.Request.Port, 10, 64)
+	remotePort, _ := strconv.ParseUint(record.Request.RemotePort, 10, 64)
 
 	headers := make([][]string, len(record.Request.Headers))
 	for i, e := range record.Request.Headers {
