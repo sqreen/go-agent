@@ -1,0 +1,51 @@
+name: Agent Tests
+on:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+jobs:
+  native:
+    strategy:
+      matrix:
+        runs-on: [ macos-latest, ubuntu-latest, windows-latest ]
+        go-version: [ 1, 1.15, 1.14, 1.13, 1.12 ]
+      fail-fast: false
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go test ./...
+
+  # Same tests but on the official golang container for linux
+  # Docker for Windows is not yet available on Github Actions.
+  golang-linux-container:
+    strategy:
+      matrix:
+        go-version: [ 1, 1.15, 1.14, 1.13, 1.12 ]
+        distribution: [ alpine, buster ]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    container:
+      image: golang:${{ matrix.go-version }}-${{ matrix.distribution }}
+    steps:
+      - uses: actions/checkout@v2
+      # Install gcc and the libc headers on alpine images
+      - if: ${{ matrix.distribution == 'alpine' }}
+        run: apk add gcc musl-dev libc6-compat git
+      - run: go test ./...
+
+  # debian stretch doesn't have the latest go versions
+  golang-debian-stretch-container:
+    strategy:
+      matrix:
+        go-version: [ 1.14, 1.13, 1.12 ]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    container:
+      image: golang:${{ matrix.go-version }}-stretch
+    steps:
+      - uses: actions/checkout@v2
+      - run: go test ./...
