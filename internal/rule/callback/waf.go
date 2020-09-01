@@ -108,50 +108,53 @@ func newWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Rul
 }
 
 func runWAF(ctx *httpprotection.RequestContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waftypes.Rule, blockingMode bool, timeout time.Duration, rule RuleFace) (blocked bool, err error) {
-	baCtx := MakeWAFCallbackBindingAccessorContext(ctx.RequestReader)
-	args := make(waftypes.DataSet, len(bindingAccessors))
-	for expr, ba := range bindingAccessors {
-		value, err := ba(baCtx)
+	sqsafeErr := sqsafe.Call(func() error {
+		baCtx := MakeWAFCallbackBindingAccessorContext(ctx.RequestReader)
+		args := make(waftypes.DataSet, len(bindingAccessors))
+		for expr, ba := range bindingAccessors {
+			value, err := ba(baCtx)
+			if err != nil {
+				// Log the error and continue
+				ctx.Logger().Error(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr))
+				continue
+			}
+			if value == nil {
+				// Skip unset values
+				continue
+			}
+			args[expr] = value
+		}
+
+		// TODO: args caching
+		action, info, err := wafRule.Run(args, timeout)
 		if err != nil {
-			// Log the error and continue
-			ctx.Logger().Error(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr))
-			continue
+			if err == waftypes.ErrTimeout {
+				WAFTimeoutLogOnce.Do(func() {
+					ctx.Logger().Error(sqerrors.New("WAF timeout"))
+				})
+				return nil
+			}
+			return newWAFRunError(err, args, timeout)
 		}
-		if value == nil {
-			// Skip unset values
-			continue
+
+		if action == waftypes.NoAction {
+			return nil
 		}
-		args[expr] = value
-	}
 
-	// TODO: args caching
-	action, info, err := wafRule.Run(args, timeout)
-	if err != nil {
-		if err == waftypes.ErrTimeout {
-			WAFTimeoutLogOnce.Do(func() {
-				ctx.Logger().Error(sqerrors.New("WAF timeout"))
-			})
-			return false, nil
+		attackInfo := api.WAFAttackInfo{WAFData: info}
+
+		if blockingMode && action == waftypes.BlockAction {
+			// Report the event
+			ctx.WriteDefaultBlockingResponse()
+			blocked = true
 		}
-		return false, newWAFRunError(err, args, timeout)
-	}
 
-	if action == waftypes.NoAction {
-		return false, nil
-	}
+		// Report the attack event
+		ctx.AddAttackEvent(rule.NewAttackEvent(blocked, attackInfo, nil))
+		return nil
+	})
 
-	attackInfo := api.WAFAttackInfo{WAFData: info}
-	blocked = false
-
-	if blockingMode && action == waftypes.BlockAction {
-		// Report the event
-		ctx.WriteDefaultBlockingResponse()
-		blocked = true
-	}
-
-	// Report the attack event
-	ctx.AddAttackEvent(rule.NewAttackEvent(blocked, attackInfo, nil))
-	return blocked, nil
+	return blocked, sqsafeErr
 }
 
 func makeWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
