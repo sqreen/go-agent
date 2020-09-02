@@ -1,7 +1,7 @@
 name: System Tests
 on:
   push:
-    branches: [ 'feature/*', 'fix/*' ]
+    branches: [ 'master', 'dev', 'hotfix/*', 'release/*', 'feature/*', 'fix/*' ]
 jobs:
   # Run system tests when the PR is no longer a draft
   system-tests:
@@ -11,7 +11,6 @@ jobs:
     steps:
       - name: Run System Tests
         uses: felixp8/dispatch-and-wait@v0.1.0
-        #uses: peter-evans/repository-dispatch@v1
         with:
           token: ${{ secrets.GH_TOKEN }}
           owner: sqreen
