@@ -1,0 +1,21 @@
+name: System Tests
+on:
+  push:
+    branches: [ 'master', 'dev', 'hotfix/*', 'release/*', 'feature/*', 'fix/*' ]
+jobs:
+  # Run system tests when the PR is no longer a draft
+  system-tests:
+    if: github.event.pull_request.draft == false
+    name: System Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run System Tests
+        uses: felixp8/dispatch-and-wait@v0.1.0
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          owner: sqreen
+          repo: AgentGoTests
+          event_type: go-agent-commit
+          client_payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+          wait_time: 10
+          max_time: 600
