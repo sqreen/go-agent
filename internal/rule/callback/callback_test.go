@@ -34,6 +34,10 @@ type RuleContextMockup struct {
 	mock.Mock
 }
 
+func (r *RuleContextMockup) MonitorPre() {
+	r.Called()
+}
+
 func (r *RuleContextMockup) PushMetricsValue(key interface{}, value int64) error {
 	return r.Called(key, value).Error(0)
 }
