@@ -24,6 +24,7 @@ type RuleFace interface {
 	PushMetricsValue(key interface{}, value int64) error
 	// TODO: variadic options api
 	NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent
+	MonitorPre()
 }
 
 // Config is the interface of the rule configuration.

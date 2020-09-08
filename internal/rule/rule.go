@@ -83,7 +83,7 @@ func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	var ruleDescriptors hookDescriptorMap
 	if len(rules) > 0 {
 		e.logger.Debugf("security rules: loading rules from pack `%s`", packID)
-		ruleDescriptors = newHookDescriptors(e, rules)
+		ruleDescriptors = newHookDescriptors(e, packID, rules)
 	}
 	e.setRules(packID, ruleDescriptors)
 }
@@ -136,7 +136,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptorMap) {
 // newHookDescriptors walks the list of received rules and creates the map of
 // hook descriptors indexed by their hook pointer. A hook descriptor contains
 // all it takes to enable and disable rules at run time.
-func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptorMap {
+func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDescriptorMap {
 	logger := e.logger
 
 	// Create and configure the list of callbacks according to the given rules
@@ -163,7 +163,7 @@ func newHookDescriptors(e *Engine, rules []api.Rule) hookDescriptorMap {
 			logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
 		}
 
-		callbackContext, err := NewCallbackContext(&r, e.metricsEngine, e.errorMetricsStore)
+		callbackContext, err := NewCallbackContext(&r, rulepackID, e.metricsEngine, e.errorMetricsStore)
 		if err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
 			continue

@@ -68,6 +68,8 @@ func newShellshockPrologCallback(rule RuleFace, blockingMode bool, regexps []*re
 			return nil, nil
 		}
 
+		rule.MonitorPre()
+
 		env := (*attr).Env
 		if env == nil {
 			env = os.Environ()
