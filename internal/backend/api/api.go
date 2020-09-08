@@ -186,17 +186,18 @@ type BatchRequest_Event struct {
 }
 
 type Rule struct {
-	Name       string             `json:"name"`
-	Hookpoint  Hookpoint          `json:"hookpoint"`
-	Data       RuleData           `json:"data"`
-	Metrics    []MetricDefinition `json:"metrics"`
-	Signature  RuleSignature      `json:"signature"`
-	Conditions RuleConditions     `json:"conditions"`
-	Callbacks  RuleCallbacks      `json:"callbacks"`
-	Test       bool               `json:"test"`
-	Block      bool               `json:"block"`
-	AttackType string             `json:"attack_type"`
-	Priority   int                `json:"priority"`
+	Name              string             `json:"name"`
+	Hookpoint         Hookpoint          `json:"hookpoint"`
+	Data              RuleData           `json:"data"`
+	Metrics           []MetricDefinition `json:"metrics"`
+	Signature         RuleSignature      `json:"signature"`
+	Conditions        RuleConditions     `json:"conditions"`
+	Callbacks         RuleCallbacks      `json:"callbacks"`
+	Test              bool               `json:"test"`
+	Block             bool               `json:"block"`
+	AttackType        string             `json:"attack_type"`
+	Priority          int                `json:"priority"`
+	CallCountInterval int                `json:"call_count_interval"`
 }
 
 type RuleConditions struct{}
