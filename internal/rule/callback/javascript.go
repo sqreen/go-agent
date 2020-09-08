@@ -48,6 +48,7 @@ func NewJSExecCallback(rule RuleFace, cfg JSReflectedCallbackConfig) (sqhook.Ref
 			//}
 
 			if vm.hasPre() {
+				rule.MonitorPre()
 				result, err := vm.callPre(baCtx)
 				if err != nil {
 					// TODO: api adding more information to the error such as the
