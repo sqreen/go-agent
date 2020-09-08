@@ -115,7 +115,7 @@ func (r *RequestReaderMock) Referer() string {
 	return r.Called().String(0)
 }
 
-func (r *RequestReaderMock) Form() (v url.Values) {
+func (r *RequestReaderMock) QueryForm() (v url.Values) {
 	v, _ = r.Called().Get(0).(url.Values)
 	return
 }

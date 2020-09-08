@@ -59,14 +59,17 @@ func (r *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBind
 }
 
 func (r *RequestBindingAccessorContext) FilteredParams() RequestParamMap {
-	form := r.Form()
+	queryForm := r.QueryForm()
+	postForm := r.PostForm()
 	params := r.RequestReader.Params()
-	if len(form) == 0 {
-		return params
-	}
 
-	res := make(types.RequestParamMap, 1+len(params))
-	res.Add("Form", form)
+	res := make(types.RequestParamMap, 2+len(params))
+	if len(postForm) > 0 {
+		res.Add("PostForm", postForm)
+	}
+	if len(queryForm) > 0 {
+		res.Add("QueryForm", queryForm)
+	}
 	for k, v := range params {
 		res.Add(k, v)
 	}

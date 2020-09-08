@@ -226,7 +226,7 @@ type handledRequest struct {
 	isTLS      bool
 	userAgent  string
 	referer    string
-	form       url.Values
+	queryForm  url.Values
 	postForm   url.Values
 	clientIP   net.IP
 	params     types.RequestParamMap
@@ -242,7 +242,7 @@ func (h *handledRequest) RemoteAddr() string            { return h.remoteAddr }
 func (h *handledRequest) IsTLS() bool                   { return h.isTLS }
 func (h *handledRequest) UserAgent() string             { return h.userAgent }
 func (h *handledRequest) Referer() string               { return h.referer }
-func (h *handledRequest) Form() url.Values              { return h.form }
+func (h *handledRequest) QueryForm() url.Values         { return h.queryForm }
 func (h *handledRequest) PostForm() url.Values          { return h.postForm }
 func (h *handledRequest) ClientIP() net.IP              { return h.clientIP }
 func (h *handledRequest) Params() types.RequestParamMap { return h.params }
@@ -270,7 +270,7 @@ func copyRequest(reader types.RequestReader) types.RequestReader {
 		isTLS:      reader.IsTLS(),
 		userAgent:  reader.UserAgent(),
 		referer:    reader.Referer(),
-		form:       reader.Form(),
+		queryForm:  reader.QueryForm(),
 		postForm:   reader.PostForm(),
 		clientIP:   reader.ClientIP(),
 		params:     reader.Params(),

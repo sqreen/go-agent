@@ -106,7 +106,8 @@ func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) 
 }
 
 type requestReaderImpl struct {
-	c *gingonic.Context
+	c         *gingonic.Context
+	queryForm url.Values
 }
 
 func (r *requestReaderImpl) Body() []byte {
@@ -161,13 +162,14 @@ func (r *requestReaderImpl) Params() types.RequestParamMap {
 	return m
 }
 
-func (r *requestReaderImpl) Form() url.Values {
-	_ = r.c.Request.ParseForm()
-	return r.c.Request.Form
+func (r *requestReaderImpl) QueryForm() url.Values {
+	if r.queryForm == nil {
+		r.queryForm = r.c.Request.URL.Query()
+	}
+	return r.queryForm
 }
 
 func (r *requestReaderImpl) PostForm() url.Values {
-	_ = r.c.Request.ParseForm()
 	return r.c.Request.PostForm
 }
 
