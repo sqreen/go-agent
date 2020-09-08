@@ -99,7 +99,7 @@ func (r *RequestReaderMockup) Referer() string {
 	return r.Called().String(0)
 }
 
-func (r *RequestReaderMockup) Form() url.Values {
+func (r *RequestReaderMockup) QueryForm() url.Values {
 	v, _ := r.Called().Get(0).(url.Values)
 	return v
 }

@@ -89,6 +89,7 @@ func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w 
 
 type requestReaderImpl struct {
 	*http.Request
+	queryForm url.Values
 }
 
 func (r *requestReaderImpl) Body() []byte {
@@ -152,8 +153,11 @@ func (r *requestReaderImpl) IsTLS() bool {
 	return r.Request.TLS != nil
 }
 
-func (r *requestReaderImpl) Form() url.Values {
-	return r.Request.Form
+func (r *requestReaderImpl) QueryForm() url.Values {
+	if r.queryForm == nil {
+		r.queryForm = r.Request.URL.Query()
+	}
+	return r.queryForm
 }
 
 func (r *requestReaderImpl) PostForm() url.Values {

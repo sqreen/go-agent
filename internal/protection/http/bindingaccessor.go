@@ -64,8 +64,12 @@ func (r *RequestBindingAccessorContext) FilteredParams() RequestParamMap {
 	params := r.RequestReader.Params()
 
 	res := make(types.RequestParamMap, 2+len(params))
-	res.Add("PostForm", postForm)
-	res.Add("QueryForm", queryForm)
+	if len(postForm) > 0 {
+		res.Add("PostForm", postForm)
+	}
+	if len(queryForm) > 0 {
+		res.Add("QueryForm", queryForm)
+	}
 	for k, v := range params {
 		res.Add(k, v)
 	}

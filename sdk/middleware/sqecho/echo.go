@@ -123,6 +123,7 @@ func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc,
 type requestReaderImpl struct {
 	c              echo.Context
 	bodyReadBuffer bytes.Buffer
+	queryForm      url.Values
 }
 
 func (r *requestReaderImpl) Body() []byte {
@@ -175,8 +176,11 @@ func (r *requestReaderImpl) Params() types.RequestParamMap {
 	return m
 }
 
-func (r *requestReaderImpl) Form() url.Values {
-	return r.c.Request().Form
+func (r *requestReaderImpl) QueryForm() url.Values {
+	if r.queryForm == nil {
+		r.queryForm = r.c.Request().URL.Query()
+	}
+	return r.queryForm
 }
 
 func (r *requestReaderImpl) PostForm() url.Values {
