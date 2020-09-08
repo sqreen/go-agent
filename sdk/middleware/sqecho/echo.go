@@ -176,12 +176,10 @@ func (r *requestReaderImpl) Params() types.RequestParamMap {
 }
 
 func (r *requestReaderImpl) Form() url.Values {
-	_ = r.c.Request().ParseForm()
 	return r.c.Request().Form
 }
 
 func (r *requestReaderImpl) PostForm() url.Values {
-	_ = r.c.Request().ParseForm()
 	return r.c.Request().PostForm
 }
 

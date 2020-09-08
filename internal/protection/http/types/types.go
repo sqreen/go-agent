@@ -25,7 +25,7 @@ type RequestReader interface {
 	IsTLS() bool
 	UserAgent() string
 	Referer() string
-	Form() url.Values
+	QueryForm() url.Values
 	PostForm() url.Values
 	ClientIP() net.IP
 	// Params returns the request parameters parsed by the handler so far at the

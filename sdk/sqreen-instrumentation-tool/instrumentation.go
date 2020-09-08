@@ -217,6 +217,7 @@ var (
 			//   can parse this string and compare the signature ASTs) - and log when
 			//   not found
 			"client.go",
+			"request.go",
 		},
 		"github.com/gin-gonic/gin": {
 			// Same comment as net/http

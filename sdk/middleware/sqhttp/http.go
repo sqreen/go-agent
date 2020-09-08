@@ -153,12 +153,10 @@ func (r *requestReaderImpl) IsTLS() bool {
 }
 
 func (r *requestReaderImpl) Form() url.Values {
-	_ = r.Request.ParseForm()
 	return r.Request.Form
 }
 
 func (r *requestReaderImpl) PostForm() url.Values {
-	_ = r.Request.ParseForm()
 	return r.Request.PostForm
 }
 
