@@ -1,3 +1,32 @@
+# v0.15.0 - 9 September 2020
+
+## New Feature
+
+- (#149) Add activity monitoring of RASP protections. The number of times a
+  protection has been used in the application is now displayed on the `Activity`
+  tab of each RASP protection dashboard page.
+
+## Fixes
+
+- (#148) Fix the usage of the Go agent in a reverse proxy server: avoid
+  automatically reading a POST request's body because of the former usage of
+  `Request.ParseForm()` in Sqreen's middleware functions, and rather get
+  POST form values from `Request.PostForm`, and URL query values from
+  `Request.URL.Query()`.  
+  Note that since `Request.PostForm`'s value is assigned by
+  `Request.ParseForm()`, the In-WAF and RASP protections will now only consider
+  POST form values when the request handler will have called
+  `Request.ParseForm()` itself for its own needs.  
+  Therefore, the In-App WAF is now also attached to `ParseForm()` to monitor
+  the resulting POST form values, and returns a non-nil error when an attack is detected
+  (cf. <https://docs.sqreen.com/go/integration> for more Go integration details).
+
+- (ef81fc2) Enforce a request body reader to ignore it when blocked by the
+  In-App WAF by returning it 0 bytes read along with the current non-nil error.
+  This allows for example `io.LimitReader` not to copy the body buffer despite
+  the non-nil error returned by the In-App WAF protection.
+
+
 # v0.14.0 - 2 September 2020
 
 ## New Feature
