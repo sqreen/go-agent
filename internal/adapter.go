@@ -136,7 +136,7 @@ func (a *httpRequestAPIAdapter) GetParameters() api.RequestRecord_Request_Parame
 		rawBody = "<Redacted By Sqreen>"
 	}
 	return api.RequestRecord_Request_Parameters{
-		Query:   req.Form(),
+		Query:   req.QueryForm(),
 		Form:    req.PostForm(),
 		Params:  req.Params(),
 		RawBody: rawBody,

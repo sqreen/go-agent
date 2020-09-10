@@ -221,7 +221,7 @@ func TestRequestReaderImpl(t *testing.T) {
 		t.Run("empty", func(t *testing.T) {
 			req, err := http.NewRequest("GET", "/", nil)
 			require.NoError(t, err)
-			reqReader := requestReaderImpl{req}
+			reqReader := requestReaderImpl{Request: req}
 
 			frameworkParams := reqReader.Params()
 			require.Empty(t, frameworkParams)
@@ -230,7 +230,7 @@ func TestRequestReaderImpl(t *testing.T) {
 		t.Run("url segments", func(t *testing.T) {
 			req, err := http.NewRequest("GET", `/a/bb/cc/%2Ffoo//bar///zyz/"\"\\"\\\"/`, nil)
 			require.NoError(t, err)
-			reqReader := requestReaderImpl{req}
+			reqReader := requestReaderImpl{Request: req}
 
 			frameworkParams := reqReader.Params()
 			require.NotEmpty(t, frameworkParams)

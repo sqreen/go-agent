@@ -161,6 +161,7 @@ func makeWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Ru
 	return func(p **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
 		ctx := *p
 
+		rule.MonitorPre()
 		blocked, err := runWAF(ctx, bindingAccessors, wafRule, blockingMode, timeout, rule)
 		if err != nil {
 			WAFErrorLogOnce.Do(func() {
@@ -261,6 +262,7 @@ func makeFunctionWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waf
 			}
 
 			if l := len(pre); l > 0 {
+				rule.MonitorPre()
 				blocked, err := runFunctionWAF(ctx, bindingAccessors, wafRule, blockingMode, timeout, rule, pre, strategy, params, nil)
 				if err != nil {
 					return sqerrors.Wrap(err, "function waf error: pre")

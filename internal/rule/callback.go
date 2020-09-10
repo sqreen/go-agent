@@ -7,6 +7,7 @@
 package rule
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -29,16 +30,18 @@ import (
 //}
 
 type CallbackContext struct {
-	metricsStores       map[string]*metrics.Store
-	defaultMetricsStore *metrics.Store
-	errorMetricsStore   *metrics.Store
-	name                string
-	testMode            bool
-	config              callback.NativeCallbackConfig
-	attackType          string
+	metricsStores          map[string]*metrics.Store
+	defaultMetricsStore    *metrics.Store
+	errorMetricsStore      *metrics.Store
+	callCountsMetricsStore *metrics.Store
+	preCallCounter         string
+	name                   string
+	testMode               bool
+	config                 callback.NativeCallbackConfig
+	attackType             string
 }
 
-func NewCallbackContext(r *api.Rule, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) (*CallbackContext, error) {
+func NewCallbackContext(r *api.Rule, rulepackID string, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) (*CallbackContext, error) {
 	var (
 		metricsStores       map[string]*metrics.Store
 		defaultMetricsStore *metrics.Store
@@ -51,13 +54,24 @@ func NewCallbackContext(r *api.Rule, metricsEngine *metrics.Engine, errorMetrics
 		defaultMetricsStore = metricsStores[r.Metrics[0].Name]
 	}
 
+	var (
+		callCountsMetricsStore *metrics.Store
+		preCallCounter         string
+	)
+	if r.CallCountInterval != 0 {
+		callCountsMetricsStore = metricsEngine.GetStore("sqreen_call_counts", 60*time.Second)
+		preCallCounter = fmt.Sprintf("%s/%s/pre", rulepackID, r.Name)
+	}
+
 	return &CallbackContext{
-		metricsStores:       metricsStores,
-		defaultMetricsStore: defaultMetricsStore,
-		errorMetricsStore:   errorMetricsStore,
-		name:                r.Name,
-		testMode:            r.Test,
-		attackType:          r.AttackType,
+		metricsStores:          metricsStores,
+		defaultMetricsStore:    defaultMetricsStore,
+		errorMetricsStore:      errorMetricsStore,
+		name:                   r.Name,
+		testMode:               r.Test,
+		attackType:             r.AttackType,
+		preCallCounter:         preCallCounter,
+		callCountsMetricsStore: callCountsMetricsStore,
 	}, nil
 }
 
@@ -86,6 +100,15 @@ func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}, st erro
 		Timestamp:  time.Now(),
 		Info:       info,
 		StackTrace: st,
+	}
+}
+
+func (d *CallbackContext) MonitorPre() {
+	// TODO: execution time monitoring and cap
+	if d.callCountsMetricsStore != nil {
+		if err := d.callCountsMetricsStore.Add(d.preCallCounter, 1); err != nil {
+			// TODO: log the error
+		}
 	}
 }
 

@@ -193,7 +193,13 @@ type AgentType struct {
 }
 
 type staticMetrics struct {
-	sdkUserLoginSuccess, sdkUserLoginFailure, sdkUserSignup, allowedIP, allowedPath, errors *metrics.Store
+	sdkUserLoginSuccess,
+	sdkUserLoginFailure,
+	sdkUserSignup,
+	allowedIP,
+	allowedPath,
+	errors,
+	callCounts *metrics.Store
 }
 
 // Error channel buffer length.

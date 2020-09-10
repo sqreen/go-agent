@@ -48,14 +48,14 @@ func TestRequestBindingAccessors(t *testing.T) {
 		{
 			Title:  "GET with URL parameters",
 			Method: "GET",
-			URL:    "http://sqreen.com/admin?user=root&password=root",
+			URL:    "http://sqreen.com/admin?user=uid&password=pwd",
 			BindingAccessors: map[string]interface{}{
 				`#.Method`:                       "GET",
 				`#.Host`:                         "sqreen.com",
 				`#.ClientIP`:                     expectedClientIP,
-				`#.URL.RequestURI`:               "/admin?user=root&password=root",
-				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root"},
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password"},
+				`#.URL.RequestURI`:               "/admin?user=uid&password=pwd",
+				`#.FilteredParams | flat_values`: FlattenedResult{"uid", "pwd"},
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"QueryForm", "user", "password"},
 				`#.Body.String`:                  "",
 				`#.Body.Bytes`:                   []byte(nil),
 			},
@@ -78,7 +78,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 		{
 			Title:  "POST with multipart form data and URL parameters",
 			Method: "POST",
-			URL:    "http://sqreen.com/admin/news?user=root&password=root",
+			URL:    "http://sqreen.com/admin/news?user=uid&password=pwd",
 			Headers: http.Header{
 				"Content-Type": []string{multipartContentTypeHeader},
 			},
@@ -88,9 +88,9 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.Host`:                         "sqreen.com",
 				`#.ClientIP`:                     expectedClientIP,
 				`#.Headers['Content-Type']`:      []string{multipartContentTypeHeader},
-				`#.URL.RequestURI`:               "/admin/news?user=root&password=root",
-				`#.FilteredParams | flat_values`: FlattenedResult{"root", "root", "value 1"},             // The multipart form data is not included for now
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "user", "password", "field 1"}, // The multipart form data is not included for now
+				`#.URL.RequestURI`:               "/admin/news?user=uid&password=pwd",
+				`#.FilteredParams | flat_values`: FlattenedResult{"uid", "pwd", "value 1"},                                // The multipart form data is not included for now
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"QueryForm", "user", "password", "PostForm", "field 1"}, // The multipart form data is not included for now
 				`#.Body.String`:                  string(multipartExpectedBody),
 				`#.Body.Bytes`:                   multipartExpectedBody,
 			},
@@ -110,7 +110,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.Headers['Content-Type']`:      []string{`application/x-www-form-urlencoded`},
 				`#.URL.RequestURI`:               "/admin/news",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", ""},
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "z", "both", "prio", "", "orphan", "empty"},
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"PostForm", "z", "both", "prio", "", "orphan", "empty"},
 				`#.Body.String`:                  `z=post&both=y&prio=2&=nokey&orphan;empty=&`,
 				`#.Body.Bytes`:                   []byte(`z=post&both=y&prio=2&=nokey&orphan;empty=&`),
 			},
@@ -130,7 +130,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.Headers['Content-Type']`:      []string{`application/x-www-form-urlencoded`},
 				`#.URL.RequestURI`:               "/admin/news?sqreen=okay",
 				`#.FilteredParams | flat_values`: FlattenedResult{"post", "y", "2", "nokey", "", "", "okay"},
-				`#.FilteredParams | flat_keys`:   FlattenedResult{"Form", "empty", "z", "both", "prio", "", "orphan", "sqreen"},
+				`#.FilteredParams | flat_keys`:   FlattenedResult{"PostForm", "empty", "z", "both", "prio", "", "orphan", "QueryForm", "sqreen"},
 				`#.Body.String`:                  `z=post&both=y&prio=2&=nokey&orphan;empty=&`,
 				`#.Body.Bytes`:                   []byte(`z=post&both=y&prio=2&=nokey&orphan;empty=&`),
 			},
@@ -171,7 +171,7 @@ func TestRequestBindingAccessors(t *testing.T) {
 		{
 			Title:  "Extra request params",
 			Method: "GET",
-			URL:    "http://sqreen.com/admin?user=root&password=root",
+			URL:    "http://sqreen.com/admin?user=uid&password=pwd",
 			RequestParams: types.RequestParamMap{
 				"json": types.RequestParamValueSlice{
 					map[string]interface{}{
@@ -185,12 +185,12 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.Method`:         "GET",
 				`#.Host`:           "sqreen.com",
 				`#.ClientIP`:       expectedClientIP,
-				`#.URL.RequestURI`: "/admin?user=root&password=root",
+				`#.URL.RequestURI`: "/admin?user=uid&password=pwd",
 				`#.FilteredParams`: http_protection.RequestParamMap{
-					"Form": []interface{}{
+					"QueryForm": []interface{}{
 						url.Values{
-							"user":     []string{"root"},
-							"password": []string{"root"},
+							"user":     []string{"uid"},
+							"password": []string{"pwd"},
 						},
 					},
 					"json": types.RequestParamValueSlice{
@@ -319,8 +319,8 @@ func (r requestReaderImpl) IsTLS() bool {
 	return r.r.TLS != nil
 }
 
-func (r requestReaderImpl) Form() url.Values {
-	return r.r.Form
+func (r requestReaderImpl) QueryForm() url.Values {
+	return r.r.URL.Query()
 }
 
 func (r requestReaderImpl) PostForm() url.Values {
