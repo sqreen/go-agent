@@ -76,6 +76,9 @@ func (t rawBodyWAF) Read(p []byte) (n int, err error) {
 
 	if err == io.EOF {
 		if wafErr := t.c.bodyWAF(); wafErr != nil {
+			// Return 0 and the sqreen error so that the caller doesn't take anything
+			// into account.
+			n = 0
 			err = wafErr
 		}
 	}
