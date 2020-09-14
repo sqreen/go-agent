@@ -199,7 +199,7 @@ type staticMetrics struct {
 	allowedIP,
 	allowedPath,
 	errors,
-	callCounts *metrics.Store
+	callCounts *metrics.SumStore
 }
 
 // Error channel buffer length.
@@ -218,7 +218,7 @@ func New(cfg *config.Config) *AgentType {
 
 	metrics := metrics.NewEngine(logger, cfg.MaxMetricsStoreLength())
 
-	errorMetrics := metrics.GetStore("errors", config.ErrorMetricsPeriod)
+	errorMetrics := metrics.GetSumStore("errors", config.ErrorMetricsPeriod)
 
 	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
 	if err != nil {
@@ -261,11 +261,11 @@ func New(cfg *config.Config) *AgentType {
 		isDone:  make(chan struct{}),
 		metrics: metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess: metrics.GetStore("sdk-login-success", sdkMetricsPeriod),
-			sdkUserLoginFailure: metrics.GetStore("sdk-login-fail", sdkMetricsPeriod),
-			sdkUserSignup:       metrics.GetStore("sdk-signup", sdkMetricsPeriod),
-			allowedIP:           metrics.GetStore("whitelisted", sdkMetricsPeriod),
-			allowedPath:         metrics.GetStore("whitelisted_paths", sdkMetricsPeriod),
+			sdkUserLoginSuccess: metrics.GetSumStore("sdk-login-success", sdkMetricsPeriod),
+			sdkUserLoginFailure: metrics.GetSumStore("sdk-login-fail", sdkMetricsPeriod),
+			sdkUserSignup:       metrics.GetSumStore("sdk-signup", sdkMetricsPeriod),
+			allowedIP:           metrics.GetSumStore("whitelisted", sdkMetricsPeriod),
+			allowedPath:         metrics.GetSumStore("whitelisted_paths", sdkMetricsPeriod),
 			errors:              errorMetrics,
 		},
 		ctx:         ctx,

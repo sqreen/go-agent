@@ -30,10 +30,10 @@ import (
 //}
 
 type CallbackContext struct {
-	metricsStores          map[string]*metrics.Store
-	defaultMetricsStore    *metrics.Store
-	errorMetricsStore      *metrics.Store
-	callCountsMetricsStore *metrics.Store
+	metricsStores          map[string]*metrics.SumStore
+	defaultMetricsStore    *metrics.SumStore
+	errorMetricsStore      *metrics.SumStore
+	callCountsMetricsStore *metrics.SumStore
 	preCallCounter         string
 	name                   string
 	testMode               bool
@@ -41,25 +41,25 @@ type CallbackContext struct {
 	attackType             string
 }
 
-func NewCallbackContext(r *api.Rule, rulepackID string, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) (*CallbackContext, error) {
+func NewCallbackContext(r *api.Rule, rulepackID string, metricsEngine *metrics.Engine, errorMetricsStore *metrics.SumStore) (*CallbackContext, error) {
 	var (
-		metricsStores       map[string]*metrics.Store
-		defaultMetricsStore *metrics.Store
+		metricsStores       map[string]*metrics.SumStore
+		defaultMetricsStore *metrics.SumStore
 	)
 	if len(r.Metrics) > 0 {
-		metricsStores = make(map[string]*metrics.Store)
+		metricsStores = make(map[string]*metrics.SumStore)
 		for _, m := range r.Metrics {
-			metricsStores[m.Name] = metricsEngine.GetStore(m.Name, time.Second*time.Duration(m.Period))
+			metricsStores[m.Name] = metricsEngine.GetSumStore(m.Name, time.Second*time.Duration(m.Period))
 		}
 		defaultMetricsStore = metricsStores[r.Metrics[0].Name]
 	}
 
 	var (
-		callCountsMetricsStore *metrics.Store
+		callCountsMetricsStore *metrics.SumStore
 		preCallCounter         string
 	)
 	if r.CallCountInterval != 0 {
-		callCountsMetricsStore = metricsEngine.GetStore("sqreen_call_counts", 60*time.Second)
+		callCountsMetricsStore = metricsEngine.GetSumStore("sqreen_call_counts", 60*time.Second)
 		preCallCounter = fmt.Sprintf("%s/%s/pre", rulepackID, r.Name)
 	}
 

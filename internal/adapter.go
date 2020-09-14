@@ -300,7 +300,7 @@ func (a *closedHTTPRequestContextEventAPIAdapter) GetDataPoints() []*api.Request
 	return nil
 }
 
-func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadyStore) []api.MetricResponse {
+func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadySumStore) []api.MetricResponse {
 	var metricsArray []api.MetricResponse
 	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
 		metricsArray = make([]api.MetricResponse, 0, len(readyMetrics))

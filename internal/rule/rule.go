@@ -42,7 +42,7 @@ type Engine struct {
 	metricsEngine         *metrics.Engine
 	publicKey             *ecdsa.PublicKey
 	instrumentationEngine InstrumentationFace
-	errorMetricsStore     *metrics.Store
+	errorMetricsStore     *metrics.SumStore
 }
 
 // Logger interface required by this package.
@@ -52,7 +52,7 @@ type Logger interface {
 }
 
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store, publicKey *ecdsa.PublicKey) *Engine {
+func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, errorMetricsStore *metrics.SumStore, publicKey *ecdsa.PublicKey) *Engine {
 	if instrumentationEngine == nil {
 		instrumentationEngine = defaultInstrumentationEngine
 	}
