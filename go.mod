@@ -5,8 +5,8 @@ go 1.12
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/dave/dst v0.23.1
-	github.com/dlclark/regexp2 v1.2.0 // indirect
-	github.com/dop251/goja v0.0.0-20200526165454-f1752421c432
+	github.com/dlclark/regexp2 v1.2.1 // indirect
+	github.com/dop251/goja v0.0.0-20200912112403-81ddb8a7cc41
 	github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7 // indirect
 	github.com/gin-gonic/gin v1.3.0
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
@@ -34,7 +34,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37 // indirect
 	golang.org/x/net v0.0.0-20200513185701-a91f0712d120
 	golang.org/x/sys v0.0.0-20200515095857-1151b9dac4a9 // indirect
-	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/text v0.3.3 // indirect
 	golang.org/x/tools v0.0.0-20200117065230-39095c1d176c // indirect
 	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
