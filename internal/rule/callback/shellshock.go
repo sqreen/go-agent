@@ -79,11 +79,15 @@ func newShellshockPrologCallback(rule RuleFace, blockingMode bool, regexps []*re
 		}
 
 		for _, env := range env {
-			v := strings.Split(env, `=`)
-			if len(v) != 2 {
+			v := strings.SplitN(env, `=`, 2)
+			if l := len(v); l <= 0 || l > 2 {
 				ctx.Logger().Error(sqerrors.Errorf("unexpected number of elements split by `=` in `%s`", env))
 				return nil, nil
+			} else if l == 1 {
+				// Skip empty values
+				continue
 			}
+
 			name, value := v[0], v[1]
 			for _, re := range regexps {
 				if re.MatchString(value) {
