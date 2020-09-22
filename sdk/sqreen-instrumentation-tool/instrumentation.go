@@ -203,6 +203,7 @@ var (
 		"net/http",
 		"github.com/gin-gonic/gin",
 		"github.com/labstack/echo",
+		"github.com/labstack/echo/v4",
 		"go.mongodb.org/mongo-driver/mongo",
 	}
 
@@ -229,6 +230,10 @@ var (
 			"mongo.go", // mongo.go contains the bson transformation function
 		},
 		"github.com/labstack/echo": {
+			// Same comment as net/http
+			"context.go", // context.go contains the body parsers
+		},
+		"github.com/labstack/echo/v4": {
 			// Same comment as net/http
 			"context.go", // context.go contains the body parsers
 		},
