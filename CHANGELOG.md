@@ -1,3 +1,22 @@
+# v0.16.0 - 22 September 2020
+
+## New Feature
+
+- (#152, #155) Add In-App WAF protection to Echo's request parameter parser:
+  [`Context`](https://pkg.go.dev/github.com/labstack/echo/v4#Context)'s method
+  `Bind()` is now protected by the In-App WAF. The Go value it parses from the
+  HTTP request is made available to the In-App WAF rules via the
+  `GET/POST parameters` field.  
+  When blocked, `Bind()` returns a non-nil [`SqreenError` value](https://godoc.org/github.com/sqreen/go-agent/sdk/types#SqreenError)
+  and its caller should immediately return.  
+  Read more about the blocking behavior of Sqreen for Go at <https://docs.sqreen.com/go/integration>.
+
+## Fix
+
+- (#153) RASP shellshock: properly handle environment variables containing
+  variable definitions (eg. `TERMCAP`).
+
+
 # v0.15.0 - 9 September 2020
 
 ## New Feature
