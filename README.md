@@ -29,9 +29,9 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
 # Quick start
 
 1. Use the middleware function for the Go web framework you use:
-   - [net/http](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp).
-   - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin).
-   - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho/v4)`.
+   - [net/http](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqhttp)
+   - [Gin](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqgin)
+   - [Echo](https://godoc.org/github.com/sqreen/go-agent/sdk/middleware/sqecho/v4)
 
    If your framework is not listed, it is usually possible to use instead the
    standard `net/http` middleware. If not, please, let us know by [creating an
