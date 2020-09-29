@@ -100,9 +100,7 @@ walk:
 		v = v.Elem()
 		goto walk
 
-	case reflect.Array:
-		fallthrough
-	case reflect.Slice:
+	case reflect.Array, reflect.Slice:
 		return s.scrubSlice(v, info)
 
 	case reflect.Map:
@@ -212,6 +210,8 @@ func (s *Scrubber) scrubSlice(v reflect.Value, info Info) (scrubbed bool) {
 }
 
 func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
+	var scrubEverything *Scrubber
+
 	vt := v.Type().Elem()
 	hasInterfaceValueType := vt.Kind() == reflect.Interface
 	hasStringKeyType := v.Type().Key().Kind() == reflect.String
@@ -223,9 +223,12 @@ func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
 		// value regular expression.
 		key := iter.Key()
 		if hasStringKeyType && !s.scrubEveryString && matchString(s.keyRegexp, key.String()) {
-			scrubber = new(Scrubber)
-			*scrubber = *s
-			scrubber.scrubEveryString = true
+			if scrubEverything == nil {
+				scrubEverything = new(Scrubber)
+				*scrubEverything = *scrubber
+				scrubEverything.scrubEveryString = true
+			}
+			scrubber = scrubEverything
 		}
 
 		// Map entries cannot be set. We therefore create a new value in order
@@ -247,9 +250,10 @@ func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
 		// the scrubber.
 		newVal := reflect.New(valT).Elem()
 		newVal.Set(val)
+
 		// Scrub it
-		if scrubbedElement := scrubber.scrubValue(newVal, info); scrubbedElement {
-			// Set it
+		if scrubber.scrubValue(newVal, info) {
+			// Replace it
 			v.SetMapIndex(key, newVal)
 			scrubbed = true
 		}
@@ -258,6 +262,8 @@ func (s *Scrubber) scrubMap(v reflect.Value, info Info) (scrubbed bool) {
 }
 
 func (s *Scrubber) scrubStruct(v reflect.Value, info Info) (scrubbed bool) {
+	var scrubEverything *Scrubber
+
 	l := v.NumField()
 	vt := v.Type()
 	for i := 0; i < l; i++ {
@@ -269,9 +275,12 @@ func (s *Scrubber) scrubStruct(v reflect.Value, info Info) (scrubbed bool) {
 
 		scrubber := s
 		if !s.scrubEveryString && matchString(s.keyRegexp, ft.Name) {
-			scrubber = new(Scrubber)
-			*scrubber = *s
-			scrubber.scrubEveryString = true
+			if scrubEverything == nil {
+				scrubEverything = new(Scrubber)
+				*scrubEverything = *scrubber
+				scrubEverything.scrubEveryString = true
+			}
+			scrubber = scrubEverything
 		}
 
 		f := v.Field(i)
