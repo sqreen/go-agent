@@ -317,15 +317,23 @@ func TestMiddleware(t *testing.T) {
 
 	t.Run("response observation", func(t *testing.T) {
 		expectedStatusCode := 433
+		expectedContentLength := int64(len(`"hello"`))
+		expectedContentType := "application/json; charset=utf-8"
 
 		agent := &mockups.AgentMockup{}
 		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
 		agent.ExpectIsIPAllowed(mock.Anything).Return(false).Once()
 		agent.ExpectIsPathAllowed(mock.Anything).Return(false).Once()
-		var responseStatusCode int
+		var (
+			responseStatusCode int
+			responseContentType string
+			responseContentLength int64
+		)
 		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
 			resp := recorded.Response()
 			responseStatusCode = resp.Status()
+			responseContentType = resp.ContentType()
+			responseContentLength = resp.ContentLength()
 			return true
 		})).Return(nil)
 		defer agent.AssertExpectations(t)
@@ -334,7 +342,7 @@ func TestMiddleware(t *testing.T) {
 		router := gin.New()
 		router.Use(middleware(agent))
 		router.GET("/", func(c *gin.Context) {
-			c.Status(expectedStatusCode)
+			c.JSON(expectedStatusCode, "hello")
 		})
 
 		// Perform the request and record the output
@@ -343,8 +351,10 @@ func TestMiddleware(t *testing.T) {
 		router.ServeHTTP(rec, req)
 
 		// Check the result
+		require.Equal(t, expectedStatusCode, rec.Code)
 		require.Equal(t, expectedStatusCode, responseStatusCode)
-		require.Equal(t, expectedStatusCode, responseStatusCode)
+		require.Equal(t, expectedContentLength, responseContentLength)
+		require.Equal(t, expectedContentType, responseContentType)
 	})
 }
 

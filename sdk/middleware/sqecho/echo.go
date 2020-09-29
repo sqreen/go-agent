@@ -255,17 +255,22 @@ type observedResponse struct {
 }
 
 func newObservedResponse(r *responseWriterImpl) *observedResponse {
-	// Content-Type will be not empty only when explicitly set.
-	// It could be guessed as net/http does. Not implemented for now.
-	ct := r.Header().Get("Content-Type")
-
 	response := r.c.Response()
 
-	// Content-Length is either explicitly set or the amount of written data.
+	headers := response.Header()
+
+	// Content-Type will be not empty only when explicitly set.
+	// It could be guessed as net/http does. Not implemented for now.
+	ct := headers.Get("Content-Type")
+
+	// Content-Length is either explicitly set or the amount of written data. It's
+	// 0 by default with Echo.
 	cl := response.Size
-	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
-		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
-			cl = l
+	if cl == 0 {
+		if contentLength := headers.Get("Content-Length"); contentLength != "" {
+			if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
+				cl = l
+			}
 		}
 	}
 
