@@ -248,15 +248,22 @@ type observedResponse struct {
 }
 
 func newObservedResponse(r *responseWriterImpl) *observedResponse {
+	headers := r.c.Writer.Header()
+
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
-	ct := r.Header().Get("Content-Type")
+	ct := headers.Get("Content-Type")
 
-	// Content-Length is either explicitly set or the amount of written data.
+	// Content-Length is either explicitly set or the amount of written data. It's
+	// less than 0 when not set by default with Gin.
 	cl := int64(r.c.Writer.Size())
-	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
-		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
-			cl = l
+	if cl < 0 {
+		if contentLength := headers.Get("Content-Length"); contentLength != "" {
+			if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
+				cl = l
+			} else {
+				cl = 0
+			}
 		}
 	}
 
