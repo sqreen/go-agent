@@ -5,6 +5,7 @@
 package sqhttp
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -70,7 +71,7 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	// Test how the control flows between middleware and handler functions
-	t.Run("control flow", func(t *testing.T) {
+	t.Run("data and control flow", func(t *testing.T) {
 		middlewareResponseBody := testlib.RandUTF8String(4096)
 		middlewareResponseStatus := 433
 		handlerResponseBody := testlib.RandUTF8String(4096)
@@ -102,6 +103,11 @@ func TestMiddleware(t *testing.T) {
 					handlers http.Handler
 					test     func(t *testing.T, rec *httptest.ResponseRecorder)
 				}{
+					//
+					// Control flow tests
+					// When an handlers, including middlewares, block.
+					//
+
 					{
 						name: "sqreen first/handler writes the response",
 						handlers: middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -161,6 +167,29 @@ func TestMiddleware(t *testing.T) {
 						test: func(t *testing.T, rec *httptest.ResponseRecorder) {
 							require.Equal(t, middlewareResponseStatus, rec.Code)
 							require.Equal(t, middlewareResponseBody, rec.Body.String())
+						},
+					},
+
+					//
+					// Context data flow tests
+					//
+					{
+						name: "middleware, sqreen, handler",
+						handlers: func(next http.Handler) http.Handler {
+							return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+								r = r.WithContext(context.WithValue(r.Context(), "m", "v"))
+								next.ServeHTTP(w, r)
+							})
+						}(middleware(func(w http.ResponseWriter, r *http.Request) {
+							ctx := r.Context()
+							if v, ok := ctx.Value("m").(string); !ok || v != "v" {
+								panic("couldn't get the context value m")
+							}
+
+							w.WriteHeader(http.StatusOK)
+						}, tc.agent)),
+						test: func(t *testing.T, rec *httptest.ResponseRecorder) {
+							require.Equal(t, http.StatusOK, rec.Code)
 						},
 					},
 				} {
