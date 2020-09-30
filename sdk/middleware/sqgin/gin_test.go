@@ -5,6 +5,7 @@
 package sqgin
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -91,7 +92,7 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	// Test how the control flows between middleware and handler functions
-	t.Run("control flow", func(t *testing.T) {
+	t.Run("data and control flow", func(t *testing.T) {
 		middlewareResponseBody := testlib.RandUTF8String(4096)
 		middlewareResponseStatus := 433
 		handlerResponseBody := testlib.RandUTF8String(4096)
@@ -124,6 +125,11 @@ func TestMiddleware(t *testing.T) {
 					handler     func(*gin.Context)
 					test        func(t *testing.T, rec *httptest.ResponseRecorder)
 				}{
+					//
+					// Control flow tests
+					// When an handlers, including middlewares, block.
+					//
+
 					{
 						name: "sqreen first/next middleware aborts before the handler",
 						middlewares: []gin.HandlerFunc{
@@ -290,6 +296,47 @@ func TestMiddleware(t *testing.T) {
 						test: func(t *testing.T, rec *httptest.ResponseRecorder) {
 							require.Equal(t, middlewareResponseStatus, rec.Code)
 							require.Equal(t, middlewareResponseBody, rec.Body.String())
+						},
+					},
+
+					//
+					// Context data flow tests
+					//
+					{
+						name: "middleware1, sqreen, middleware2, handler",
+						middlewares: []gin.HandlerFunc{
+							func(c *gin.Context) {
+								c.Set("m10", "v10")
+								c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), "m11", "v11"))
+							},
+							middleware(tc.agent),
+							func(c *gin.Context) {
+								c.Set("m20", "v20")
+								c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), "m21", "v21"))
+							},
+						},
+						handler: func(c *gin.Context) {
+							// From Gin's context
+							if v, ok := c.Value("m10").(string); !ok || v != "v10" {
+								panic("couldn't get the context value m10")
+							}
+							if v, ok := c.Value("m20").(string); !ok || v != "v20" {
+								panic("couldn't get the context value m20")
+							}
+
+							// From the request context
+							reqCtx := c.Request.Context()
+							if v, ok := reqCtx.Value("m11").(string); !ok || v != "v11" {
+								panic("couldn't get the context value m11")
+							}
+							if v, ok := reqCtx.Value("m21").(string); !ok || v != "v21" {
+								panic("couldn't get the context value m21")
+							}
+
+							c.Status(http.StatusOK)
+						},
+						test: func(t *testing.T, rec *httptest.ResponseRecorder) {
+							require.Equal(t, http.StatusOK, rec.Code)
 						},
 					},
 				} {
