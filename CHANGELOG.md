@@ -1,3 +1,18 @@
+# v0.16.1 - 30 September 2020
+
+## Fixes
+
+- (#158) PII: make the PII scrubbing of In-App WAF attack events
+  case-insensitive in order to correctly scrub transformed request parameters.
+
+- (#159) Monitoring: fix the content type and length monitoring of HTTP
+  responses.
+
+- (#157) Gin middleware: use the request Go context instead of Gin's so that the
+  agent can properly manage the request execution context, but also to correctly
+  propagate values stored in the Go context before the middleware function.
+
+
 # v0.16.0 - 22 September 2020
 
 ## New Feature
