@@ -17,7 +17,7 @@ dashboard.
 
 This package provides Sqreen's middleware function for Gin to monitor and
 protect requests Gin receives. Simply setup the middleware function to have your
-request monitored and protected by Sqreen.
+requests monitored and protected by Sqreen.
 
 Usage:
 
