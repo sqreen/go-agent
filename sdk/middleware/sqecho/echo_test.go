@@ -5,6 +5,7 @@
 package sqecho
 
 import (
+	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -100,7 +101,7 @@ func TestMiddleware(t *testing.T) {
 		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("control flow", func(t *testing.T) {
+	t.Run("data and control flow", func(t *testing.T) {
 		middlewareResponseBody := testlib.RandUTF8String(4096)
 		middlewareResponseStatus := 433
 		handlerResponseBody := testlib.RandUTF8String(4096)
@@ -133,6 +134,11 @@ func TestMiddleware(t *testing.T) {
 					handler     func(echo.Context) error
 					test        func(t *testing.T, rec *httptest.ResponseRecorder, err error)
 				}{
+					//
+					// Control flow tests
+					// When an handlers, including middlewares, block.
+					//
+
 					{
 						name: "sqreen first/the middleware aborts before the handler",
 						middlewares: []echo.MiddlewareFunc{
@@ -341,6 +347,54 @@ func TestMiddleware(t *testing.T) {
 							require.Equal(t, middlewareResponseBody+handlerResponseBody+middlewareResponseBody, rec.Body.String())
 						},
 					},
+
+					//
+					// Context data flow tests
+					//
+					{
+						name: "middleware1, sqreen, middleware2, handler",
+						middlewares: []echo.MiddlewareFunc{
+							func(next echo.HandlerFunc) echo.HandlerFunc {
+								return func(c echo.Context) error {
+									c.Set("m10", "v10")
+									c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), "m11", "v11")))
+									return next(c)
+								}
+							},
+							middleware(tc.agent),
+							func(next echo.HandlerFunc) echo.HandlerFunc {
+								return func(c echo.Context) error {
+									c.Set("m20", "v20")
+									c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), "m21", "v21")))
+									return next(c)
+								}
+							},
+						},
+						handler: func(c echo.Context) error {
+							// From Gin's context
+							if v, ok := c.Get("m10").(string); !ok || v != "v10" {
+								panic("couldn't get the context value m10")
+							}
+							if v, ok := c.Get("m20").(string); !ok || v != "v20" {
+								panic("couldn't get the context value m20")
+							}
+
+							// From the request context
+							reqCtx := c.Request().Context()
+							if v, ok := reqCtx.Value("m11").(string); !ok || v != "v11" {
+								panic("couldn't get the context value m11")
+							}
+							if v, ok := reqCtx.Value("m21").(string); !ok || v != "v21" {
+								panic("couldn't get the context value m21")
+							}
+
+							return c.NoContent(http.StatusOK)
+						},
+						test: func(t *testing.T, rec *httptest.ResponseRecorder, err error) {
+							require.NoError(t, err)
+							require.Equal(t, http.StatusOK, rec.Code)
+						},
+					},
 				} {
 					tc := tc
 					t.Run(tc.name, func(t *testing.T) {
@@ -370,15 +424,23 @@ func TestMiddleware(t *testing.T) {
 
 	t.Run("response observation", func(t *testing.T) {
 		expectedStatusCode := 433
+		expectedContentLength := int64(len("\"hello\"\n"))
+		expectedContentType := echo.MIMEApplicationJSONCharsetUTF8
 
 		agent := &mockups.AgentMockup{}
 		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
 		agent.ExpectIsIPAllowed(mock.Anything).Return(false).Once()
 		agent.ExpectIsPathAllowed(mock.Anything).Return(false).Once()
-		var responseStatusCode int
+		var (
+			responseStatusCode    int
+			responseContentType   string
+			responseContentLength int64
+		)
 		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
 			resp := recorded.Response()
 			responseStatusCode = resp.Status()
+			responseContentLength = resp.ContentLength()
+			responseContentType = resp.ContentType()
 			return true
 		})).Return(nil)
 		defer agent.AssertExpectations(t)
@@ -387,7 +449,7 @@ func TestMiddleware(t *testing.T) {
 		router := echo.New()
 		router.Use(middleware(agent))
 		router.GET("/", func(c echo.Context) error {
-			return c.NoContent(expectedStatusCode)
+			return c.JSON(expectedStatusCode, "hello")
 		})
 
 		// Perform the request and record the output
@@ -401,8 +463,10 @@ func TestMiddleware(t *testing.T) {
 
 		// Check the result
 		require.NoError(t, err)
-		require.Equal(t, expectedStatusCode, responseStatusCode)
 		require.Equal(t, expectedStatusCode, rec.Code)
+		require.Equal(t, expectedStatusCode, responseStatusCode)
+		require.Equal(t, expectedContentLength, responseContentLength)
+		require.Equal(t, expectedContentType, responseContentType)
 	})
 
 }

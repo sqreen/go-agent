@@ -1247,8 +1247,16 @@ func TestScrubber(t *testing.T) {
 				fuzzer.Fuzz(&multipartForm)
 
 				// Insert some values forbidden by the regular expression
-				postForm.Add("password", "1234")
-				postForm.Add("password", "5678")
+				postForm.Add("password", "password10")
+				postForm.Add("password", "password11")
+				postForm.Add("password", "password12")
+				postForm.Add("passwd", "password1")
+				postForm.Add("api_key", "password2")
+				postForm.Add("apikey", "password3")
+				postForm.Add("authorization", "password4")
+				postForm.Add("access_token", "password5")
+				postForm.Add("secret", "password6")
+
 				messageFormat := "here is my credit card number %s."
 				stringWithCreditCardNb := fmt.Sprintf(messageFormat, "4533-3432-3234-3334")
 				form.Add("message", stringWithCreditCardNb)
@@ -1276,12 +1284,23 @@ func TestScrubber(t *testing.T) {
 				require.True(t, scrubbed)
 
 				// Check values were scrubbed
-				require.Equal(t, []string{expectedMask, expectedMask}, req.PostForm["password"])
+				require.Equal(t, []string{expectedMask, expectedMask, expectedMask}, req.PostForm["password"])
+				require.Equal(t, []string{expectedMask}, req.PostForm["passwd"])
+				require.Equal(t, []string{expectedMask}, req.PostForm["api_key"])
+				require.Equal(t, []string{expectedMask}, req.PostForm["apikey"])
+				require.Equal(t, []string{expectedMask}, req.PostForm["authorization"])
+				require.Equal(t, []string{expectedMask}, req.PostForm["access_token"])
+				require.Equal(t, []string{expectedMask}, req.PostForm["secret"])
 				require.Equal(t, []string{fmt.Sprintf(messageFormat, expectedMask)}, req.Form["message"])
 
 				require.Contains(t, info, stringWithCreditCardNb)
-				require.Contains(t, info, "1234")
-				require.Contains(t, info, "5678")
+				require.Contains(t, info, "password10")
+				require.Contains(t, info, "password11")
+				require.Contains(t, info, "password2")
+				require.Contains(t, info, "password3")
+				require.Contains(t, info, "password4")
+				require.Contains(t, info, "password5")
+				require.Contains(t, info, "password6")
 			})
 		})
 	})
