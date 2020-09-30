@@ -76,7 +76,7 @@ func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) 
 	requestReader := &requestReaderImpl{c: c}
 	responseWriter := &responseWriterImpl{c: c}
 
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(c, agent, responseWriter, requestReader)
+	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(c.Request.Context(), agent, responseWriter, requestReader)
 	if ctx == nil {
 		c.Next()
 		return
