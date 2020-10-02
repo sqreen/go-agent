@@ -267,7 +267,7 @@ func (s *PerfHistogram) bucket(v float64) (bin uint64) {
 		return 1
 	}
 	r := math.Floor(math.Log(v)*s.invLogBase - s.subParcel)
-	sqassert.True(r > 0 && !math.IsNaN(r) && math.IsInf(r, 0))
+	sqassert.True(r >= 0 && !math.IsNaN(r) && !math.IsInf(r, 0))
 	return 2 + uint64(r)
 }
 

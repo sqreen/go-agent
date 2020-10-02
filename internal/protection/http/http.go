@@ -9,11 +9,13 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/sqreen/go-agent/internal/event"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
+	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
 
 func FromContext(ctx context.Context) *RequestContext {
@@ -30,6 +32,8 @@ func FromGLS() *RequestContext {
 }
 
 func NewRequestContext(ctx context.Context, agent protectioncontext.AgentFace, w types.ResponseWriter, r types.RequestReader) (*RequestContext, context.Context, context.CancelFunc) {
+	start := time.Now()
+
 	if agent.IsPathAllowed(r.URL().Path) {
 		return nil, nil, nil
 	}
@@ -57,9 +61,8 @@ func NewRequestContext(ctx context.Context, agent protectioncontext.AgentFace, w
 		ResponseWriter:           w,
 		RequestReader:            rr,
 		cancelHandlerContextFunc: cancelHandlerContextFunc,
-		// Keep a reference to the request param map to be able to add more params
-		// to it.
-		requestReader: rr,
+		requestReader:            rr,
+		start:                    start,
 	}
 	return protCtx, reqCtx, cancelHandlerContextFunc
 }
@@ -71,15 +74,15 @@ type RequestContext struct {
 	events                     event.Record
 	cancelHandlerContextFunc   context.CancelFunc
 	contextHandlerCanceledLock sync.RWMutex
-
 	// We are intentionally not using the Context.Err() method here in order to
 	// be sure it was canceled by a call to CancelHandlerContext(). Using
 	// Context.Err() in order to know this would be also true if for example
 	// the parent context timeouts, in which case we mustn't write the blocking
 	// response.
 	contextHandlerCanceled bool
-
-	requestReader *requestReader
+	requestReader          *requestReader
+	start                  time.Time
+	sqreenTime             sqtime.SharedStopWatch
 }
 
 // Helper types for callbacks who must be designed for this protection so that
@@ -206,6 +209,9 @@ func (c *RequestContext) isContextHandlerCanceled() bool {
 }
 
 func (c *RequestContext) Close(response types.ResponseFace) error {
+	// Compute the request duration
+	duration := time.Since(c.start)
+
 	// Make sure to clear the goroutine local storage to avoid keeping it if some
 	// memory pools are used under the hood.
 	// TODO: enforce this by design of the gls instrumentation
@@ -218,6 +224,8 @@ func (c *RequestContext) Close(response types.ResponseFace) error {
 		response: response,
 		request:  copyRequest(c.RequestReader),
 		events:   c.events.CloseRecord(),
+		start:    c.start,
+		duration: duration,
 	})
 }
 

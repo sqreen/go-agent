@@ -199,7 +199,8 @@ type staticMetrics struct {
 	allowedIP,
 	allowedPath,
 	errors,
-	callCounts *metrics.SumStore
+	callCounts *metrics.TimeHistogram
+	requestTime, sqreenTime *metrics.PerfHistogram
 }
 
 // Error channel buffer length.
@@ -216,9 +217,9 @@ func New(cfg *config.Config) *AgentType {
 		return nil
 	}
 
-	metrics := metrics.NewEngine(logger, cfg.MaxMetricsStoreLength())
+	metrics := metrics.NewEngine()
 
-	errorMetrics := metrics.GetSumStore("errors", config.ErrorMetricsPeriod)
+	errorMetrics := metrics.TimeHistogram("errors", config.ErrorMetricsPeriod)
 
 	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
 	if err != nil {
@@ -254,6 +255,15 @@ func New(cfg *config.Config) *AgentType {
 		return nil
 	}
 
+	sq, err := metrics.PerfHistogram("sq", 0.1, 2.0, time.Minute)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "`sq` performance histogram constructor error"))
+	}
+	req, err := metrics.PerfHistogram("req", 0.1, 2.0, time.Minute)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "`req` performance histogram constructor error"))
+	}
+
 	// AgentType graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &AgentType{
@@ -261,12 +271,14 @@ func New(cfg *config.Config) *AgentType {
 		isDone:  make(chan struct{}),
 		metrics: metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess: metrics.GetSumStore("sdk-login-success", sdkMetricsPeriod),
-			sdkUserLoginFailure: metrics.GetSumStore("sdk-login-fail", sdkMetricsPeriod),
-			sdkUserSignup:       metrics.GetSumStore("sdk-signup", sdkMetricsPeriod),
-			allowedIP:           metrics.GetSumStore("whitelisted", sdkMetricsPeriod),
-			allowedPath:         metrics.GetSumStore("whitelisted_paths", sdkMetricsPeriod),
+			sdkUserLoginSuccess: metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod),
+			sdkUserLoginFailure: metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod),
+			sdkUserSignup:       metrics.TimeHistogram("sdk-signup", sdkMetricsPeriod),
+			allowedIP:           metrics.TimeHistogram("whitelisted", sdkMetricsPeriod),
+			allowedPath:         metrics.TimeHistogram("whitelisted_paths", sdkMetricsPeriod),
 			errors:              errorMetrics,
+			requestTime:         req,
+			sqreenTime:          sq,
 		},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -326,12 +338,26 @@ func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextF
 		a.addUserEvent(event)
 	}
 
-	event := newClosedHTTPRequestContextEvent(a.RulespackID(), ctx.Response(), ctx.Request(), events)
-	if event.shouldSend() {
-		return a.eventMng.send(event)
+	start := ctx.Start()
+	duration := ctx.Duration()
+	finish := start.Add(duration)
+
+	// TODO: enforce start as the current time for the performance metrics?
+	rq := float64(duration.Nanoseconds()) / float64(time.Millisecond)
+	if err := a.staticMetrics.requestTime.Add(rq); err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "could not add the request execution time"))
 	}
 
-	return nil
+	//sq := float64(ctx.SqreenTime().Nanoseconds()) / float64(time.Millisecond)
+	//if err := a.staticMetrics.sqreenTime.Add(sq); err != nil {
+	//	a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
+	//}
+
+	event := newClosedHTTPRequestContextEvent(a.RulespackID(), start, finish, ctx.Response(), ctx.Request(), events)
+	if !event.shouldSend() {
+		return nil
+	}
+	return a.eventMng.send(event)
 }
 
 type withNotificationError struct {

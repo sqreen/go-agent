@@ -15,7 +15,7 @@ import (
 
 func (a *AgentType) addUserEvent(e event.UserEventFace) {
 	var (
-		store  *metrics.SumStore
+		store  *metrics.TimeHistogram
 		logFmt string
 	)
 	var uevent *event.UserEvent
@@ -71,7 +71,7 @@ func (a *AgentType) addPathPasslistEvent(matchedPasslistEntry string) {
 	}
 }
 
-func (a *AgentType) addPasslistEvent(store *metrics.SumStore, matchedPasslistEntry string) error {
+func (a *AgentType) addPasslistEvent(store *metrics.TimeHistogram, matchedPasslistEntry string) error {
 	err := store.Add(matchedPasslistEntry, 1)
 
 	var maxStoreLenErr metrics.MaxMetricsStoreLengthError

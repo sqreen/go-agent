@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/sqreen/go-agent/internal/event"
 )
@@ -74,6 +75,9 @@ type ClosedRequestContextFace interface {
 	Response() ResponseFace
 	Request() RequestReader
 	Events() event.Recorded
+	Start() time.Time
+	Duration() time.Duration
+	SqreenTime() time.Duration
 }
 
 type WriteAfterCloseError struct{}
