@@ -19,7 +19,6 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
-	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	sdktypes "github.com/sqreen/go-agent/sdk/types"
 	"github.com/sqreen/go-libsqreen/waf"
 	waftypes "github.com/sqreen/go-libsqreen/waf/types"
@@ -85,7 +84,7 @@ func prepareWAF(cfg NativeCallbackConfig) (waftypes.Rule, map[string]bindingacce
 	return wafRule, bindingAccessors, timeout, nil
 }
 
-func NewWAFCallback(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWAFCallback(rule RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	wafRule, bindingAccessors, timeout, err := prepareWAF(cfg)
 	if err != nil {
 		return nil, sqerrors.Wrap(err, "unexpected configuration error")
@@ -100,85 +99,78 @@ type (
 
 var ErrWAFProtection = errors.New("waf protection triggered")
 
-func newWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
+func newWAFPrologCallback(rule RuleContext, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
 		prolog:  makeWAFPrologCallback(rule, blockingMode, wafRule, bindingAccessors, timeout),
 	}
 }
 
-func runWAF(ctx *httpprotection.RequestContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waftypes.Rule, blockingMode bool, timeout time.Duration, rule RuleFace) (blocked bool, err error) {
-	sqsafeErr := sqsafe.Call(func() error {
-		baCtx := MakeWAFCallbackBindingAccessorContext(ctx.RequestReader)
-		args := make(waftypes.DataSet, len(bindingAccessors))
-		for expr, ba := range bindingAccessors {
-			value, err := ba(baCtx)
-			if err != nil {
-				// Log the error and continue
-				ctx.Logger().Error(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr))
-				continue
-			}
-			if value == nil {
-				// Skip unset values
-				continue
-			}
-			args[expr] = value
-		}
+func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waftypes.Rule, timeout time.Duration) (blocked bool, err error) {
+	baCtx, err := MakeWAFCallbackBindingAccessorContext(c)
+	if err != nil {
+		return false, err
+	}
 
-		// TODO: args caching
-		action, info, err := wafRule.Run(args, timeout)
+	args := make(waftypes.DataSet, len(bindingAccessors))
+	for expr, ba := range bindingAccessors {
+		value, err := ba(baCtx)
 		if err != nil {
-			if err == waftypes.ErrTimeout {
-				WAFTimeoutLogOnce.Do(func() {
-					ctx.Logger().Error(sqerrors.New("WAF timeout"))
-				})
-				return nil
-			}
-			return newWAFRunError(err, args, timeout)
+			// Log the error and continue
+			c.Logger().Error(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr))
+			continue
 		}
-
-		if action == waftypes.NoAction {
-			return nil
+		if value == nil {
+			// Skip unset values
+			continue
 		}
+		args[expr] = value
+	}
 
-		attackInfo := api.WAFAttackInfo{WAFData: info}
-
-		if blockingMode && action == waftypes.BlockAction {
-			// Report the event
-			ctx.WriteDefaultBlockingResponse()
-			blocked = true
+	// TODO: args caching
+	action, info, err := wafRule.Run(args, timeout)
+	if err != nil {
+		if err == waftypes.ErrTimeout {
+			WAFTimeoutLogOnce.Do(func() {
+				c.Logger().Error(sqerrors.New("WAF timeout"))
+			})
+			return false, nil
 		}
+		return false, newWAFRunError(err, args, timeout)
+	}
 
-		// Report the attack event
-		ctx.AddAttackEvent(rule.NewAttackEvent(blocked, attackInfo, nil))
-		return nil
-	})
+	if action == waftypes.NoAction {
+		return false, nil
+	}
 
-	return blocked, sqsafeErr
+	attackInfo := api.WAFAttackInfo{WAFData: info}
+
+	return c.HandleAttack(action == waftypes.BlockAction, attackInfo), nil
 }
 
-func makeWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
-	return func(p **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
-		ctx := *p
+func makeWAFPrologCallback(rule RuleContext, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
+	return func(**httpprotection.RequestContext) (epilog httpprotection.BlockingEpilogCallbackType, prologErr error) {
+		rule.Pre(func(c CallbackContext) {
+			blocked, err := runWAF(c, bindingAccessors, wafRule, timeout)
+			if err != nil {
+				WAFErrorLogOnce.Do(func() {
+					c.Logger().Error(sqerrors.Wrap(err, "WAF execution error"))
+				})
+			}
 
-		rule.MonitorPre()
-		blocked, err := runWAF(ctx, bindingAccessors, wafRule, blockingMode, timeout, rule)
-		if err != nil {
-			WAFErrorLogOnce.Do(func() {
-				ctx.Logger().Error(sqerrors.Wrap(err, "WAF execution error"))
-			})
-			return nil, nil
-		}
-		if !blocked {
-			return nil, nil
-		}
+			if !blocked {
+				epilog, prologErr = nil, nil
+				return
+			}
 
-		// Return the epilog and abort the call.
-		return func(err *error) {
-			// An error needs to be written in order to abort handling the
-			// request.
-			*err = sdktypes.SqreenError{Err: ErrWAFProtection}
-		}, sqhook.AbortError
+			// Return the epilog and abort the call.
+			epilog, prologErr = func(err *error) {
+				// An error needs to be written in order to abort handling the
+				// request.
+				*err = sdktypes.SqreenError{Err: ErrWAFProtection}
+			}, sqhook.AbortError
+		})
+		return
 	}
 }
 
@@ -194,7 +186,7 @@ func newWAFRunError(err error, args waftypes.DataSet, timeout time.Duration) err
 	})
 }
 
-func NewFunctionWAFCallback(rule RuleFace, cfg ReflectedCallbackConfig, functionWAFCfg *api.RuleFunctionWAFCallbacks) (sqhook.PrologCallback, error) {
+func NewFunctionWAFCallback(r RuleContext, cfg ReflectedCallbackConfig, functionWAFCfg *api.RuleFunctionWAFCallbacks) (sqhook.PrologCallback, error) {
 	if functionWAFCfg == nil {
 		return nil, sqerrors.New("unexpected nil function waf configuration")
 	}
@@ -217,7 +209,7 @@ func NewFunctionWAFCallback(rule RuleFace, cfg ReflectedCallbackConfig, function
 		return nil, sqerrors.Wrap(err, "could not compile the post binding accessors")
 	}
 
-	return newFunctionWAFPrologCallback(rule, cfg.BlockingMode(), wafRule, bindingAccessors, timeout, cfg.Strategy(), pre, post), nil
+	return newFunctionWAFPrologCallback(r, wafRule, bindingAccessors, timeout, cfg.Strategy(), pre, post), nil
 }
 
 type functionWAFBindingAccessorMap map[*bindingaccessor.BindingAccessorFunc]bindingaccessor.BindingAccessorFunc
@@ -244,28 +236,27 @@ func compileFunctionWAFBindingAccessors(bas map[string]string) (functionWAFBindi
 	return r, nil
 }
 
-func newFunctionWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) *wafCallbackObject {
+func newFunctionWAFPrologCallback(r RuleContext, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
-		prolog:  makeFunctionWAFPrologCallback(rule, blockingMode, wafRule, bindingAccessors, timeout, strategy, pre, post),
+		prolog:  makeFunctionWAFPrologCallback(r, wafRule, bindingAccessors, timeout, strategy, pre, post),
 	}
 }
 
-func makeFunctionWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) sqhook.ReflectedPrologCallback {
+func makeFunctionWAFPrologCallback(r RuleContext, wafRule waftypes.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) sqhook.ReflectedPrologCallback {
 	sqassert.True(len(pre) > 0 || len(post) > 0)
 
-	return func(params []reflect.Value) (epilog sqhook.ReflectedEpilogCallback, err error) {
-		safeCallErr := sqsafe.Call(func() error {
-			ctx := httpprotection.FromGLS()
-			if ctx == nil {
-				return nil
-			}
-
-			if l := len(pre); l > 0 {
-				rule.MonitorPre()
-				blocked, err := runFunctionWAF(ctx, bindingAccessors, wafRule, blockingMode, timeout, rule, pre, strategy, params, nil)
+	return func(params []reflect.Value) (epilog sqhook.ReflectedEpilogCallback, prologErr error) {
+		if l := len(pre); l > 0 {
+			var preErr error
+			r.Pre(func(c CallbackContext) {
+				blocked, err := runFunctionWAF(c, bindingAccessors, wafRule, timeout, pre, strategy, params, nil)
 				if err != nil {
-					return sqerrors.Wrap(err, "function waf error: pre")
+					FunctionWAFPreErrorLogOnce.Do(func() {
+						c.Logger().Error(sqerrors.Wrap(err, "function waf error: pre"))
+					})
+					preErr = err
+					return
 				}
 
 				if blocked {
@@ -274,49 +265,43 @@ func makeFunctionWAFPrologCallback(rule RuleFace, blockingMode bool, wafRule waf
 						abortErr := sdktypes.SqreenError{Err: ErrWAFProtection}
 						results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
 					}
-					err = sqhook.AbortError
-					return nil
+					prologErr = sqhook.AbortError
+					return
 				}
-			}
-
-			if l := len(post); l > 0 {
-				epilog = func(results []reflect.Value) {
-					safeCallErr := sqsafe.Call(func() error {
-						blocked, err := runFunctionWAF(ctx, bindingAccessors, wafRule, blockingMode, timeout, rule, post, strategy, params, results)
-						if err != nil {
-							return sqerrors.Wrap(err, "function waf error: post")
-						}
-						if blocked {
-							errorIndex := strategy.Protection.BlockStrategy.RetIndex
-							abortErr := sdktypes.SqreenError{Err: ErrWAFProtection}
-							results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
-						}
-						return nil
-					})
-					if safeCallErr != nil {
-						FunctionWAFPostErrorLogOnce.Do(func() {
-							ctx.Logger().Error(safeCallErr)
-						})
-					}
-				}
-			}
-
-			return nil
-		})
-
-		if safeCallErr != nil {
-			FunctionWAFPreErrorLogOnce.Do(func() {
-				// TODO: provide a logger in the upcoming callback API
 			})
-			return nil, nil
+			if preErr != nil {
+				return nil, nil
+			}
+		}
+
+		if l := len(post); l > 0 {
+			epilog = func(results []reflect.Value) {
+				r.Post(func(c CallbackContext) {
+					blocked, err := runFunctionWAF(c, bindingAccessors, wafRule, timeout, post, strategy, params, results)
+					if err != nil {
+						FunctionWAFPreErrorLogOnce.Do(func() {
+							c.Logger().Error(sqerrors.Wrap(err, "function waf error: post"))
+						})
+						return
+					}
+
+					if !blocked {
+						return
+					}
+
+					errorIndex := strategy.Protection.BlockStrategy.RetIndex
+					abortErr := sdktypes.SqreenError{Err: ErrWAFProtection}
+					results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
+				})
+			}
 		}
 
 		return
 	}
 }
 
-func runFunctionWAF(ctx *httpprotection.RequestContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waftypes.Rule, blockingMode bool, timeout time.Duration, rule RuleFace, extraParamAccessors functionWAFBindingAccessorMap, strategy *api.ReflectedCallbackConfig, params []reflect.Value, results []reflect.Value) (blocked bool, err error) {
-	baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, params, results, ctx.RequestReader, nil)
+func runFunctionWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waftypes.Rule, timeout time.Duration, extraParamAccessors functionWAFBindingAccessorMap, strategy *api.ReflectedCallbackConfig, params []reflect.Value, results []reflect.Value) (blocked bool, err error) {
+	baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c, params, results, nil)
 	if err != nil {
 		err = sqerrors.Wrap(err, "unexpected error while creating the binding accessor context")
 		return false, err
@@ -347,7 +332,7 @@ func runFunctionWAF(ctx *httpprotection.RequestContext, bindingAccessors map[str
 
 		// TODO: move this in a separate callback so that it doesn't depend on the WAF
 		//   rule and can be always enabled
-		ctx.AddRequestParam(name, v)
+		c.ProtectionContext().AddRequestParam(name, v)
 
 		hasExtraParams = true
 	}
@@ -357,5 +342,5 @@ func runFunctionWAF(ctx *httpprotection.RequestContext, bindingAccessors map[str
 		return false, nil
 	}
 
-	return runWAF(ctx, bindingAccessors, wafRule, blockingMode, timeout, rule)
+	return runWAF(c, bindingAccessors, wafRule, timeout)
 }
