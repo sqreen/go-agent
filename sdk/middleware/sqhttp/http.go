@@ -264,3 +264,10 @@ func (w *responseWriterImpl) WriteHeader(statusCode int) {
 	w.status = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
 }
+
+// Flush sends if supported any buffered data to the client.
+func (w *responseWriterImpl) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
