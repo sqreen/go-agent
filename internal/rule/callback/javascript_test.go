@@ -31,8 +31,12 @@ func TestJSVirtualMachine(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, foo)
 
-		strPtr := str
+		strPtr := &str
 		v, err = foo(goja.Undefined(), vm.ToValue(strPtr))
+		require.NoError(t, err)
+		require.Equal(t, false, v.ToBoolean())
+
+		v, err = foo(goja.Undefined(), vm.ToValue(str))
 		require.NoError(t, err)
 		require.Equal(t, true, v.ToBoolean())
 	})
@@ -117,6 +121,7 @@ function foo(n) {
 
 		t.Log(ex.String())
 		t.Log(ex.Error())
+		t.Logf("value=%#+v", ex.Value().Export())
 	})
 
 	t.Run("exporting a structure", func(t *testing.T) {

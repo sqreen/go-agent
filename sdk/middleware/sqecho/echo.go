@@ -91,7 +91,7 @@ func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc,
 
 	req := c.Request()
 
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(req.Context(), agent, responseWriter, requestReader)
+	ctx, reqCtx, cancelHandlerContext := http_protection.NewProtectionContext(req.Context(), agent, responseWriter, requestReader)
 	if ctx == nil {
 		return next(c)
 	}

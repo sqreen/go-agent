@@ -14,6 +14,8 @@ import (
 
 	"github.com/sqreen/go-agent/internal/actor"
 	"github.com/sqreen/go-agent/internal/plog"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
+	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
 
 // ContextKey is the context key value to use in order to store a protection
@@ -89,6 +91,22 @@ type ClosedRequestContextFace interface{}
 type ConfigReader interface {
 	PrioritizedIPHeader() string
 	PrioritizedIPHeaderFormat() string
+}
+
+type ProtectionContext interface {
+	AddRequestParam(name string, v interface{})
+	HandleAttack(block bool, attack interface{}) (blocked bool)
+	ClientIP() net.IP
+	SqreenTime() *sqtime.SharedStopWatch
+}
+
+func FromGLS() ProtectionContext {
+	ctx := sqgls.Get()
+	if ctx == nil {
+		return nil
+	}
+	v, _ := ctx.(ProtectionContext)
+	return v
 }
 
 // Root request context

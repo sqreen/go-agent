@@ -17,7 +17,7 @@ import (
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWriteCustomErrorPageCallback(_ NativeRuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var statusCode = 500 // default status code
 	if data := cfg.Data(); data != nil {
 		cfg, ok := data.(*api.CustomErrorPageRuleDataEntry)
@@ -32,7 +32,7 @@ func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqho
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
 func newWriteCustomErrorPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+	return func(m **httpprotection.ProtectionContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
 		ctx := *m
 		// Note that the header must be written first since writing the body first
 		// leads to the default OK status.

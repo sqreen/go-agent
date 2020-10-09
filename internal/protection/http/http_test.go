@@ -144,7 +144,7 @@ func TestProtectionAPI(t *testing.T) {
 			requestReaderMockup.ExpectURL().Return(u)
 			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
 
-			ctx, _, _ := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
+			ctx, _, _ := NewProtectionContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
 			require.Nil(t, ctx)
 		})
 
@@ -164,7 +164,7 @@ func TestProtectionAPI(t *testing.T) {
 			requestReaderMockup.ExpectURL().Return(u)
 			agentMockup.ExpectIsPathAllowed(u.Path).Return(true)
 
-			ctx, _, _ := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
+			ctx, _, _ := NewProtectionContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
 			require.Nil(t, ctx)
 		})
 
@@ -189,7 +189,7 @@ func TestProtectionAPI(t *testing.T) {
 			requestReaderMockup.ExpectURL().Return(u)
 			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
 
-			ctx, reqCtx, cancel := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
+			ctx, reqCtx, cancel := NewProtectionContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
 
 			require.NotNil(t, ctx)
 			require.NotNil(t, reqCtx)

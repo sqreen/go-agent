@@ -397,7 +397,7 @@ func (this *MetricResponse) GetFinish() time.Time {
 	return this.Finish
 }
 
-func (this *MetricResponse) GetObservation() api.Struct {
+func (this *MetricResponse) GetObservation() api.MetricsData {
 	return this.Observation
 }
 

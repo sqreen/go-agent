@@ -14,7 +14,7 @@ import (
 // NewCallback returns the callback object or function for the given callback
 // name. An error is returned if the callback name is unknown or an error
 // occurred during the constructor call.
-func NewNativeCallback(name string, ctx callback.RuleFace, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
+func NewNativeCallback(name string, r callback.NativeRuleContext, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
 	var callbackCtor callback.NativeCallbackConstructorFunc
 	switch name {
 	default:
@@ -38,32 +38,32 @@ func NewNativeCallback(name string, ctx callback.RuleFace, cfg callback.NativeCa
 	case "Shellshock":
 		callbackCtor = callback.NewShellshockCallback
 	}
-	return callbackCtor(ctx, cfg)
+	return callbackCtor(r, cfg)
 }
 
 // NewReflectedCallback returns the callback object or function of the given
 // callback name. An error is returned if the callback name is unknown or an
 // error occurred during the constructor call.
-func NewReflectedCallback(name string, ctx callback.RuleFace, r *api.Rule) (prolog sqhook.PrologCallback, err error) {
+func NewReflectedCallback(name string, r callback.NativeRuleContext, rule *api.Rule) (prolog sqhook.PrologCallback, err error) {
 	switch name {
 	default:
 		return nil, sqerrors.Errorf("undefined reflected callback name `%s`", name)
 	case "", "JSExec":
-		cfg, err := newJSReflectedCallbackConfig(r)
+		cfg, err := newJSReflectedCallbackConfig(rule)
 		if err != nil {
 			return nil, sqerrors.Wrap(err, "configuration error")
 		}
-		return callback.NewJSExecCallback(ctx, cfg)
+		return callback.NewJSExecCallback(r, cfg)
 
 	case "FunctionWAF":
-		cfg, err := newReflectedCallbackConfig(r)
+		cfg, err := newReflectedCallbackConfig(rule)
 		if err != nil {
 			return nil, sqerrors.Wrap(err, "configuration error")
 		}
-		callbacks, ok := r.Callbacks.RuleCallbacksNode.(*api.RuleFunctionWAFCallbacks)
+		callbacks, ok := rule.Callbacks.RuleCallbacksNode.(*api.RuleFunctionWAFCallbacks)
 		if !ok {
-			return nil, sqerrors.Errorf("unexpected callbacks type `%T` instead of `%T`", r.Callbacks.RuleCallbacksNode, callbacks)
+			return nil, sqerrors.Errorf("unexpected callbacks type `%T` instead of `%T`", rule.Callbacks.RuleCallbacksNode, callbacks)
 		}
-		return callback.NewFunctionWAFCallback(ctx, cfg, callbacks)
+		return callback.NewFunctionWAFCallback(r, cfg, callbacks)
 	}
 }

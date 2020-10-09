@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 )
 
@@ -47,14 +46,19 @@ type AttackEvent struct {
 	Blocked    bool
 	Timestamp  time.Time
 	Info       interface{}
-	StackTrace errors.StackTrace
+	StackTrace []uintptr
 	AttackType string
 }
 
-func (r *Record) AddAttackEvent(attack *AttackEvent) {
+func (r *Record) AddAttackEvent(attack interface{}) {
+	actual, ok := attack.(*AttackEvent)
+	if !ok {
+		return
+	}
+
 	r.attacksLock.Lock()
 	defer r.attacksLock.Unlock()
-	r.attacks = append(r.attacks, attack)
+	r.attacks = append(r.attacks, actual)
 }
 
 func (r *Record) AddUserAuth(id UserIdentifierMap, ip net.IP, success bool) {

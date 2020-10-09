@@ -214,7 +214,20 @@ func (a *attackEventAPIAdapter) GetBacktrace() []api.StackFrame {
 	return stackTraceAPIAdapter(a.StackTrace).GetBacktrace()
 }
 
-type stackTraceAPIAdapter errors.StackTrace
+type stackTraceAPIAdapter []uintptr
+
+type errorStackTraceAPIAdapter errors.StackTrace
+
+func (a errorStackTraceAPIAdapter) GetBacktrace() []api.StackFrame {
+	if len(a) == 0 {
+		return nil
+	}
+	bt := make([]api.StackFrame, len(a))
+	for i, f := range a {
+		bt[i] = *api.NewStackFrameFromFace(apiStackFrame(f))
+	}
+	return bt
+}
 
 func (a stackTraceAPIAdapter) GetBacktrace() []api.StackFrame {
 	if len(a) == 0 {

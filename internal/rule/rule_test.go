@@ -81,7 +81,7 @@ func TestEngineUsage(t *testing.T) {
 	publicKey := &privateKey.PublicKey
 
 	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
-	metrics := metrics.NewEngine(plog.NewLogger(plog.Debug, os.Stderr, 0), 100000000)
+	metrics := metrics.NewEngine()
 
 	t.Run("empty state", func(t *testing.T) {
 		instrumentation := &instrumentationMockup{}

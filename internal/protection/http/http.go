@@ -7,31 +7,52 @@ package http
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/sqreen/go-agent/internal/event"
-	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
+	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
 
-func FromContext(ctx context.Context) *RequestContext {
-	c, _ := protectioncontext.FromContext(ctx).(*RequestContext)
+type ProtectionContext struct {
+	*protection_context.RequestContext
+	RequestReader              types.RequestReader
+	ResponseWriter             types.ResponseWriter
+	events                     event.Record
+	cancelHandlerContextFunc   context.CancelFunc
+	contextHandlerCanceledLock sync.RWMutex
+	// We are intentionally not using the Context.Err() method here in order to
+	// be sure it was canceled by a call to CancelHandlerContext(). Using
+	// Context.Err() in order to know this would be also true if for example
+	// the parent context timeouts, in which case we mustn't write the blocking
+	// response.
+	contextHandlerCanceled bool
+	requestReader          *requestReader
+	start                  time.Time
+
+	// todo: rename protection timer
+	sqreenTime sqtime.SharedStopWatch
+}
+
+// Static assert that the interface is implemented
+var _ protection_context.ProtectionContext = &ProtectionContext{}
+
+func FromContext(ctx context.Context) *ProtectionContext {
+	c, _ := protection_context.FromContext(ctx).(*ProtectionContext)
 	return c
 }
 
-func FromGLS() *RequestContext {
-	ctx := sqgls.Get()
-	if ctx == nil {
-		return nil
-	}
-	return ctx.(*RequestContext)
+func FromGLS() *ProtectionContext {
+	c, _ := protection_context.FromGLS().(*ProtectionContext)
+	return c
 }
 
-func NewRequestContext(ctx context.Context, agent protectioncontext.AgentFace, w types.ResponseWriter, r types.RequestReader) (*RequestContext, context.Context, context.CancelFunc) {
+func NewProtectionContext(ctx context.Context, agent protection_context.AgentFace, w types.ResponseWriter, r types.RequestReader) (*ProtectionContext, context.Context, context.CancelFunc) {
 	start := time.Now()
 
 	if agent.IsPathAllowed(r.URL().Path) {
@@ -56,8 +77,8 @@ func NewRequestContext(ctx context.Context, agent protectioncontext.AgentFace, w
 		requestParams: make(types.RequestParamMap),
 	}
 
-	protCtx := &RequestContext{
-		RequestContext:           protectioncontext.NewRequestContext(agent),
+	protCtx := &ProtectionContext{
+		RequestContext:           protection_context.NewRequestContext(agent),
 		ResponseWriter:           w,
 		RequestReader:            rr,
 		cancelHandlerContextFunc: cancelHandlerContextFunc,
@@ -67,32 +88,14 @@ func NewRequestContext(ctx context.Context, agent protectioncontext.AgentFace, w
 	return protCtx, reqCtx, cancelHandlerContextFunc
 }
 
-type RequestContext struct {
-	*protectioncontext.RequestContext
-	RequestReader              types.RequestReader
-	ResponseWriter             types.ResponseWriter
-	events                     event.Record
-	cancelHandlerContextFunc   context.CancelFunc
-	contextHandlerCanceledLock sync.RWMutex
-	// We are intentionally not using the Context.Err() method here in order to
-	// be sure it was canceled by a call to CancelHandlerContext(). Using
-	// Context.Err() in order to know this would be also true if for example
-	// the parent context timeouts, in which case we mustn't write the blocking
-	// response.
-	contextHandlerCanceled bool
-	requestReader          *requestReader
-	start                  time.Time
-	sqreenTime             sqtime.SharedStopWatch
-}
-
 // Helper types for callbacks who must be designed for this protection so that
 // they are the source of truth and so that the compiler catches type issues
 // when compiling (versus when the callback is attached).
 type (
-	BlockingPrologCallbackType = func(**RequestContext) (BlockingEpilogCallbackType, error)
+	BlockingPrologCallbackType = func(**ProtectionContext) (BlockingEpilogCallbackType, error)
 	BlockingEpilogCallbackType = func(*error)
 
-	NonBlockingPrologCallbackType = func(**RequestContext) (NonBlockingEpilogCallbackType, error)
+	NonBlockingPrologCallbackType = func(**ProtectionContext) (NonBlockingEpilogCallbackType, error)
 	NonBlockingEpilogCallbackType = func()
 
 	WAFPrologCallbackType = BlockingPrologCallbackType
@@ -101,85 +104,81 @@ type (
 	BodyWAFPrologCallbackType = WAFPrologCallbackType
 	BodyWAFEpilogCallbackType = WAFEpilogCallbackType
 
-	IdentifyUserPrologCallbackType = func(**RequestContext, *map[string]string) (BlockingEpilogCallbackType, error)
+	IdentifyUserPrologCallbackType = func(**ProtectionContext, *map[string]string) (BlockingEpilogCallbackType, error)
 
-	ResponseMonitoringPrologCallbackType = func(**RequestContext, *types.ResponseFace) (NonBlockingEpilogCallbackType, error)
+	ResponseMonitoringPrologCallbackType = func(**ProtectionContext, *types.ResponseFace) (NonBlockingEpilogCallbackType, error)
 )
 
-// Static assert that RequestContext implements the SDK Event Recorder Getter
+// Static assert that ProtectionContext implements the SDK Event Recorder Getter
 // interface.
-var _ protectioncontext.EventRecorderGetter = (*RequestContext)(nil)
+var _ protection_context.EventRecorderGetter = (*ProtectionContext)(nil)
 
-func (c *RequestContext) EventRecorder() protectioncontext.EventRecorder { return c }
+func (p *ProtectionContext) EventRecorder() protection_context.EventRecorder { return p }
 
-func (c *RequestContext) AddAttackEvent(attack *event.AttackEvent) {
-	c.events.AddAttackEvent(attack)
+func (p *ProtectionContext) TrackEvent(event string) protection_context.CustomEvent {
+	return p.events.AddCustomEvent(event)
 }
 
-func (c *RequestContext) TrackEvent(event string) protectioncontext.CustomEvent {
-	return c.events.AddCustomEvent(event)
+func (p *ProtectionContext) TrackUserSignup(id map[string]string) {
+	p.events.AddUserSignup(id, p.RequestReader.ClientIP())
 }
 
-func (c *RequestContext) TrackUserSignup(id map[string]string) {
-	c.events.AddUserSignup(id, c.RequestReader.ClientIP())
+func (p *ProtectionContext) TrackUserAuth(id map[string]string, success bool) {
+	p.events.AddUserAuth(id, p.RequestReader.ClientIP(), success)
 }
 
-func (c *RequestContext) TrackUserAuth(id map[string]string, success bool) {
-	c.events.AddUserAuth(id, c.RequestReader.ClientIP(), success)
-}
-
-func (c *RequestContext) IdentifyUser(id map[string]string) error {
-	c.events.Identify(id)
-	return c.userSecurityResponse(id)
+func (p *ProtectionContext) IdentifyUser(id map[string]string) error {
+	p.events.Identify(id)
+	return p.userSecurityResponse(id)
 }
 
 // Static assert that the SDK interface is implemented.
-var _ protectioncontext.EventRecorder = &RequestContext{}
+var _ protection_context.EventRecorder = &ProtectionContext{}
 
 // When a non-nil error is returned, the request handler shouldn't be called
-// and the request should be stopped immediately by closing the RequestContext
+// and the request should be stopped immediately by closing the ProtectionContext
 // and returning.
-func (c *RequestContext) Before() (err error) {
+func (p *ProtectionContext) Before() (err error) {
 	// Set the current goroutine local storage to this request storage to be able
 	// to retrieve it from lower-level functions.
-	sqgls.Set(c)
+	sqgls.Set(p)
 
-	c.addSecurityHeaders()
+	p.addSecurityHeaders()
 
-	if err := c.isIPBlocked(); err != nil {
+	if err := p.isIPBlocked(); err != nil {
 		return err
 	}
-	if err := c.ipSecurityResponse(); err != nil {
+	if err := p.ipSecurityResponse(); err != nil {
 		return err
 	}
-	if err := c.waf(); err != nil {
+	if err := p.waf(); err != nil {
 		return err
 	}
 	return nil
 }
 
 //go:noinline
-func (c *RequestContext) isIPBlocked() error { /* dynamically instrumented */ return nil }
+func (p *ProtectionContext) isIPBlocked() error { /* dynamically instrumented */ return nil }
 
 //go:noinline
-func (c *RequestContext) waf() error { /* dynamically instrumented */ return nil }
+func (p *ProtectionContext) waf() error { /* dynamically instrumented */ return nil }
 
 //go:noinline
-func (c *RequestContext) bodyWAF() error { /* dynamically instrumented */ return nil }
+func (p *ProtectionContext) bodyWAF() error { /* dynamically instrumented */ return nil }
 
 //go:noinline
-func (c *RequestContext) addSecurityHeaders() { /* dynamically instrumented */ }
+func (p *ProtectionContext) addSecurityHeaders() { /* dynamically instrumented */ }
 
 //go:noinline
-func (c *RequestContext) ipSecurityResponse() error { /* dynamically instrumented */ return nil }
+func (p *ProtectionContext) ipSecurityResponse() error { /* dynamically instrumented */ return nil }
 
 type canceledHandlerContextError struct{}
 
 func (canceledHandlerContextError) Error() string { return "canceled handler context" }
 
 //go:noinline
-func (c *RequestContext) After() (err error) {
-	if c.isContextHandlerCanceled() {
+func (p *ProtectionContext) After() (err error) {
+	if p.isContextHandlerCanceled() {
 		// The context was canceled by an in-handler protection, return an error
 		// in order to fully abort the framework.
 		return canceledHandlerContextError{}
@@ -188,29 +187,43 @@ func (c *RequestContext) After() (err error) {
 	return nil
 }
 
-func (c *RequestContext) userSecurityResponse(userID map[string]string) error { return nil }
+func (p *ProtectionContext) userSecurityResponse(userID map[string]string) error { return nil }
 
 // CancelHandlerContext cancels the request handler context in order to stop its
 // execution and abort every ongoing operation and goroutine it may be doing.
 // Since the handler should return at some point, the After() protection method
 // will take care of applying the blocking response.
 // This method can be called by multiple goroutines simultaneously.
-func (c *RequestContext) CancelHandlerContext() {
-	c.contextHandlerCanceledLock.Lock()
-	defer c.contextHandlerCanceledLock.Unlock()
-	c.contextHandlerCanceled = true
+func (p *ProtectionContext) CancelHandlerContext() {
+	p.contextHandlerCanceledLock.Lock()
+	defer p.contextHandlerCanceledLock.Unlock()
+	p.cancelHandlerContextFunc()
+	p.contextHandlerCanceled = true
 }
 
-func (c *RequestContext) isContextHandlerCanceled() bool {
-	c.contextHandlerCanceledLock.RLock()
-	defer c.contextHandlerCanceledLock.RUnlock()
-	return c.contextHandlerCanceled
+func (p *ProtectionContext) isContextHandlerCanceled() bool {
+	p.contextHandlerCanceledLock.RLock()
+	defer p.contextHandlerCanceledLock.RUnlock()
+	return p.contextHandlerCanceled
 
 }
 
-func (c *RequestContext) Close(response types.ResponseFace) error {
+func (p *ProtectionContext) HandleAttack(block bool, attack interface{}) (blocked bool) {
+	if block {
+		defer p.CancelHandlerContext()
+		p.WriteDefaultBlockingResponse()
+		blocked = true
+	}
+
+	if attack != nil {
+		p.events.AddAttackEvent(attack)
+	}
+	return blocked
+}
+
+func (p *ProtectionContext) Close(response types.ResponseFace) error {
 	// Compute the request duration
-	duration := time.Since(c.start)
+	duration := time.Since(p.start)
 
 	// Make sure to clear the goroutine local storage to avoid keeping it if some
 	// memory pools are used under the hood.
@@ -219,13 +232,14 @@ func (c *RequestContext) Close(response types.ResponseFace) error {
 
 	// Copy everything we need here as it is not safe to keep then after the
 	// request is done because of memory pools reusing them.
-	c.monitorObservedResponse(response)
-	return c.RequestContext.Close(&closedRequestContext{
-		response: response,
-		request:  copyRequest(c.RequestReader),
-		events:   c.events.CloseRecord(),
-		start:    c.start,
-		duration: duration,
+	p.monitorObservedResponse(response)
+	return p.RequestContext.Close(&closedRequestContext{
+		response:   response,
+		request:    copyRequest(p.RequestReader),
+		events:     p.events.CloseRecord(),
+		start:      p.start,
+		duration:   duration,
+		sqreenTime: p.SqreenTime().Duration(),
 	})
 }
 
@@ -233,25 +247,25 @@ func (c *RequestContext) Close(response types.ResponseFace) error {
 // doesn't block nor cancel the handler context. Users of this method must
 // handle their
 //go:noinline
-func (c *RequestContext) WriteDefaultBlockingResponse() { /* dynamically instrumented */ }
+func (p *ProtectionContext) WriteDefaultBlockingResponse() { /* dynamically instrumented */ }
 
 //go:noinline
-func (c *RequestContext) monitorObservedResponse(response types.ResponseFace) { /* dynamically instrumented */ }
+func (p *ProtectionContext) monitorObservedResponse(response types.ResponseFace) { /* dynamically instrumented */ }
 
 // WrapRequest is a helper method to prepare an http.Request with its
 // new context, the protection context, and a body buffer.
-func (c *RequestContext) WrapRequest(ctx context.Context, r *http.Request) *http.Request {
-	r = r.WithContext(context.WithValue(ctx, protectioncontext.ContextKey, c))
+func (p *ProtectionContext) WrapRequest(ctx context.Context, r *http.Request) *http.Request {
+	r = r.WithContext(context.WithValue(ctx, protection_context.ContextKey, p))
 	if r.Body != nil {
-		r.Body = c.wrapBody(r.Body)
+		r.Body = p.wrapBody(r.Body)
 	}
 	return r
 }
 
-func (c *RequestContext) wrapBody(body io.ReadCloser) io.ReadCloser {
+func (p *ProtectionContext) wrapBody(body io.ReadCloser) io.ReadCloser {
 	return rawBodyWAF{
 		ReadCloser: body,
-		c:          c,
+		c:          p,
 	}
 }
 
@@ -259,7 +273,15 @@ func (c *RequestContext) wrapBody(body io.ReadCloser) io.ReadCloser {
 // are taken from the HTTP request and parsed into a Go value. It can be the
 // result of a JSON parsing, query-string parsing, etc. The source allows to
 // specify where it was taken from.
-func (c *RequestContext) AddRequestParam(name string, param interface{}) {
-	params := c.requestReader.requestParams[name]
-	c.requestReader.requestParams[name] = append(params, param)
+func (p *ProtectionContext) AddRequestParam(name string, param interface{}) {
+	params := p.requestReader.requestParams[name]
+	p.requestReader.requestParams[name] = append(params, param)
+}
+
+func (p *ProtectionContext) ClientIP() net.IP {
+	return p.requestReader.clientIP
+}
+
+func (p *ProtectionContext) SqreenTime() *sqtime.SharedStopWatch {
+	return &p.sqreenTime
 }

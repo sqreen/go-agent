@@ -348,10 +348,10 @@ func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextF
 		a.logger.Error(sqerrors.Wrap(err, "could not add the request execution time"))
 	}
 
-	//sq := float64(ctx.SqreenTime().Nanoseconds()) / float64(time.Millisecond)
-	//if err := a.staticMetrics.sqreenTime.Add(sq); err != nil {
-	//	a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
-	//}
+	sq := float64(ctx.SqreenTime().Nanoseconds()) / float64(time.Millisecond)
+	if err := a.staticMetrics.sqreenTime.Add(sq); err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
+	}
 
 	event := newClosedHTTPRequestContextEvent(a.RulespackID(), start, finish, ctx.Response(), ctx.Request(), events)
 	if !event.shouldSend() {

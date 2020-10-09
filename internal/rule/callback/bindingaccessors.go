@@ -11,13 +11,13 @@ import (
 	"reflect"
 	"strings"
 
-	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
-func NewReflectedCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, ruleValues interface{}) (*BindingAccessorContextType, error) {
+func NewReflectedCallbackBindingAccessorContext(capabilities []string, req interface{}, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
 	var c = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
@@ -28,7 +28,11 @@ func NewReflectedCallbackBindingAccessorContext(capabilities []string, args, res
 		case "func":
 			c.Func = NewFunctionBindingAccessorContext(args, res)
 		case "request":
-			c.RequestBindingAccessorContext = NewRequestBindingAccessorContext(req)
+			baCtx, err := NewRequestBindingAccessorContext(req)
+			if err != nil {
+				return nil, sqerrors.Wrapf(err, "could not create the request binding accessor context")
+			}
+			c.HTTPRequestBindingAccessorContext = baCtx
 		case "lib":
 			c.Lib = NewLibraryBindingAccessorContext()
 		case "cache":
@@ -125,19 +129,28 @@ type BindingAccessorContextType struct {
 	Func *FuncCallBindingAccessorContextType
 	SQL  *SQLBindingAccessorContextType
 	Rule *RuleBindingAccessorContextType
-	*RequestBindingAccessorContext
+	*HTTPRequestBindingAccessorContext
 	BindingAccessorResultCache
 }
 
 type WAFBindingAccessorContextType struct {
-	RequestBindingAccessorContext
+	HTTPRequestBindingAccessorContext
 	BindingAccessorResultCache
 }
 
-func MakeWAFCallbackBindingAccessorContext(request types.RequestReader) WAFBindingAccessorContextType {
+func MakeWAFCallbackBindingAccessorContext(c CallbackContext) (WAFBindingAccessorContextType, error) {
+	switch protCtx := c.ProtectionContext().(type) {
+	case *http_protection.ProtectionContext:
+		return makeHTTPWAFCallbackBindingAccessorContext(protCtx.RequestReader), nil
+	default:
+		return WAFBindingAccessorContextType{}, sqerrors.Errorf("unexpected protection context type `%T`", protCtx)
+	}
+}
+
+func makeHTTPWAFCallbackBindingAccessorContext(request types.RequestReader) WAFBindingAccessorContextType {
 	return WAFBindingAccessorContextType{
-		RequestBindingAccessorContext: MakeRequestBindingAccessorContext(request),
-		BindingAccessorResultCache:    MakeBindingAccessorResultCache(),
+		HTTPRequestBindingAccessorContext: MakeHTTPRequestBindingAccessorContext(request),
+		BindingAccessorResultCache:        MakeBindingAccessorResultCache(),
 	}
 }
 
@@ -148,8 +161,8 @@ type FuncCallBindingAccessorContextType struct {
 
 type SQLBindingAccessorContextType struct{}
 
-type RequestBindingAccessorContext struct {
-	Request *httpprotection.RequestBindingAccessorContext
+type HTTPRequestBindingAccessorContext struct {
+	Request *http_protection.RequestBindingAccessorContext
 }
 
 // BindingAccessorResultCache is a simple result cache. There is no result
@@ -179,14 +192,24 @@ func (b BindingAccessorResultCache) Get(expr string) (value interface{}, exists 
 	return
 }
 
-func NewRequestBindingAccessorContext(request types.RequestReader) *RequestBindingAccessorContext {
-	ctx := MakeRequestBindingAccessorContext(request)
+func NewRequestBindingAccessorContext(req interface{}) (*HTTPRequestBindingAccessorContext, error) {
+	switch actual := req.(type) {
+	default:
+		return nil, sqerrors.Errorf("unexpected request type `%T`", actual)
+
+	case types.RequestReader:
+		return NewHTTPRequestBindingAccessorContext(actual), nil
+	}
+}
+
+func NewHTTPRequestBindingAccessorContext(req types.RequestReader) *HTTPRequestBindingAccessorContext {
+	ctx := MakeHTTPRequestBindingAccessorContext(req)
 	return &ctx
 }
 
-func MakeRequestBindingAccessorContext(request types.RequestReader) RequestBindingAccessorContext {
-	return RequestBindingAccessorContext{
-		Request: httpprotection.NewRequestBindingAccessorContext(request),
+func MakeHTTPRequestBindingAccessorContext(request types.RequestReader) HTTPRequestBindingAccessorContext {
+	return HTTPRequestBindingAccessorContext{
+		Request: http_protection.NewRequestBindingAccessorContext(request),
 	}
 }
 

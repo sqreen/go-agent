@@ -66,7 +66,7 @@ func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w 
 	requestReader := &requestReaderImpl{Request: r}
 	responseWriter := &responseWriterImpl{ResponseWriter: w}
 
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(r.Context(), agent, responseWriter, requestReader)
+	ctx, reqCtx, cancelHandlerContext := http_protection.NewProtectionContext(r.Context(), agent, responseWriter, requestReader)
 	if ctx == nil {
 		next.ServeHTTP(w, r)
 		return

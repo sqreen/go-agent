@@ -231,7 +231,7 @@ func TestBindingAccessor(t *testing.T) {
 		} {
 			tc := tc
 			t.Run(tc.Name, func(t *testing.T) {
-				ctx, err := callback.NewReflectedCallbackBindingAccessorContext(tc.Capabilities, tc.NewContextArgs.Args, tc.NewContextArgs.Res, tc.NewContextArgs.Req, tc.NewContextArgs.Values)
+				ctx, err := callback.NewReflectedCallbackBindingAccessorContext(tc.Capabilities, tc.NewContextArgs.Req, tc.NewContextArgs.Args, tc.NewContextArgs.Res, tc.NewContextArgs.Values)
 				require.NoError(t, err)
 
 				for _, tc := range tc.TestCases {

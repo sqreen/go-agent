@@ -42,7 +42,7 @@ type Engine struct {
 	metricsEngine         *metrics.Engine
 	publicKey             *ecdsa.PublicKey
 	instrumentationEngine InstrumentationFace
-	errorMetricsStore     *metrics.SumStore
+	errorMetricsStore     *metrics.TimeHistogram
 }
 
 // Logger interface required by this package.
@@ -52,7 +52,7 @@ type Logger interface {
 }
 
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, errorMetricsStore *metrics.SumStore, publicKey *ecdsa.PublicKey) *Engine {
+func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, errorMetricsStore *metrics.TimeHistogram, publicKey *ecdsa.PublicKey) *Engine {
 	if instrumentationEngine == nil {
 		instrumentationEngine = defaultInstrumentationEngine
 	}
@@ -163,7 +163,8 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 			logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
 		}
 
-		callbackContext, err := NewCallbackContext(&r, rulepackID, e.metricsEngine, e.errorMetricsStore)
+		// Create the rule context
+		ruleCtx, err := newNativeRuleContext(&r, rulepackID, e.metricsEngine, e.logger)
 		if err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
 			continue
@@ -179,14 +180,14 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 				continue
 			}
 
-			prolog, err = NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
+			prolog, err = NewNativeCallback(hookpoint.Callback, ruleCtx, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
 			}
 
 		case "reflected":
-			prolog, err = NewReflectedCallback(hookpoint.Callback, callbackContext, &r)
+			prolog, err = NewReflectedCallback(hookpoint.Callback, ruleCtx, &r)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue

@@ -12,8 +12,8 @@ package callback_test
 //		EpilogType:    reflect.TypeOf(callback.MonitorHTTPStatusCodeEpilogCallbackType(nil)),
 //		ValidTestCases: []ValidTestCase{
 //			{
-//				Rule: &RuleContextMockup{},
-//				TestCallback: func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
+//				Rule: &NativeRuleContextMockup{},
+//				TestCallback: func(t *testing.T, rule *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
 //					actualProlog, ok := prolog.(callback.MonitorHTTPStatusCodePrologCallbackType)
 //					require.True(t, ok)
 //					code := rand.Int()

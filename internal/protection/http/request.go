@@ -65,7 +65,7 @@ func (r *requestReader) Params() types.RequestParamMap {
 
 type rawBodyWAF struct {
 	io.ReadCloser
-	c *RequestContext
+	c *ProtectionContext
 }
 
 // Read buffers what has been read and ultimately calls the WAF on EOF.

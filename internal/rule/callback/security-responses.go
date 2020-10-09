@@ -26,7 +26,7 @@ const (
 	redirectUserEventName = "app.sqreen.action.redirect_user"
 )
 
-func NewIPSecurityResponseCallback(RuleFace, NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewIPSecurityResponseCallback(NativeRuleContext, NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newIPSecurityResponsePrologCallback(), nil
 }
 
@@ -35,7 +35,7 @@ type securityResponseError struct{}
 func (securityResponseError) Error() string { return "aborted by a security response" }
 
 func newIPSecurityResponsePrologCallback() httpprotection.BlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
+	return func(m **httpprotection.ProtectionContext) (httpprotection.BlockingEpilogCallbackType, error) {
 		ctx := *m
 		ip := ctx.RequestReader.ClientIP()
 		action, exists, err := ctx.FindActionByIP(ip)
@@ -57,7 +57,7 @@ func newIPSecurityResponsePrologCallback() httpprotection.BlockingPrologCallback
 // response only for redirection, otherwise it blocks with the global blocking
 // settings. The contract with the HTTP protection here is to use a distinct
 // error value according to what we need.
-func writeIPSecurityResponse(ctx *httpprotection.RequestContext, action actor.Action, ip net.IP) {
+func writeIPSecurityResponse(ctx *httpprotection.ProtectionContext, action actor.Action, ip net.IP) {
 	var properties protectioncontext.EventProperties
 	if redirect, ok := action.(actor.RedirectAction); ok {
 		properties = newRedirectedIPEventProperties(redirect, ip)
@@ -70,12 +70,12 @@ func writeIPSecurityResponse(ctx *httpprotection.RequestContext, action actor.Ac
 	}
 }
 
-func NewUserSecurityResponseCallback(RuleFace, NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewUserSecurityResponseCallback(NativeRuleContext, NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newUserSecurityResponsePrologCallback(), nil
 }
 
 func newUserSecurityResponsePrologCallback() httpprotection.IdentifyUserPrologCallbackType {
-	return func(m **httpprotection.RequestContext, uid *map[string]string) (httpprotection.BlockingEpilogCallbackType, error) {
+	return func(m **httpprotection.ProtectionContext, uid *map[string]string) (httpprotection.BlockingEpilogCallbackType, error) {
 		ctx := *m
 		id := *uid
 		action, exists := ctx.FindActionByUserID(id)
@@ -89,7 +89,7 @@ func newUserSecurityResponsePrologCallback() httpprotection.IdentifyUserPrologCa
 	}
 }
 
-func writeUserSecurityResponse(ctx *httpprotection.RequestContext, action actor.Action, userID map[string]string) {
+func writeUserSecurityResponse(ctx *httpprotection.ProtectionContext, action actor.Action, userID map[string]string) {
 	// Since this call happens in the handler, we need to close its context
 	// which also let know the HTTP protection layer that it shouldn't continue
 	// with post-handler protections.

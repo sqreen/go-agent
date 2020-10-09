@@ -5,8 +5,11 @@
 package callback_test
 
 import (
-	"github.com/pkg/errors"
-	"github.com/sqreen/go-agent/internal/event"
+	"net"
+
+	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -30,26 +33,86 @@ func (m *NativeCallbackConfigMockup) ExpectBlockingMode() *mock.Call {
 	return m.On("BlockingMode")
 }
 
-type RuleContextMockup struct {
+type NativeRuleContextMockup struct {
 	mock.Mock
 }
 
-func (r *RuleContextMockup) MonitorPre() {
-	r.Called()
+func (r *NativeRuleContextMockup) Pre(cb func(c callback.CallbackContext)) {
+	r.Called(cb)
 }
 
-func (r *RuleContextMockup) PushMetricsValue(key interface{}, value int64) error {
-	return r.Called(key, value).Error(0)
+func (r *NativeRuleContextMockup) ExpectPre(cb func(c callback.CallbackContext)) *mock.Call {
+	return r.On("Pre", cb)
 }
 
-func (r *RuleContextMockup) ExpectPushMetricsValue(key interface{}, value int64) *mock.Call {
-	return r.On("PushMetricsValue", key, value)
+func (r *NativeRuleContextMockup) Post(cb func(c callback.CallbackContext)) {
+	r.Called(cb)
 }
 
-func (r *RuleContextMockup) NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent {
-	return r.Called(blocked, info, st).Get(0).(*event.AttackEvent)
+func (r *NativeRuleContextMockup) ExpectPost(cb func(c callback.CallbackContext)) *mock.Call {
+	return r.On("Post", cb)
 }
 
-func (r *RuleContextMockup) ExpectNewAttackEvent(blocked bool, info interface{}) *mock.Call {
-	return r.On("NewAttackEvent", blocked, info)
+type CallbackContextMockup struct {
+	mock.Mock
+}
+
+func (c *CallbackContextMockup) ProtectionContext() protectioncontext.ProtectionContext {
+	return c.Called().Get(0).(protectioncontext.ProtectionContext)
+}
+
+func (c *CallbackContextMockup) ExpectProtectionContext() *mock.Call {
+	return c.On("ProtectionContext")
+}
+
+func (c *CallbackContextMockup) Logger() callback.Logger {
+	return c.Called().Get(0).(callback.Logger)
+}
+
+func (c *CallbackContextMockup) PushMetricsValue(key interface{}, value int64) error {
+	return c.Called(key, value).Error(0)
+}
+
+func (c *CallbackContextMockup) ExpectPushMetricsValue(key interface{}, value int64) *mock.Call {
+	return c.On("PushMetricsValue", key, value)
+}
+
+func (c *CallbackContextMockup) HandleAttack(shouldBock bool, info interface{}) (blocked bool) {
+	return c.Called(shouldBock, info).Bool(0)
+}
+
+type ProtectionContextMockup struct {
+	mock.Mock
+}
+
+func (p *ProtectionContextMockup) AddRequestParam(name string, v interface{}) {
+	p.Called(name, v)
+}
+
+func (p *ProtectionContextMockup) ExpectAddRequestParam(name string, v interface{}) *mock.Call {
+	return p.On("AddRequestParam", name, v)
+}
+
+func (p *ProtectionContextMockup) HandleAttack(block bool, attack interface{}) (blocked bool) {
+	return p.Called(block, attack).Bool(0)
+}
+
+func (p *ProtectionContextMockup) ExpectHandleAttack(block bool, attack interface{}) *mock.Call {
+	return p.On("HandleAttack", block, attack)
+}
+
+func (p *ProtectionContextMockup) ClientIP() net.IP {
+	return p.Called().Get(0).(net.IP)
+}
+
+func (p *ProtectionContextMockup) ExpectClientIP() *mock.Call {
+	return p.On("ClientIP")
+}
+
+func (p *ProtectionContextMockup) SqreenTime() *sqtime.SharedStopWatch {
+	return p.Called().Get(0).(*sqtime.SharedStopWatch)
+}
+
+func (p *ProtectionContextMockup) ExpectSqreenTime() *mock.Call {
+	return p.On("SqreenTime")
 }

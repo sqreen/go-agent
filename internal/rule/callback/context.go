@@ -9,8 +9,9 @@ import (
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 )
 
+// TODO: rename to RuleContext if we don't do ReflectedRuleContext for now
 // TODO: add return values when generics allow to safely return the prolog type
-type RuleContext interface {
+type NativeRuleContext interface {
 	Pre(func(c CallbackContext))
 	Post(func(c CallbackContext))
 }
@@ -25,6 +26,11 @@ type CallbackContext interface {
 	//   pushing them. But the current metrics store interface doesn't allow
 	//   to pass a time (to pass the time of the observation).
 	PushMetricsValue(key interface{}, value int64) error
-	Logger() *plog.Logger
+	Logger() Logger
 	HandleAttack(shouldBock bool, info interface{}) (blocked bool)
+}
+
+type Logger interface {
+	plog.DebugLogger
+	plog.ErrorLogger
 }
