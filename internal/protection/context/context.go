@@ -98,6 +98,7 @@ type ProtectionContext interface {
 	HandleAttack(block bool, attack interface{}) (blocked bool)
 	ClientIP() net.IP
 	SqreenTime() *sqtime.SharedStopWatch
+	DeadlineExceeded(d time.Duration) (exceeded bool)
 }
 
 func FromGLS() ProtectionContext {
@@ -112,6 +113,8 @@ func FromGLS() ProtectionContext {
 // Root request context
 type RequestContext struct {
 	AgentFace
+	sqreenTime    sqtime.SharedStopWatch
+	maxSqreenTime time.Duration
 }
 
 func NewRequestContext(agent AgentFace) *RequestContext {
@@ -122,4 +125,16 @@ func NewRequestContext(agent AgentFace) *RequestContext {
 
 func (c *RequestContext) Close(ctx ClosedRequestContextFace) error {
 	return c.AgentFace.SendClosedRequestContext(ctx)
+}
+
+func (p *RequestContext) SqreenTime() *sqtime.SharedStopWatch {
+	return &p.sqreenTime
+}
+
+func (p *RequestContext) DeadlineExceeded(d time.Duration) (exceeded bool) {
+	if p.maxSqreenTime == 0 {
+		// No max time duration
+		return false
+	}
+	return p.sqreenTime.Duration()+d >= p.maxSqreenTime
 }

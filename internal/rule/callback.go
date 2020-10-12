@@ -46,7 +46,7 @@ type (
 	NativeCallbackMiddlewareFunc = func(cb NativeCallbackFunc) NativeCallbackFunc
 )
 
-func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metrics.Engine, logger Logger) (*nativeRuleContext, error) {
+func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metrics.Engine, logger Logger, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) (*nativeRuleContext, error) {
 	var (
 		metricsStores       map[string]*metrics.TimeHistogram
 		defaultMetricsStore *metrics.TimeHistogram
@@ -70,8 +70,18 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 
 	r.pre = append(r.pre, withSafeCall(r.logger))
 	r.post = append(r.post, withSafeCall(r.logger))
-	r.pre = append(r.pre, withPerformanceMonitoring())
-	r.post = append(r.post, withPerformanceMonitoring())
+
+	perfHist, err := metricsEngine.PerfHistogram("sq."+r.name+".pre", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+	if err != nil {
+		r.logger.Error(sqerrors.Wrap(err, "could not create the performance metrics for the pre callback"))
+	}
+	r.pre = append(r.pre, withPerformanceMonitoring(perfHist))
+
+	perfHist, err = metricsEngine.PerfHistogram("sq."+r.name+".post", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+	if err != nil {
+		r.logger.Error(sqerrors.Wrap(err, "could not create the performance metrics for the pre callback"))
+	}
+	r.post = append(r.post, withPerformanceMonitoring(perfHist))
 
 	if rule.CallCountInterval != 0 {
 		r.pre = append(r.pre, withCallCount(metricsEngine, rulepackID, rule.Name))
@@ -81,15 +91,24 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 	return r, nil
 }
 
-func withPerformanceMonitoring() NativeCallbackMiddlewareFunc {
+func withPerformanceMonitoring(perfHistogram *metrics.PerfHistogram) NativeCallbackMiddlewareFunc {
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) {
-			// TODO: individual pref monitoring
+			if c.ProtectionContext().DeadlineExceeded(0) {
+				return
+			}
 
 			sq := c.ProtectionContext().SqreenTime()
-			// TODO: perf cap against sq.Duration()
-			sq.Start()
-			defer sq.Stop()
+			sw := sq.Start()
+			defer func() {
+				duration := sw.Stop()
+				// Compute the milliseconds floating point value out of the nanoseconds
+				ms := float64(duration.Nanoseconds()) / float64(time.Millisecond)
+				if err := perfHistogram.Add(ms); err != nil {
+					// TODO: log once
+				}
+			}()
+
 			cb(c)
 		}
 	}

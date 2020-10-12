@@ -16,7 +16,6 @@ import (
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
-	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
 
 type ProtectionContext struct {
@@ -34,9 +33,6 @@ type ProtectionContext struct {
 	contextHandlerCanceled bool
 	requestReader          *requestReader
 	start                  time.Time
-
-	// todo: rename protection timer
-	sqreenTime sqtime.SharedStopWatch
 }
 
 // Static assert that the interface is implemented
@@ -280,8 +276,4 @@ func (p *ProtectionContext) AddRequestParam(name string, param interface{}) {
 
 func (p *ProtectionContext) ClientIP() net.IP {
 	return p.requestReader.clientIP
-}
-
-func (p *ProtectionContext) SqreenTime() *sqtime.SharedStopWatch {
-	return &p.sqreenTime
 }

@@ -226,7 +226,7 @@ func New(cfg *config.Config) *AgentType {
 		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
 		return nil
 	}
-	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
+	rulesEngine := rule.NewEngine(logger, nil, metrics, publicKey, perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
 
 	// Early health checking
 	if err := rulesEngine.Health(agentVersion); err != nil {
@@ -255,11 +255,11 @@ func New(cfg *config.Config) *AgentType {
 		return nil
 	}
 
-	sq, err := metrics.PerfHistogram("sq", 0.1, 2.0, time.Minute)
+	sq, err := metrics.PerfHistogram("sq", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "`sq` performance histogram constructor error"))
 	}
-	req, err := metrics.PerfHistogram("req", 0.1, 2.0, time.Minute)
+	req, err := metrics.PerfHistogram("req", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "`req` performance histogram constructor error"))
 	}
