@@ -62,34 +62,25 @@ import (
 func Middleware() gingonic.HandlerFunc {
 	internal.Start()
 	return func(c *gingonic.Context) {
-		middlewareHandler(internal.Agent(), c)
+		middlewareHandler(c)
 	}
 }
 
-func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) {
-	if agent == nil {
-		// The agent is disabled or not yet started.
-		c.Next()
-		return
-	}
-
+func middlewareHandler(c *gingonic.Context) {
 	requestReader := &requestReaderImpl{c: c}
 	responseWriter := &responseWriterImpl{c: c}
 
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(c.Request.Context(), agent, responseWriter, requestReader)
-	if ctx == nil {
+	p := http_protection.NewProtectionContext(c.Request.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+	if p == nil {
 		c.Next()
 		return
 	}
-	defer func() {
-		cancelHandlerContext()
-		_ = ctx.Close(responseWriter.closeResponseWriter())
-	}()
+	defer p.Close(responseWriter.closeResponseWriter())
 
-	c.Request = ctx.WrapRequest(reqCtx, c.Request)
-	c.Set(protection_context.ContextKey.String, ctx)
+	c.Request = p.WrapRequest(c.Request)
+	c.Set(protection_context.ContextKey.String, p)
 
-	if err := ctx.Before(); err != nil {
+	if err := p.Before(); err != nil {
 		c.Abort()
 		return
 	}
@@ -99,7 +90,7 @@ func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) 
 	if c.IsAborted() {
 		return
 	}
-	if err := ctx.After(); err != nil {
+	if err := p.After(); err != nil {
 		c.Abort()
 		return
 	}

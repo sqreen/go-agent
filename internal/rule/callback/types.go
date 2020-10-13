@@ -30,8 +30,8 @@ type JSReflectedCallbackConfig interface {
 
 // NativeCallbackConstructorFunc is a function returning a native callback
 // function or a CallbackObject.
-type NativeCallbackConstructorFunc func(r NativeRuleContext, cfg NativeCallbackConfig) (prolog sqhook.PrologCallback, err error)
+type NativeCallbackConstructorFunc func(r RuleContext, cfg NativeCallbackConfig) (prolog sqhook.PrologCallback, err error)
 
 // ReflectedCallbackConstructorFunc is a function returning a reflected callback
 // function for the provided type.
-type ReflectedCallbackConstructorFunc func(r NativeRuleContext, cfg ReflectedCallbackConfig) (prolog sqhook.ReflectedPrologCallback, err error)
+type ReflectedCallbackConstructorFunc func(r RuleContext, cfg ReflectedCallbackConfig) (prolog sqhook.ReflectedPrologCallback, err error)

@@ -61,13 +61,13 @@ func (a *AgentType) addUserEvent(e event.UserEventFace) {
 func (a *AgentType) addIPPasslistEvent(matchedPasslistEntry string) {
 	err := a.addPasslistEvent(a.staticMetrics.allowedIP, matchedPasslistEntry)
 	if err != nil {
-		a.Logger().Error(sqerrors.Wrap(err, "passlist event: could not update the ip passlist metrics store"))
+		a.logger.Error(sqerrors.Wrap(err, "passlist event: could not update the ip passlist metrics store"))
 	}
 }
 func (a *AgentType) addPathPasslistEvent(matchedPasslistEntry string) {
 	err := a.addPasslistEvent(a.staticMetrics.allowedPath, matchedPasslistEntry)
 	if err != nil {
-		a.Logger().Error(sqerrors.Wrap(err, "passlist event: could not update the path passlist metrics store"))
+		a.logger.Error(sqerrors.Wrap(err, "passlist event: could not update the path passlist metrics store"))
 	}
 }
 

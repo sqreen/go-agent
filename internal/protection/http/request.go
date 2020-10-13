@@ -282,7 +282,7 @@ func copyRequest(reader types.RequestReader) types.RequestReader {
 	}
 }
 
-type closedRequestContext struct {
+type closedProtectionContext struct {
 	response   types.ResponseFace
 	request    types.RequestReader
 	events     event.Recorded
@@ -291,11 +291,11 @@ type closedRequestContext struct {
 	sqreenTime time.Duration
 }
 
-var _ types.ClosedRequestContextFace = (*closedRequestContext)(nil)
+var _ types.ClosedProtectionContextFace = (*closedProtectionContext)(nil)
 
-func (c *closedRequestContext) Events() event.Recorded       { return c.events }
-func (c *closedRequestContext) Request() types.RequestReader { return c.request }
-func (c *closedRequestContext) Response() types.ResponseFace { return c.response }
-func (c *closedRequestContext) Start() time.Time             { return c.start }
-func (c *closedRequestContext) Duration() time.Duration      { return c.duration }
-func (c *closedRequestContext) SqreenTime() time.Duration    { return c.sqreenTime }
+func (c *closedProtectionContext) Events() event.Recorded       { return c.events }
+func (c *closedProtectionContext) Request() types.RequestReader { return c.request }
+func (c *closedProtectionContext) Response() types.ResponseFace { return c.response }
+func (c *closedProtectionContext) Start() time.Time             { return c.start }
+func (c *closedProtectionContext) Duration() time.Duration      { return c.duration }
+func (c *closedProtectionContext) SqreenTime() time.Duration    { return c.sqreenTime }

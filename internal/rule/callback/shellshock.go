@@ -18,7 +18,7 @@ import (
 	"github.com/sqreen/go-agent/sdk/types"
 )
 
-func NewShellshockCallback(r NativeRuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewShellshockCallback(r RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	sqassert.NotNil(r)
 	sqassert.NotNil(cfg)
 
@@ -60,7 +60,7 @@ type ShellshockAttackInfo struct {
 	VariableValue string `json:"variable_value"`
 }
 
-func newShellshockPrologCallback(r NativeRuleContext, regexps []*regexp.Regexp) ShellshockPrologCallbackType {
+func newShellshockPrologCallback(r RuleContext, regexps []*regexp.Regexp) ShellshockPrologCallbackType {
 	return func(_ *string, _ *[]string, attr **os.ProcAttr) (epilog ShellshockEpilogCallbackType, prologErr error) {
 		r.Pre(func(c CallbackContext) {
 			env := (*attr).Env

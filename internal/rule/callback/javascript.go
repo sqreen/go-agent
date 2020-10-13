@@ -12,14 +12,13 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/sqreen/go-agent/internal/binding-accessor"
-	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 	"github.com/sqreen/go-agent/sdk/types"
 )
 
-func NewJSExecCallback(r NativeRuleContext, cfg JSReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
+func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
 	pool := newVMPool(cfg)
 	// TODO: move this into a JSNativeRuleContext
 	sqassert.NotNil(pool)
@@ -249,10 +248,6 @@ func call(vm *goja.Runtime, descr *jsCallbackFunc, baCtx bindingaccessor.Context
 	}
 
 	return vm.ExportTo(v, result)
-}
-
-func getProtectionContext() *httpprotection.ProtectionContext {
-	return httpprotection.FromGLS()
 }
 
 type noScrub map[string]interface{}

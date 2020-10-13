@@ -84,7 +84,7 @@ func prepareWAF(cfg NativeCallbackConfig) (waf_types.Rule, map[string]bindingacc
 	return wafRule, bindingAccessors, timeout, nil
 }
 
-func NewWAFCallback(rule NativeRuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWAFCallback(rule RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	wafRule, bindingAccessors, timeout, err := prepareWAF(cfg)
 	if err != nil {
 		return nil, sqerrors.Wrap(err, "unexpected configuration error")
@@ -99,7 +99,7 @@ type (
 
 var ErrWAFProtection = errors.New("waf protection triggered")
 
-func newWAFPrologCallback(rule NativeRuleContext, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
+func newWAFPrologCallback(rule RuleContext, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
 		prolog:  makeWAFPrologCallback(rule, blockingMode, wafRule, bindingAccessors, timeout),
@@ -148,7 +148,7 @@ func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.Bindi
 	return c.HandleAttack(action == waf_types.BlockAction, attackInfo), nil
 }
 
-func makeWAFPrologCallback(rule NativeRuleContext, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
+func makeWAFPrologCallback(rule RuleContext, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
 	return func(**http_protection.ProtectionContext) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
 		rule.Pre(func(c CallbackContext) {
 			blocked, err := runWAF(c, bindingAccessors, wafRule, timeout)
@@ -186,7 +186,7 @@ func newWAFRunError(err error, args waf_types.DataSet, timeout time.Duration) er
 	})
 }
 
-func NewFunctionWAFCallback(r NativeRuleContext, cfg ReflectedCallbackConfig, functionWAFCfg *api.RuleFunctionWAFCallbacks) (sqhook.PrologCallback, error) {
+func NewFunctionWAFCallback(r RuleContext, cfg ReflectedCallbackConfig, functionWAFCfg *api.RuleFunctionWAFCallbacks) (sqhook.PrologCallback, error) {
 	if functionWAFCfg == nil {
 		return nil, sqerrors.New("unexpected nil function waf configuration")
 	}
@@ -236,14 +236,14 @@ func compileFunctionWAFBindingAccessors(bas map[string]string) (functionWAFBindi
 	return r, nil
 }
 
-func newFunctionWAFPrologCallback(r NativeRuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) *wafCallbackObject {
+func newFunctionWAFPrologCallback(r RuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
 		prolog:  makeFunctionWAFPrologCallback(r, wafRule, bindingAccessors, timeout, strategy, pre, post),
 	}
 }
 
-func makeFunctionWAFPrologCallback(r NativeRuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) sqhook.ReflectedPrologCallback {
+func makeFunctionWAFPrologCallback(r RuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration, strategy *api.ReflectedCallbackConfig, pre, post functionWAFBindingAccessorMap) sqhook.ReflectedPrologCallback {
 	sqassert.True(len(pre) > 0 || len(post) > 0)
 
 	return func(params []reflect.Value) (epilog sqhook.ReflectedEpilogCallback, prologErr error) {

@@ -6,18 +6,18 @@ package callback
 
 import (
 	"github.com/sqreen/go-agent/internal/plog"
-	protection_context "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/rule/callback/types"
 )
 
 // TODO: rename to RuleContext if we don't do ReflectedRuleContext for now
 // TODO: add return values when generics allow to safely return the prolog type
-type NativeRuleContext interface {
+type RuleContext interface {
 	Pre(func(c CallbackContext))
 	Post(func(c CallbackContext))
 }
 
 type CallbackContext interface {
-	ProtectionContext() protection_context.ProtectionContext
+	ProtectionContext() types.ProtectionContext
 
 	// Push a new metrics value for the given key into the default metrics store
 	// given by the rule.

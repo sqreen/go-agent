@@ -14,7 +14,7 @@ import (
 // NewCallback returns the callback object or function for the given callback
 // name. An error is returned if the callback name is unknown or an error
 // occurred during the constructor call.
-func NewNativeCallback(name string, r callback.NativeRuleContext, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
+func NewNativeCallback(name string, r callback.RuleContext, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
 	var callbackCtor callback.NativeCallbackConstructorFunc
 	switch name {
 	default:
@@ -44,7 +44,7 @@ func NewNativeCallback(name string, r callback.NativeRuleContext, cfg callback.N
 // NewReflectedCallback returns the callback object or function of the given
 // callback name. An error is returned if the callback name is unknown or an
 // error occurred during the constructor call.
-func NewReflectedCallback(name string, r callback.NativeRuleContext, rule *api.Rule) (prolog sqhook.PrologCallback, err error) {
+func NewReflectedCallback(name string, r callback.RuleContext, rule *api.Rule) (prolog sqhook.PrologCallback, err error) {
 	switch name {
 	default:
 		return nil, sqerrors.Errorf("undefined reflected callback name `%s`", name)

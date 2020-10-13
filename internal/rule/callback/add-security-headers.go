@@ -18,7 +18,7 @@ import (
 // NewAddSecurityHeadersCallback returns the native prolog and epilog callbacks
 // to be attached to compatible HTTP protection middlewares such as
 // `protection/http`. It adds HTTP headers provided by the rule's configuration.
-func NewAddSecurityHeadersCallback(_ NativeRuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewAddSecurityHeadersCallback(_ RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	sqassert.NotNil(cfg)
 	var headers http.Header
 	data, ok := cfg.Data().([]interface{})

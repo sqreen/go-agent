@@ -18,7 +18,7 @@ import (
 	sdk_types "github.com/sqreen/go-agent/sdk/types"
 )
 
-func NewIPDenyListCallback(r NativeRuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewIPDenyListCallback(r RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	sqassert.NotNil(r)
 	sqassert.NotNil(cfg)
 
@@ -62,7 +62,7 @@ func (e IPDenyListError) Error() string {
 	return fmt.Sprintf("ip address `%s` matched the denylist entry `%s` and was blocked", e.DeniedIP.String(), e.DenyListEntry)
 }
 
-func newIPDenyListPrologCallback(r NativeRuleContext, denylist *actor.CIDRIPListStore) IPDenyListPrologCallbackType {
+func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore) IPDenyListPrologCallbackType {
 	return func(**http_protection.ProtectionContext) (epilog IPDenyListEpilogCallbackType, prologErr error) {
 		r.Pre(func(c CallbackContext) {
 			ip := c.ProtectionContext().ClientIP()

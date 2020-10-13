@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sqreen/go-agent/internal/actor"
 	"github.com/sqreen/go-agent/internal/event"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
@@ -19,10 +20,14 @@ import (
 )
 
 type ProtectionContext struct {
-	*protection_context.RequestContext
-	RequestReader              types.RequestReader
-	ResponseWriter             types.ResponseWriter
-	events                     event.Record
+	context.Context
+	types.RootProtectionContext
+
+	RequestReader  types.RequestReader
+	ResponseWriter types.ResponseWriter
+
+	events event.Record
+
 	cancelHandlerContextFunc   context.CancelFunc
 	contextHandlerCanceledLock sync.RWMutex
 	// We are intentionally not using the Context.Err() method here in order to
@@ -35,53 +40,49 @@ type ProtectionContext struct {
 	start                  time.Time
 }
 
-// Static assert that the interface is implemented
-var _ protection_context.ProtectionContext = &ProtectionContext{}
-
-func FromContext(ctx context.Context) *ProtectionContext {
-	c, _ := protection_context.FromContext(ctx).(*ProtectionContext)
-	return c
+type SecurityResponseStore interface {
+	FindActionByIP(ip net.IP) (actor.Action, bool, error)
+	FindActionByUserID(id map[string]string) (actor.Action, bool)
 }
 
-func FromGLS() *ProtectionContext {
-	c, _ := protection_context.FromGLS().(*ProtectionContext)
-	return c
-}
+//func FromContext(ctx context.Context) *ProtectionContext {
+//	c, _ := protection_context.FromContext(ctx).(*ProtectionContext)
+//	return c
+//}
 
-func NewProtectionContext(ctx context.Context, agent protection_context.AgentFace, w types.ResponseWriter, r types.RequestReader) (*ProtectionContext, context.Context, context.CancelFunc) {
-	start := time.Now()
-
-	if agent.IsPathAllowed(r.URL().Path) {
-		return nil, nil, nil
+func NewProtectionContext(ctx context.Context, root types.RootProtectionContext, w types.ResponseWriter, r types.RequestReader) *ProtectionContext {
+	if root == nil {
+		return nil
 	}
 
-	clientIP := r.ClientIP()
-	if clientIP == nil {
-		cfg := agent.Config()
-		clientIP = ClientIP(r.RemoteAddr(), r.Headers(), cfg.PrioritizedIPHeader(), cfg.PrioritizedIPHeaderFormat())
+	if root.IsPathAllowed(r.URL().Path) {
+		return nil
 	}
 
-	if agent.IsIPAllowed(clientIP) {
-		return nil, nil, nil
+	cfg := root.Config()
+	clientIP := ClientIP(r.RemoteAddr(), r.Headers(), cfg.HTTPClientIPHeader(), cfg.HTTPClientIPHeaderFormat())
+
+	if root.IsIPAllowed(clientIP) {
+		return nil
 	}
 
 	reqCtx, cancelHandlerContextFunc := context.WithCancel(ctx)
 
 	rr := &requestReader{
-		clientIP:      clientIP,
 		RequestReader: r,
+		clientIP:      clientIP,
 		requestParams: make(types.RequestParamMap),
 	}
 
-	protCtx := &ProtectionContext{
-		RequestContext:           protection_context.NewRequestContext(agent),
+	p := &ProtectionContext{
+		Context:                  reqCtx,
+		RootProtectionContext:    root,
 		ResponseWriter:           w,
 		RequestReader:            rr,
-		cancelHandlerContextFunc: cancelHandlerContextFunc,
 		requestReader:            rr,
-		start:                    start,
+		cancelHandlerContextFunc: cancelHandlerContextFunc,
 	}
-	return protCtx, reqCtx, cancelHandlerContextFunc
+	return p
 }
 
 // Helper types for callbacks who must be designed for this protection so that
@@ -105,11 +106,8 @@ type (
 	ResponseMonitoringPrologCallbackType = func(**ProtectionContext, *types.ResponseFace) (NonBlockingEpilogCallbackType, error)
 )
 
-// Static assert that ProtectionContext implements the SDK Event Recorder Getter
-// interface.
-var _ protection_context.EventRecorderGetter = (*ProtectionContext)(nil)
-
-func (p *ProtectionContext) EventRecorder() protection_context.EventRecorder { return p }
+// Static assert that ProtectionContext implements the expected interfaces.
+var _ protection_context.EventRecorder = (*ProtectionContext)(nil)
 
 func (p *ProtectionContext) TrackEvent(event string) protection_context.CustomEvent {
 	return p.events.AddCustomEvent(event)
@@ -128,13 +126,12 @@ func (p *ProtectionContext) IdentifyUser(id map[string]string) error {
 	return p.userSecurityResponse(id)
 }
 
-// Static assert that the SDK interface is implemented.
-var _ protection_context.EventRecorder = &ProtectionContext{}
-
 // When a non-nil error is returned, the request handler shouldn't be called
 // and the request should be stopped immediately by closing the ProtectionContext
 // and returning.
 func (p *ProtectionContext) Before() (err error) {
+	p.start = time.Now()
+
 	// Set the current goroutine local storage to this request storage to be able
 	// to retrieve it from lower-level functions.
 	sqgls.Set(p)
@@ -217,7 +214,9 @@ func (p *ProtectionContext) HandleAttack(block bool, attack interface{}) (blocke
 	return blocked
 }
 
-func (p *ProtectionContext) Close(response types.ResponseFace) error {
+func (p *ProtectionContext) Close(response types.ResponseFace) {
+	p.CancelHandlerContext()
+
 	// Compute the request duration
 	duration := time.Since(p.start)
 
@@ -229,7 +228,7 @@ func (p *ProtectionContext) Close(response types.ResponseFace) error {
 	// Copy everything we need here as it is not safe to keep then after the
 	// request is done because of memory pools reusing them.
 	p.monitorObservedResponse(response)
-	return p.RequestContext.Close(&closedRequestContext{
+	p.RootProtectionContext.Close(&closedProtectionContext{
 		response:   response,
 		request:    copyRequest(p.RequestReader),
 		events:     p.events.CloseRecord(),
@@ -250,8 +249,8 @@ func (p *ProtectionContext) monitorObservedResponse(response types.ResponseFace)
 
 // WrapRequest is a helper method to prepare an http.Request with its
 // new context, the protection context, and a body buffer.
-func (p *ProtectionContext) WrapRequest(ctx context.Context, r *http.Request) *http.Request {
-	r = r.WithContext(context.WithValue(ctx, protection_context.ContextKey, p))
+func (p *ProtectionContext) WrapRequest(r *http.Request) *http.Request {
+	r = r.WithContext(context.WithValue(p, protection_context.ContextKey, p))
 	if r.Body != nil {
 		r.Body = p.wrapBody(r.Body)
 	}

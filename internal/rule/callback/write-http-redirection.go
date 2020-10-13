@@ -19,7 +19,7 @@ import (
 // NewWriteHTTPRedirectionCallbacks returns the native callback applying the
 // the rule-configured HTTP redirection to the HTTP protection response writer
 // using the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(_ NativeRuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWriteHTTPRedirectionCallbacks(_ RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var redirectionURL string
 	if cfg := cfg.Data(); cfg != nil {
 		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)

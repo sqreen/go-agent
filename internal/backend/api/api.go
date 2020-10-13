@@ -60,7 +60,8 @@ type AppLoginResponse struct {
 	Status    bool                     `json:"status"`
 	Commands  []CommandRequest         `json:"commands"`
 	Features  AppLoginResponse_Feature `json:"features"`
-	PackId    string                   `json:"pack_id"`
+	RulesPackResponse
+	ActionsPackResponse
 }
 
 type AppLoginResponse_Feature struct {

@@ -436,7 +436,7 @@ func TestMiddleware(t *testing.T) {
 			responseContentType   string
 			responseContentLength int64
 		)
-		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
+		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedProtectionContextFace) bool {
 			resp := recorded.Response()
 			responseStatusCode = resp.Status()
 			responseContentLength = resp.ContentLength()

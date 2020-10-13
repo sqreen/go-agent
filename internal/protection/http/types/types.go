@@ -11,8 +11,26 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/sqreen/go-agent/internal/actor"
 	"github.com/sqreen/go-agent/internal/event"
+	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
+
+type RootProtectionContext interface {
+	SqreenTime() *sqtime.SharedStopWatch
+	DeadlineExceeded(needed time.Duration) (exceeded bool)
+	FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error)
+	FindActionByUserID(userID map[string]string) (action actor.Action, exists bool)
+	IsIPAllowed(ip net.IP) bool
+	IsPathAllowed(path string) bool
+	Config() ConfigReader
+	Close(ClosedProtectionContextFace)
+}
+
+type ConfigReader interface {
+	HTTPClientIPHeader() string
+	HTTPClientIPHeaderFormat() string
+}
 
 // RequestReader is the read-only interface to the request.
 type RequestReader interface {
@@ -71,7 +89,7 @@ type ResponseFace interface {
 	ContentLength() int64
 }
 
-type ClosedRequestContextFace interface {
+type ClosedProtectionContextFace interface {
 	Response() ResponseFace
 	Request() RequestReader
 	Events() event.Recorded

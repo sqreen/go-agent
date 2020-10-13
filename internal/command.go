@@ -30,6 +30,7 @@ type CommandManagerAgent interface {
 	SetPathPasslist([]string) error
 	ReloadRules() (rulespackID string, err error)
 	SendAppBundle() error
+	SetPerformanceBudget(budget float64) error
 }
 
 func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
@@ -47,6 +48,7 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 		"rules_reload":           mng.ReloadRules,
 		"get_bundle":             mng.GetBundle,
 		"paths_whitelist":        mng.SetPathPasslist,
+		"performance_budget":     mng.SetPerformanceBudget,
 	}
 
 	return mng
@@ -121,6 +123,18 @@ func (m *CommandManager) SetPathPasslist(args []json.RawMessage) (string, error)
 		return "", err
 	}
 	return "", m.agent.SetPathPasslist(paths)
+}
+
+func (m *CommandManager) SetPerformanceBudget(args []json.RawMessage) (string, error) {
+	if argc := len(args); argc != 1 {
+		return "", fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
+	}
+	var budget float64
+	arg0 := args[0]
+	if err := json.Unmarshal(arg0, &budget); err != nil {
+		return "", err
+	}
+	return "", m.agent.SetPerformanceBudget(budget)
 }
 
 func (m *CommandManager) ReloadRules([]json.RawMessage) (string, error) {

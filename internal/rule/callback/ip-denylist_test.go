@@ -268,7 +268,7 @@ func newMockups() (*httpprotection.ProtectionContext, *AgentMock, *RequestReader
 	responseWriter := &ResponseWriterMock{}
 
 	ctx := &httpprotection.ProtectionContext{
-		RequestContext: &protectioncontext.RequestContext{
+		ProtectionContext: &protectioncontext.ProtectionContext{
 			AgentFace: agent,
 		},
 		RequestReader:  requestReader,

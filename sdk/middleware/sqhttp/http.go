@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/sqreen/go-agent/internal"
-	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 )
@@ -52,37 +51,29 @@ import (
 func Middleware(next http.Handler) http.Handler {
 	internal.Start()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		middlewareHandler(internal.Agent(), next, w, r)
+		middlewareHandler(next, w, r)
 	})
 }
-func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w http.ResponseWriter, r *http.Request) {
-	if agent == nil {
-		next.ServeHTTP(w, r)
-		return
-	}
-
+func middlewareHandler(next http.Handler, w http.ResponseWriter, r *http.Request) {
 	// requestReader is a pointer value in order to change the inner request
 	// pointer with the new one created by http.(*Request).WithContext below
 	requestReader := &requestReaderImpl{Request: r}
 	responseWriter := &responseWriterImpl{ResponseWriter: w}
 
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewProtectionContext(r.Context(), agent, responseWriter, requestReader)
-	if ctx == nil {
+	p := http_protection.NewProtectionContext(r.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+	if p == nil {
 		next.ServeHTTP(w, r)
 		return
 	}
-	defer func() {
-		cancelHandlerContext()
-		ctx.Close(responseWriter.closeResponseWriter())
-	}()
+	defer p.Close(responseWriter.closeResponseWriter())
 
-	requestReader.Request = ctx.WrapRequest(reqCtx, requestReader.Request)
+	requestReader.Request = p.WrapRequest(requestReader.Request)
 
-	if err := ctx.Before(); err != nil {
+	if err := p.Before(); err != nil {
 		return
 	}
 	next.ServeHTTP(responseWriter, requestReader.Request)
-	if err := ctx.After(); err != nil {
+	if err := p.After(); err != nil {
 		return
 	}
 }

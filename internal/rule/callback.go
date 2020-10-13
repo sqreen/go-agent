@@ -18,8 +18,8 @@ import (
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
-	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/internal/rule/callback/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
@@ -39,7 +39,7 @@ type nativeRuleContext struct {
 	defaultMetricsStore *metrics.TimeHistogram
 }
 
-var _ callback.NativeRuleContext = &nativeRuleContext{}
+var _ callback.RuleContext = &nativeRuleContext{}
 
 type (
 	NativeCallbackFunc           = func(c callback.CallbackContext)
@@ -75,13 +75,14 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 	if err != nil {
 		r.logger.Error(sqerrors.Wrap(err, "could not create the performance metrics for the pre callback"))
 	}
-	r.pre = append(r.pre, withPerformanceMonitoring(perfHist))
+	overBudgetHist := metricsEngine.TimeHistogram("request_overbudget_cb", perfHistogramPeriod)
+	r.pre = append(r.pre, withPerformanceMonitoring(r.name, perfHist, overBudgetHist))
 
 	perfHist, err = metricsEngine.PerfHistogram("sq."+r.name+".post", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
 	if err != nil {
 		r.logger.Error(sqerrors.Wrap(err, "could not create the performance metrics for the pre callback"))
 	}
-	r.post = append(r.post, withPerformanceMonitoring(perfHist))
+	r.post = append(r.post, withPerformanceMonitoring(r.name, perfHist, overBudgetHist))
 
 	if rule.CallCountInterval != 0 {
 		r.pre = append(r.pre, withCallCount(metricsEngine, rulepackID, rule.Name))
@@ -91,10 +92,12 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 	return r, nil
 }
 
-func withPerformanceMonitoring(perfHistogram *metrics.PerfHistogram) NativeCallbackMiddlewareFunc {
+func withPerformanceMonitoring(rule string, perfHistogram *metrics.PerfHistogram, overBudgetHistogram *metrics.TimeHistogram) NativeCallbackMiddlewareFunc {
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) {
 			if c.ProtectionContext().DeadlineExceeded(0) {
+				// TODO: log error once
+				_ = overBudgetHistogram.Add(rule, 1)
 				return
 			}
 
@@ -168,11 +171,11 @@ func wrapCallback(cb NativeCallbackFunc, middlewares []NativeCallbackMiddlewareF
 
 type nativeCallbackContext struct {
 	r *nativeRuleContext
-	p protection_context.ProtectionContext
+	p types.ProtectionContext
 }
 
 func makeCallbackContext(r *nativeRuleContext) (c nativeCallbackContext, ok bool) {
-	p := protection_context.FromGLS()
+	p := types.FromGLS()
 	if p == nil {
 		ok = false
 		return
@@ -184,7 +187,7 @@ func makeCallbackContext(r *nativeRuleContext) (c nativeCallbackContext, ok bool
 	}, true
 }
 
-func (c nativeCallbackContext) ProtectionContext() protection_context.ProtectionContext {
+func (c nativeCallbackContext) ProtectionContext() types.ProtectionContext {
 	return c.p
 }
 
