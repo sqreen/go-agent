@@ -76,8 +76,8 @@ func TestMiddleware(t *testing.T) {
 		middlewareResponseStatus := 433
 		handlerResponseBody := testlib.RandUTF8String(4096)
 		handlerResponseStatus := 533
-		agent := &mockups.AgentMockup{}
-		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{})
+		agent := &mockups.RootHTTPProtectionContextMockup{}
+		agent.ExpectConfig().Return(&mockups.HTTPProtectionConfigMockup{})
 		agent.ExpectIsIPAllowed(mock.Anything).Return(false)
 		agent.ExpectIsPathAllowed(mock.Anything).Return(false)
 		agent.ExpectSendClosedRequestContext(mock.Anything).Return(nil)
@@ -213,8 +213,8 @@ func TestMiddleware(t *testing.T) {
 		expectedContentLength := int64(len(`"hello"`))
 		expectedContentType := "application/json"
 
-		agent := &mockups.AgentMockup{}
-		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
+		agent := &mockups.RootHTTPProtectionContextMockup{}
+		agent.ExpectConfig().Return(&mockups.HTTPProtectionConfigMockup{}).Once()
 		agent.ExpectIsIPAllowed(mock.Anything).Return(false).Once()
 		agent.ExpectIsPathAllowed(mock.Anything).Return(false).Once()
 		var (

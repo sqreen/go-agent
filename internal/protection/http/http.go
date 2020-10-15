@@ -201,7 +201,7 @@ func (p *ProtectionContext) isContextHandlerCanceled() bool {
 
 }
 
-func (p *ProtectionContext) HandleAttack(block bool, attack interface{}) (blocked bool) {
+func (p *ProtectionContext) HandleAttack(block bool, attack *event.AttackEvent) (blocked bool) {
 	if block {
 		defer p.CancelHandlerContext()
 		p.WriteDefaultBlockingResponse()

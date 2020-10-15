@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/stretchr/testify/mock"
@@ -62,6 +63,10 @@ func (r *RequestReaderMockup) Headers() http.Header {
 	return h
 }
 
+func (r *RequestReaderMockup) ExpectHeaders() *mock.Call {
+	return r.On("Headers")
+}
+
 func (r *RequestReaderMockup) Method() string {
 	return r.Called().String(0)
 }
@@ -85,6 +90,10 @@ func (r *RequestReaderMockup) Host() string {
 
 func (r *RequestReaderMockup) RemoteAddr() string {
 	return r.Called().String(0)
+}
+
+func (r *RequestReaderMockup) ExpectRemoteAddr() *mock.Call {
+	return r.On("RemoteAddr")
 }
 
 func (r *RequestReaderMockup) IsTLS() bool {
@@ -123,81 +132,130 @@ func (r *RequestReaderMockup) Params() types.RequestParamMap {
 	return v
 }
 
+type ResponseMockup struct {
+	mock.Mock
+}
+
+func (r *ResponseMockup) Status() int {
+	return r.Called().Int(0)
+}
+
+func (r *ResponseMockup) ContentType() string {
+	return r.Called().String(0)
+}
+
+func (r *ResponseMockup) ContentLength() int64 {
+	return r.Called().Get(0).(int64)
+}
+
 func TestProtectionAPI(t *testing.T) {
+	newMockups := func(t *testing.T, ip net.IP, allowPath, allowIP bool) (*mockups.RootHTTPProtectionContextMockup, *mockups.HTTPProtectionConfigMockup, *RequestReaderMockup, *ResponseWriterMockup) {
+		r := &mockups.RootHTTPProtectionContextMockup{}
+
+		cfg := mockups.NewHTTPProtectionConfigMockup()
+
+		responseWriterMockup := &ResponseWriterMockup{}
+
+		requestReaderMockup := &RequestReaderMockup{}
+
+		// Path passlist
+		u, err := url.Parse("https://test.com/foo/bar/")
+		require.NoError(t, err)
+		requestReaderMockup.ExpectURL().Return(u)
+		r.ExpectIsPathAllowed(u.Path).Return(allowPath)
+
+		if !allowPath {
+			r.ExpectConfig().Return(cfg)
+
+			// The following calls only happen when the path is not passlisted
+			// Make ClientIP return a given IP address
+			requestReaderMockup.ExpectRemoteAddr().Return(ip.String())
+			requestReaderMockup.ExpectHeaders().Return(nil)
+
+			// IP passlist
+			r.ExpectIsIPAllowed(ip).Return(allowIP)
+		}
+
+		return r, cfg, requestReaderMockup, responseWriterMockup
+	}
+
 	t.Run("passlists", func(t *testing.T) {
 		t.Run("ip allowed", func(t *testing.T) {
-			agentMockup := &mockups.AgentMockup{}
-			defer agentMockup.AssertExpectations(t)
-
-			responseWriterMockup := &ResponseWriterMockup{}
-			defer responseWriterMockup.AssertExpectations(t)
-
-			requestReaderMockup := &RequestReaderMockup{}
-			defer requestReaderMockup.AssertExpectations(t)
-			ip := net.ParseIP("1.2.3.4")
-			requestReaderMockup.ExpectClientIP().Return(ip)
-			agentMockup.ExpectIsIPAllowed(ip).Return(true)
-
-			// The request path is not passlisted
-			u, err := url.Parse("https://test.com/foo/bar/")
-			require.NoError(t, err)
-			requestReaderMockup.ExpectURL().Return(u)
-			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
-
-			ctx, _, _ := NewProtectionContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
-			require.Nil(t, ctx)
+			r, cfg, req, w := newMockups(t, net.ParseIP("1.2.3.4"), false, true)
+			defer r.AssertExpectations(t)
+			defer cfg.AssertExpectations(t)
+			defer req.AssertExpectations(t)
+			defer w.AssertExpectations(t)
+			p := NewProtectionContext(context.Background(), r, w, req)
+			require.Nil(t, p)
 		})
 
 		t.Run("path allowed", func(t *testing.T) {
-			agentMockup := &mockups.AgentMockup{}
-			defer agentMockup.AssertExpectations(t)
-
-			responseWriterMockup := &ResponseWriterMockup{}
-			defer responseWriterMockup.AssertExpectations(t)
-
-			requestReaderMockup := &RequestReaderMockup{}
-			defer requestReaderMockup.AssertExpectations(t)
-
-			// The request path is allowed
-			u, err := url.Parse("https://test.com/foo/bar/")
-			require.NoError(t, err)
-			requestReaderMockup.ExpectURL().Return(u)
-			agentMockup.ExpectIsPathAllowed(u.Path).Return(true)
-
-			ctx, _, _ := NewProtectionContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
-			require.Nil(t, ctx)
+			r, cfg, req, w := newMockups(t, net.ParseIP("1.2.3.4"), true, false)
+			defer r.AssertExpectations(t)
+			defer cfg.AssertExpectations(t)
+			defer req.AssertExpectations(t)
+			defer w.AssertExpectations(t)
+			p := NewProtectionContext(context.Background(), r, w, req)
+			require.Nil(t, p)
 		})
 
 		t.Run("none allowed", func(t *testing.T) {
-			agentMockup := &mockups.AgentMockup{}
-			defer agentMockup.AssertExpectations(t)
-
-			responseWriterMockup := &ResponseWriterMockup{}
-			defer responseWriterMockup.AssertExpectations(t)
-
-			requestReaderMockup := &RequestReaderMockup{}
-			defer requestReaderMockup.AssertExpectations(t)
-
-			// The IP is not allowed
 			ip := net.ParseIP("1.2.3.4")
-			requestReaderMockup.ExpectClientIP().Return(ip)
-			agentMockup.ExpectIsIPAllowed(ip).Return(false)
+			r, cfg, req, w := newMockups(t, ip, false, false)
+			defer r.AssertExpectations(t)
+			defer cfg.AssertExpectations(t)
+			defer req.AssertExpectations(t)
+			defer w.AssertExpectations(t)
 
-			// The request path is not allowed
-			u, err := url.Parse("https://test.com/foo/bar/")
-			require.NoError(t, err)
-			requestReaderMockup.ExpectURL().Return(u)
-			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
-
-			ctx, reqCtx, cancel := NewProtectionContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
-
-			require.NotNil(t, ctx)
-			require.NotNil(t, reqCtx)
-			require.NotNil(t, cancel)
+			p := NewProtectionContext(context.Background(), r, w, req)
+			require.NotNil(t, p)
 		})
 	})
 
-	// TODO: more test cases
+	t.Run("nil root context", func(t *testing.T) {
+		w := &ResponseWriterMockup{}
+		req := &RequestReaderMockup{}
+		p := NewProtectionContext(context.Background(), nil, w, req)
+		require.Nil(t, p)
+	})
+
+	t.Run("protection/callback api", func(t *testing.T) {
+		ip := net.ParseIP("1.2.3.4")
+		r, cfg, req, w := newMockups(t, ip, false, false)
+		defer r.AssertExpectations(t)
+		defer cfg.AssertExpectations(t)
+		defer req.AssertExpectations(t)
+		defer w.AssertExpectations(t)
+
+		p := NewProtectionContext(context.Background(), r, w, req)
+		require.NotNil(t, p)
+
+		require.Equal(t, ip, p.ClientIP())
+
+		// Handle a non-blocking attack
+		blocked := p.HandleAttack(false, &event.AttackEvent{})
+		require.False(t, blocked)
+		// The context shouldn't be closed
+		require.False(t, p.isContextHandlerCanceled())
+		require.Nil(t, p.Context.Err())
+
+		// Handle a blocking attack
+		blocked = p.HandleAttack(true, &event.AttackEvent{})
+		require.True(t, blocked)
+		// The context shouldn't be closed
+		require.True(t, p.isContextHandlerCanceled())
+		require.Equal(t, context.Canceled, p.Context.Err())
+
+		// TODO: check the close() behaviour
+		//response := &ResponseMockup{}
+		//r.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+		//	//events := closed.Events()
+		//	//require.Equal(t, events.AttackEvents)
+		//	return true
+		//})).Once()
+		//p.Close(response)
+	})
 }
 
 func TestParseClientIPHeaderHeaderValue(t *testing.T) {

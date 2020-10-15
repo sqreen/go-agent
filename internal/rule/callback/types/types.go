@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/sqreen/go-agent/internal/event"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
@@ -21,7 +22,7 @@ func FromGLS() ProtectionContext {
 
 type ProtectionContext interface {
 	AddRequestParam(name string, v interface{})
-	HandleAttack(block bool, attack interface{}) (blocked bool)
+	HandleAttack(block bool, attack *event.AttackEvent) (blocked bool)
 	ClientIP() net.IP
 	SqreenTime() *sqtime.SharedStopWatch
 	DeadlineExceeded(needed time.Duration) (exceeded bool)

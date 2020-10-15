@@ -50,15 +50,10 @@ type AttackEvent struct {
 	AttackType string
 }
 
-func (r *Record) AddAttackEvent(attack interface{}) {
-	actual, ok := attack.(*AttackEvent)
-	if !ok {
-		return
-	}
-
+func (r *Record) AddAttackEvent(attack *AttackEvent) {
 	r.attacksLock.Lock()
 	defer r.attacksLock.Unlock()
-	r.attacks = append(r.attacks, actual)
+	r.attacks = append(r.attacks, attack)
 }
 
 func (r *Record) AddUserAuth(id UserIdentifierMap, ip net.IP, success bool) {
