@@ -29,7 +29,7 @@ import (
 // so `sdk.FromContext()` cannot be used with it, hence another `FromContext()`
 // in this package to access the SDK context value from Echo's context.
 // `sdk.FromContext()` can still be used on the request context.
-func FromContext(c echo.Context) *sdk.Context {
+func FromContext(c echo.Context) sdk.Context {
 	return sdk.FromContext(c.Request().Context())
 }
 
@@ -76,36 +76,31 @@ func Middleware() echo.MiddlewareFunc {
 	internal.Start()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			return middlewareHandler(internal.Agent(), next, c)
+			return middlewareHandler(next, c)
 		}
 	}
 }
 
-func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc, c echo.Context) error {
-	if agent == nil {
-		return next(c)
-	}
-
+func middlewareHandler(next echo.HandlerFunc, c echo.Context) error {
 	requestReader := &requestReaderImpl{c: c}
 	responseWriter := &responseWriterImpl{c: c}
 
 	req := c.Request()
 
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(req.Context(), agent, responseWriter, requestReader)
-	if ctx == nil {
+	p := http_protection.NewProtectionContext(req.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+	if p == nil {
 		return next(c)
 	}
 
 	defer func() {
-		cancelHandlerContext()
-		_ = ctx.Close(responseWriter.closeResponseWriter())
+		p.Close(responseWriter.closeResponseWriter())
 	}()
 
-	req = ctx.WrapRequest(reqCtx, req)
+	req = p.WrapRequest(req)
 	c.SetRequest(req)
-	c.Set(protectioncontext.ContextKey.String, ctx)
+	c.Set(protectioncontext.ContextKey.String, p)
 
-	if err := ctx.Before(); err != nil {
+	if err := p.Before(); err != nil {
 		return err
 	}
 	if err := next(c); err != nil {
@@ -114,7 +109,7 @@ func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc,
 		// was returned.
 		return err
 	}
-	if err := ctx.After(); err != nil {
+	if err := p.After(); err != nil {
 		return err
 	}
 	return nil
