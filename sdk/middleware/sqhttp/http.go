@@ -65,7 +65,9 @@ func middlewareHandler(next http.Handler, w http.ResponseWriter, r *http.Request
 		next.ServeHTTP(w, r)
 		return
 	}
-	defer p.Close(responseWriter.closeResponseWriter())
+	defer func() {
+		p.Close(responseWriter.closeResponseWriter())
+	}()
 
 	requestReader.Request = p.WrapRequest(requestReader.Request)
 

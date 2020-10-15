@@ -30,8 +30,6 @@ require (
 	github.com/sqreen/go-sdk/signal v1.2.0
 	github.com/stretchr/testify v1.6.1
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
-	golang.org/x/sys v0.0.0-20200515095857-1151b9dac4a9 // indirect
-	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20200914190812-8f9ed77dd8e5 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect

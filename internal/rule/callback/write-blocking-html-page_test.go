@@ -6,7 +6,7 @@ package callback_test
 
 //func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 //	RunNativeCallbackTest(t, TestConfig{
-//		CallbacksCtor: callback.NewWriteCustomErrorPageCallback,
+//		CallbacksCtor: callback.NewWriteBlockingHTMLPageCallback,
 //		ExpectProlog:  true,
 //		PrologType:    reflect.TypeOf(callback.WriteCustomErrorPagePrologCallbackType(nil)),
 //		EpilogType:    reflect.TypeOf(callback.WriteCustomErrorPageEpilogCallbackType(nil)),

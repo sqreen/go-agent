@@ -92,7 +92,9 @@ func middlewareHandler(next echo.HandlerFunc, c echo.Context) error {
 		return next(c)
 	}
 
-	defer p.Close(responseWriter.closeResponseWriter())
+	defer func() {
+		p.Close(responseWriter.closeResponseWriter())
+	}()
 
 	req = p.WrapRequest(req)
 	c.SetRequest(req)

@@ -64,6 +64,7 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 		defaultMetricsStore: defaultMetricsStore,
 		name:                rule.Name,
 		testMode:            rule.Test,
+		blockingMode:        rule.Block,
 		attackType:          rule.AttackType,
 		logger:              logger,
 	}
@@ -139,6 +140,7 @@ func withCallCount(engine *metrics.Engine, rulepackID, ruleName string) NativeCa
 			if err := store.Add(callCounterID, 1); err != nil {
 				c.Logger().Error(err)
 			}
+			cb(c)
 		}
 	}
 }

@@ -129,10 +129,14 @@ func (m *CommandManager) SetPerformanceBudget(args []json.RawMessage) (string, e
 	if argc := len(args); argc != 1 {
 		return "", fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
 	}
-	var budget float64
+	var v *float64
 	arg0 := args[0]
-	if err := json.Unmarshal(arg0, &budget); err != nil {
+	if err := json.Unmarshal(arg0, &v); err != nil {
 		return "", err
+	}
+	var budget float64
+	if v != nil {
+		budget = *v
 	}
 	return "", m.agent.SetPerformanceBudget(budget)
 }

@@ -75,7 +75,9 @@ func middlewareHandler(c *gingonic.Context) {
 		c.Next()
 		return
 	}
-	defer p.Close(responseWriter.closeResponseWriter())
+	defer func() {
+		p.Close(responseWriter.closeResponseWriter())
+	}()
 
 	c.Request = p.WrapRequest(c.Request)
 	c.Set(protection_context.ContextKey.String, p)

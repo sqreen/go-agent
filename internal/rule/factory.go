@@ -19,8 +19,8 @@ func NewNativeCallback(name string, r callback.RuleContext, cfg callback.NativeC
 	switch name {
 	default:
 		return nil, sqerrors.Errorf("undefined native callback name `%s`", name)
-	case "WriteCustomErrorPage":
-		callbackCtor = callback.NewWriteCustomErrorPageCallback
+	case "WriteCustomErrorPage", "WriteBlockingHTMLPage":
+		callbackCtor = callback.NewWriteBlockingHTMLPageCallback
 	case "WriteHTTPRedirection":
 		callbackCtor = callback.NewWriteHTTPRedirectionCallbacks
 	case "AddSecurityHeaders":

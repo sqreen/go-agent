@@ -211,6 +211,7 @@ func (p *ProtectionContext) HandleAttack(block bool, attack interface{}) (blocke
 	if attack != nil {
 		p.events.AddAttackEvent(attack)
 	}
+
 	return blocked
 }
 
