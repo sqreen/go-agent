@@ -76,28 +76,39 @@ func Middleware() echo.MiddlewareFunc {
 	internal.Start()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			return middlewareHandler(next, c)
+			ctx, cancel := internal.NewRootHTTPProtectionContext(c.Request().Context())
+			if ctx == nil {
+				return next(c)
+			}
+			defer cancel()
+			return middlewareHandlerFromRootProtectionContext(ctx, next, c)
 		}
 	}
 }
 
-func middlewareHandler(next echo.HandlerFunc, c echo.Context) error {
-	requestReader := &requestReaderImpl{c: c}
-	responseWriter := &responseWriterImpl{c: c}
-
-	req := c.Request()
-
-	p := http_protection.NewProtectionContext(req.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next echo.HandlerFunc, c echo.Context) error {
+	w := &responseWriterImpl{c: c}
+	r := &requestReaderImpl{c: c}
+	p := http_protection.NewProtectionContext(ctx, w, r)
 	if p == nil {
 		return next(c)
 	}
 
 	defer func() {
-		p.Close(responseWriter.closeResponseWriter())
+		p.Close(w.closeResponseWriter())
 	}()
 
-	req = p.WrapRequest(req)
-	c.SetRequest(req)
+	return middlewareHandlerFromProtectionContext(p, next, c)
+}
+
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, next echo.HandlerFunc, c echo.Context) error {
+	c.SetRequest(p.WrapRequest(c.Request()))
 	c.Set(protectioncontext.ContextKey.String, p)
 
 	if err := p.Before(); err != nil {
@@ -109,10 +120,7 @@ func middlewareHandler(next echo.HandlerFunc, c echo.Context) error {
 		// was returned.
 		return err
 	}
-	if err := p.After(); err != nil {
-		return err
-	}
-	return nil
+	return p.After()
 }
 
 type requestReaderImpl struct {
@@ -134,7 +142,7 @@ func (r *requestReaderImpl) Referer() string {
 }
 
 func (r *requestReaderImpl) ClientIP() net.IP {
-	return nil // Delegated to the middleware according the agent configuration
+	return nil // Delegated to the middleware according the rootProtectectionContext configuration
 }
 
 func (r *requestReaderImpl) Method() string {
@@ -250,17 +258,22 @@ type observedResponse struct {
 }
 
 func newObservedResponse(r *responseWriterImpl) *observedResponse {
-	// Content-Type will be not empty only when explicitly set.
-	// It could be guessed as net/http does. Not implemented for now.
-	ct := r.Header().Get("Content-Type")
-
 	response := r.c.Response()
 
-	// Content-Length is either explicitly set or the amount of written data.
+	headers := response.Header()
+
+	// Content-Type will be not empty only when explicitly set.
+	// It could be guessed as net/http does. Not implemented for now.
+	ct := headers.Get("Content-Type")
+
+	// Content-Length is either explicitly set or the amount of written data. It's
+	// 0 by default with Echo.
 	cl := response.Size
-	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
-		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
-			cl = l
+	if cl == 0 {
+		if contentLength := headers.Get("Content-Length"); contentLength != "" {
+			if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
+				cl = l
+			}
 		}
 	}
 

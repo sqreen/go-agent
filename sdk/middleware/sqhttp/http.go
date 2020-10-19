@@ -51,30 +51,46 @@ import (
 func Middleware(next http.Handler) http.Handler {
 	internal.Start()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		middlewareHandler(next, w, r)
+		ctx, cancel := internal.NewRootHTTPProtectionContext(r.Context())
+		if ctx == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		defer cancel()
+		middlewareHandlerFromRootProtectionContext(ctx, next, w, r)
 	})
 }
-func middlewareHandler(next http.Handler, w http.ResponseWriter, r *http.Request) {
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next http.Handler, w http.ResponseWriter, r *http.Request) {
 	// requestReader is a pointer value in order to change the inner request
 	// pointer with the new one created by http.(*Request).WithContext below
 	requestReader := &requestReaderImpl{Request: r}
 	responseWriter := &responseWriterImpl{ResponseWriter: w}
-
-	p := http_protection.NewProtectionContext(r.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+	p := http_protection.NewProtectionContext(ctx, responseWriter, requestReader)
 	if p == nil {
 		next.ServeHTTP(w, r)
 		return
 	}
+
 	defer func() {
 		p.Close(responseWriter.closeResponseWriter())
 	}()
 
-	requestReader.Request = p.WrapRequest(requestReader.Request)
+	middlewareHandlerFromProtectionContext(p, next, responseWriter, requestReader)
+}
+
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, next http.Handler, w *responseWriterImpl, r *requestReaderImpl) {
+	r.Request = p.WrapRequest(r.Request)
 
 	if err := p.Before(); err != nil {
 		return
 	}
-	next.ServeHTTP(responseWriter, requestReader.Request)
+	next.ServeHTTP(w, r.Request)
 	if err := p.After(); err != nil {
 		return
 	}

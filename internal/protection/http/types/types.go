@@ -5,6 +5,7 @@
 package types
 
 import (
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +18,8 @@ import (
 )
 
 type RootProtectionContext interface {
+	Context() context.Context
+	CancelContext()
 	SqreenTime() *sqtime.SharedStopWatch
 	DeadlineExceeded(needed time.Duration) (exceeded bool)
 	FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error)

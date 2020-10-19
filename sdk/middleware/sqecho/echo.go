@@ -76,28 +76,39 @@ func Middleware() echo.MiddlewareFunc {
 	internal.Start()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			return middlewareHandler(next, c)
+			ctx, cancel := internal.NewRootHTTPProtectionContext(c.Request().Context())
+			if ctx == nil {
+				return next(c)
+			}
+			defer cancel()
+			return middlewareHandlerFromRootProtectionContext(ctx, next, c)
 		}
 	}
 }
 
-func middlewareHandler(next echo.HandlerFunc, c echo.Context) error {
-	requestReader := &requestReaderImpl{c: c}
-	responseWriter := &responseWriterImpl{c: c}
-
-	req := c.Request()
-
-	p := http_protection.NewProtectionContext(req.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next echo.HandlerFunc, c echo.Context) error {
+	w := &responseWriterImpl{c: c}
+	r := &requestReaderImpl{c: c}
+	p := http_protection.NewProtectionContext(ctx, w, r)
 	if p == nil {
 		return next(c)
 	}
 
 	defer func() {
-		p.Close(responseWriter.closeResponseWriter())
+		p.Close(w.closeResponseWriter())
 	}()
 
-	req = p.WrapRequest(req)
-	c.SetRequest(req)
+	return middlewareHandlerFromProtectionContext(p, next, c)
+}
+
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, next echo.HandlerFunc, c echo.Context) error {
+	c.SetRequest(p.WrapRequest(c.Request()))
 	c.Set(protectioncontext.ContextKey.String, p)
 
 	if err := p.Before(); err != nil {
@@ -109,10 +120,7 @@ func middlewareHandler(next echo.HandlerFunc, c echo.Context) error {
 		// was returned.
 		return err
 	}
-	if err := p.After(); err != nil {
-		return err
-	}
-	return nil
+	return p.After()
 }
 
 type requestReaderImpl struct {

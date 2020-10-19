@@ -14,7 +14,7 @@ import (
 	"net/url"
 	"strconv"
 
-	gingonic "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 	"github.com/sqreen/go-agent/internal"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
@@ -59,26 +59,41 @@ import (
 //		// ... not blocked ...
 //	}
 //
-func Middleware() gingonic.HandlerFunc {
+func Middleware() gin.HandlerFunc {
 	internal.Start()
-	return func(c *gingonic.Context) {
-		middlewareHandler(c)
+	return func(c *gin.Context) {
+		ctx, cancel := internal.NewRootHTTPProtectionContext(c.Request.Context())
+		if ctx == nil {
+			c.Next()
+		}
+		defer cancel()
+		middlewareHandlerFromRootProtectionContext(ctx, c)
 	}
 }
 
-func middlewareHandler(c *gingonic.Context) {
-	requestReader := &requestReaderImpl{c: c}
-	responseWriter := &responseWriterImpl{c: c}
-
-	p := http_protection.NewProtectionContext(c.Request.Context(), internal.NewRootHTTPProtectionContext(), responseWriter, requestReader)
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, c *gin.Context) {
+	w := &responseWriterImpl{c: c}
+	r := &requestReaderImpl{c: c}
+	p := http_protection.NewProtectionContext(ctx, w, r)
 	if p == nil {
 		c.Next()
 		return
 	}
+
 	defer func() {
-		p.Close(responseWriter.closeResponseWriter())
+		p.Close(w.closeResponseWriter())
 	}()
 
+	middlewareHandlerFromProtectionContext(p, c)
+}
+
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, c *gin.Context) {
 	c.Request = p.WrapRequest(c.Request)
 	c.Set(protection_context.ContextKey.String, p)
 
@@ -99,7 +114,7 @@ func middlewareHandler(c *gingonic.Context) {
 }
 
 type requestReaderImpl struct {
-	c         *gingonic.Context
+	c         *gin.Context
 	queryForm url.Values
 }
 
@@ -187,7 +202,7 @@ func (r *requestReaderImpl) RemoteAddr() string {
 }
 
 type responseWriterImpl struct {
-	c      *gingonic.Context
+	c      *gin.Context
 	closed bool
 	// Gin allows overwriting the status field even when it was already done and
 	// sent over the network. It can therefore lead to a status code distinct from
@@ -263,7 +278,10 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// Take the status code we observed, and Gin's if none.
 	status := r.writtenStatus
 	if status == 0 {
-		status = r.c.Writer.Status()
+		// Use Gin's if any
+		if s := r.c.Writer.Status(); s > 0 {
+			status = s
+		}
 	}
 
 	return &observedResponse{

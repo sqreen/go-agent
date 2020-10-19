@@ -5,6 +5,7 @@
 package mockups
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -14,6 +15,20 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 	"github.com/stretchr/testify/mock"
 )
+
+func NewRootHTTPProtectionContextMockup(ctx context.Context, ip string, path string) *RootHTTPProtectionContextMockup {
+	r := &RootHTTPProtectionContextMockup{}
+
+	r.ExpectIsPathAllowed(path).Return(false)
+	r.ExpectIsIPAllowed(ip).Return(false)
+
+	cfg := NewHTTPProtectionConfigMockup()
+	r.ExpectConfig().Return(cfg)
+
+	r.ExpectContext().Return(ctx)
+
+	return r
+}
 
 type RootHTTPProtectionContextMockup struct {
 	mock.Mock
@@ -77,16 +92,34 @@ func (a *RootHTTPProtectionContextMockup) SqreenTime() *sqtime.SharedStopWatch {
 	return v
 }
 
+func (a *RootHTTPProtectionContextMockup) ExpectSqreenTime() *mock.Call {
+	return a.On("SqreenTime")
+}
+
 func (a *RootHTTPProtectionContextMockup) DeadlineExceeded(needed time.Duration) (exceeded bool) {
 	return a.Called(needed).Bool(0)
+}
+
+func (a *RootHTTPProtectionContextMockup) Context() context.Context {
+	c, _ := a.Called().Get(0).(context.Context)
+	return c
+}
+
+func (a *RootHTTPProtectionContextMockup) ExpectContext() *mock.Call {
+	return a.On("Context")
+}
+
+func (a *RootHTTPProtectionContextMockup) CancelContext() {
+	a.Called()
 }
 
 func (a *RootHTTPProtectionContextMockup) Close(closed http_protection_types.ClosedProtectionContextFace) {
 	a.Called(closed)
 }
 
-func (a *RootHTTPProtectionContextMockup) ExpectClose(v interface{}) *mock.Call {
-	return a.On("Close", v)
+func (a *RootHTTPProtectionContextMockup) ExpectClose(v interface{}) {
+	a.ExpectSqreenTime().Return(&sqtime.SharedStopWatch{})
+	a.On("Close", v)
 }
 
 type HTTPProtectionConfigMockup struct {

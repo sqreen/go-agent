@@ -5,6 +5,7 @@
 package internal
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -16,21 +17,27 @@ import (
 
 // Root protection context
 type RootHTTPProtectionContext struct {
+	ctx           context.Context
+	cancel        context.CancelFunc
 	agent         *AgentType
 	sqreenTime    sqtime.SharedStopWatch
 	maxSqreenTime time.Duration
 }
 
-func NewRootHTTPProtectionContext() *RootHTTPProtectionContext {
+func NewRootHTTPProtectionContext(ctx context.Context) (*RootHTTPProtectionContext, context.CancelFunc) {
 	agent := agentInstance.get()
 	if agent == nil || !agent.isRunning() {
-		return nil
+		return nil, nil
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	return &RootHTTPProtectionContext{
+		ctx:           ctx,
+		cancel:        cancel,
 		agent:         agent,
 		maxSqreenTime: agent.performanceBudget,
-	}
+	}, cancel
 }
 
 func (p *RootHTTPProtectionContext) SqreenTime() *sqtime.SharedStopWatch {
@@ -76,6 +83,14 @@ func (p *RootHTTPProtectionContext) IsPathAllowed(path string) (allowed bool) {
 		p.agent.logger.Debugf("request path `%s` found in the passlist and is allowed to pass through Sqreen monitoring and protections", path)
 	}
 	return allowed
+}
+
+func (p *RootHTTPProtectionContext) Context() context.Context {
+	return p.ctx
+}
+
+func (p *RootHTTPProtectionContext) CancelContext() {
+	p.cancel()
 }
 
 func (p *RootHTTPProtectionContext) Close(ctx http_protection_types.ClosedProtectionContextFace) {

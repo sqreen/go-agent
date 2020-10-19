@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/sqreen/go-agent/internal/actor"
@@ -20,7 +19,6 @@ import (
 )
 
 type ProtectionContext struct {
-	context.Context
 	types.RootProtectionContext
 
 	RequestReader  types.RequestReader
@@ -28,16 +26,8 @@ type ProtectionContext struct {
 
 	events event.Record
 
-	cancelHandlerContextFunc   context.CancelFunc
-	contextHandlerCanceledLock sync.RWMutex
-	// We are intentionally not using the Context.Err() method here in order to
-	// be sure it was canceled by a call to CancelHandlerContext(). Using
-	// Context.Err() in order to know this would be also true if for example
-	// the parent context timeouts, in which case we mustn't write the blocking
-	// response.
-	contextHandlerCanceled bool
-	requestReader          *requestReader
-	start                  time.Time
+	requestReader *requestReader
+	start         time.Time
 }
 
 type SecurityResponseStore interface {
@@ -45,28 +35,21 @@ type SecurityResponseStore interface {
 	FindActionByUserID(id map[string]string) (actor.Action, bool)
 }
 
-//func FromContext(ctx context.Context) *ProtectionContext {
-//	c, _ := protection_context.FromContext(ctx).(*ProtectionContext)
-//	return c
-//}
-
-func NewProtectionContext(ctx context.Context, root types.RootProtectionContext, w types.ResponseWriter, r types.RequestReader) *ProtectionContext {
-	if root == nil {
+func NewProtectionContext(ctx types.RootProtectionContext, w types.ResponseWriter, r types.RequestReader) *ProtectionContext {
+	if ctx == nil {
 		return nil
 	}
 
-	if root.IsPathAllowed(r.URL().Path) {
+	if ctx.IsPathAllowed(r.URL().Path) {
 		return nil
 	}
 
-	cfg := root.Config()
+	cfg := ctx.Config()
 	clientIP := ClientIP(r.RemoteAddr(), r.Headers(), cfg.HTTPClientIPHeader(), cfg.HTTPClientIPHeaderFormat())
 
-	if root.IsIPAllowed(clientIP) {
+	if ctx.IsIPAllowed(clientIP) {
 		return nil
 	}
-
-	reqCtx, cancelHandlerContextFunc := context.WithCancel(ctx)
 
 	rr := &requestReader{
 		RequestReader: r,
@@ -75,12 +58,10 @@ func NewProtectionContext(ctx context.Context, root types.RootProtectionContext,
 	}
 
 	p := &ProtectionContext{
-		Context:                  reqCtx,
-		RootProtectionContext:    root,
-		ResponseWriter:           w,
-		RequestReader:            rr,
-		requestReader:            rr,
-		cancelHandlerContextFunc: cancelHandlerContextFunc,
+		RootProtectionContext: ctx,
+		ResponseWriter:        w,
+		RequestReader:         rr,
+		requestReader:         rr,
 	}
 	return p
 }
@@ -182,28 +163,14 @@ func (p *ProtectionContext) After() (err error) {
 
 func (p *ProtectionContext) userSecurityResponse(userID map[string]string) error { return nil }
 
-// CancelHandlerContext cancels the request handler context in order to stop its
-// execution and abort every ongoing operation and goroutine it may be doing.
-// Since the handler should return at some point, the After() protection method
-// will take care of applying the blocking response.
-// This method can be called by multiple goroutines simultaneously.
-func (p *ProtectionContext) CancelHandlerContext() {
-	p.contextHandlerCanceledLock.Lock()
-	defer p.contextHandlerCanceledLock.Unlock()
-	p.cancelHandlerContextFunc()
-	p.contextHandlerCanceled = true
-}
-
 func (p *ProtectionContext) isContextHandlerCanceled() bool {
-	p.contextHandlerCanceledLock.RLock()
-	defer p.contextHandlerCanceledLock.RUnlock()
-	return p.contextHandlerCanceled
+	return p.Context().Err() == context.Canceled
 
 }
 
 func (p *ProtectionContext) HandleAttack(block bool, attack *event.AttackEvent) (blocked bool) {
 	if block {
-		defer p.CancelHandlerContext()
+		defer p.CancelContext()
 		p.WriteDefaultBlockingResponse()
 		blocked = true
 	}
@@ -216,8 +183,6 @@ func (p *ProtectionContext) HandleAttack(block bool, attack *event.AttackEvent) 
 }
 
 func (p *ProtectionContext) Close(response types.ResponseFace) {
-	p.CancelHandlerContext()
-
 	// Compute the request duration
 	duration := time.Since(p.start)
 
@@ -246,12 +211,14 @@ func (p *ProtectionContext) Close(response types.ResponseFace) {
 func (p *ProtectionContext) WriteDefaultBlockingResponse() { /* dynamically instrumented */ }
 
 //go:noinline
-func (p *ProtectionContext) monitorObservedResponse(response types.ResponseFace) { /* dynamically instrumented */ }
+func (p *ProtectionContext) monitorObservedResponse(response types.ResponseFace) {
+	/* dynamically instrumented */
+}
 
 // WrapRequest is a helper method to prepare an http.Request with its
 // new context, the protection context, and a body buffer.
 func (p *ProtectionContext) WrapRequest(r *http.Request) *http.Request {
-	r = r.WithContext(context.WithValue(p, protection_context.ContextKey, p))
+	r = r.WithContext(context.WithValue(r.Context(), protection_context.ContextKey, p))
 	if r.Body != nil {
 		r.Body = p.wrapBody(r.Body)
 	}
