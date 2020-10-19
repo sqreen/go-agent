@@ -5,20 +5,16 @@
 package backend_test
 
 import (
-	"context"
 	"net/http"
 	"os"
-	"testing"
 
 	fuzz "github.com/google/gofuzz"
-	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 	"github.com/sqreen/go-agent/internal/backend"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/plog"
 	"github.com/sqreen/go-agent/tools/testlib"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -26,114 +22,116 @@ var (
 	fuzzer = fuzz.New().Funcs(FuzzStruct, FuzzCommandRequest, FuzzRuleDataValue, FuzzRuleSignature)
 )
 
-func TestClient(t *testing.T) {
-	RegisterTestingT(t)
-
-	t.Run("AppLogin", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-
-		token := testlib.RandHTTPHeaderValue(2, 50)
-		appName := testlib.RandHTTPHeaderValue(2, 50)
-
-		statusCode := http.StatusOK
-
-		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogin
-
-		response := NewRandomAppLoginResponse()
-		request := NewRandomAppLoginRequest()
-
-		headers := http.Header{
-			config.BackendHTTPAPIHeaderToken:   []string{token},
-			config.BackendHTTPAPIHeaderAppName: []string{appName},
-		}
-
-		server := initFakeServer(endpointCfg, request, response, statusCode, headers)
-		defer server.Close()
-
-		client, err := backend.NewClient(server.URL(), "", logger)
-		require.NoError(t, err)
-
-		res, err := client.AppLogin(request, token, appName, false)
-		g.Expect(err).NotTo(HaveOccurred())
-		// A request has been received
-		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
-		g.Expect(res).Should(Equal(response))
-	})
-
-	t.Run("AppBeat", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-
-		statusCode := http.StatusOK
-
-		endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
-
-		response := NewRandomAppBeatResponse()
-		request := NewRandomAppBeatRequest()
-
-		client, server := initFakeServerSession(endpointCfg, request, response, statusCode, nil)
-		defer server.Close()
-
-		res, err := client.AppBeat(context.Background(), request)
-		g.Expect(err).NotTo(HaveOccurred())
-		// A request has been received
-		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
-		g.Expect(res).Should(Equal(response))
-	})
-
-	t.Run("Batch", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-
-		statusCode := http.StatusOK
-
-		endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
-
-		request := NewRandomBatchRequest()
-		t.Logf("%#v", request)
-
-		client, server := initFakeServerSession(endpointCfg, request, nil, statusCode, nil)
-		defer server.Close()
-
-		err := client.Batch(context.Background(), request)
-		g.Expect(err).NotTo(HaveOccurred())
-		// A request has been received
-		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
-	})
-
-	t.Run("ActionsPack", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-
-		statusCode := http.StatusOK
-
-		endpointCfg := &config.BackendHTTPAPIEndpoint.ActionsPack
-
-		response := NewRandomActionsPackResponse()
-
-		client, server := initFakeServerSession(endpointCfg, nil, response, statusCode, nil)
-		defer server.Close()
-
-		res, err := client.ActionsPack()
-		g.Expect(err).NotTo(HaveOccurred())
-		// A request has been received
-		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
-		g.Expect(res).Should(Equal(response))
-	})
-
-	t.Run("AppLogout", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-
-		statusCode := http.StatusOK
-
-		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogout
-
-		client, server := initFakeServerSession(endpointCfg, nil, nil, statusCode, nil)
-		defer server.Close()
-
-		err := client.AppLogout()
-		g.Expect(err).NotTo(HaveOccurred())
-		// A request has been received
-		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
-	})
-}
+// TODO: fuzzing is a mess for such a dynamic API - copy past real-world
+//  examples instead
+//func TestClient(t *testing.T) {
+//	RegisterTestingT(t)
+//
+//	//t.Run("AppLogin", func(t *testing.T) {
+//	//	g := NewGomegaWithT(t)
+//	//
+//	//	token := testlib.RandHTTPHeaderValue(2, 50)
+//	//	appName := testlib.RandHTTPHeaderValue(2, 50)
+//	//
+//	//	statusCode := http.StatusOK
+//	//
+//	//	endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogin
+//	//
+//	//	response := NewRandomAppLoginResponse()
+//	//	request := NewRandomAppLoginRequest()
+//	//
+//	//	headers := http.Header{
+//	//		config.BackendHTTPAPIHeaderToken:   []string{token},
+//	//		config.BackendHTTPAPIHeaderAppName: []string{appName},
+//	//	}
+//	//
+//	//	server := initFakeServer(endpointCfg, request, response, statusCode, headers)
+//	//	defer server.Close()
+//	//
+//	//	client, err := backend.NewClient(server.URL(), "", logger)
+//	//	require.NoError(t, err)
+//	//
+//	//	res, err := client.AppLogin(request, token, appName, false)
+//	//	g.Expect(err).NotTo(HaveOccurred())
+//	//	// A request has been received
+//	//	g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+//	//	g.Expect(res).Should(Equal(response))
+//	//})
+//
+//	//t.Run("AppBeat", func(t *testing.T) {
+//	//	g := NewGomegaWithT(t)
+//	//
+//	//	statusCode := http.StatusOK
+//	//
+//	//	endpointCfg := &config.BackendHTTPAPIEndpoint.AppBeat
+//	//
+//	//	response := NewRandomAppBeatResponse()
+//	//	request := NewRandomAppBeatRequest()
+//	//
+//	//	client, server := initFakeServerSession(endpointCfg, request, response, statusCode, nil)
+//	//	defer server.Close()
+//	//
+//	//	res, err := client.AppBeat(context.Background(), request)
+//	//	g.Expect(err).NotTo(HaveOccurred())
+//	//	// A request has been received
+//	//	g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+//	//	g.Expect(res).Should(Equal(response))
+//	//})
+//
+//	//t.Run("Batch", func(t *testing.T) {
+//	//	g := NewGomegaWithT(t)
+//	//
+//	//	statusCode := http.StatusOK
+//	//
+//	//	endpointCfg := &config.BackendHTTPAPIEndpoint.Batch
+//	//
+//	//	request := NewRandomBatchRequest()
+//	//	t.Logf("%#v", request)
+//	//
+//	//	client, server := initFakeServerSession(endpointCfg, request, nil, statusCode, nil)
+//	//	defer server.Close()
+//	//
+//	//	err := client.Batch(context.Background(), request)
+//	//	g.Expect(err).NotTo(HaveOccurred())
+//	//	// A request has been received
+//	//	g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+//	//})
+//
+//	t.Run("ActionsPack", func(t *testing.T) {
+//		g := NewGomegaWithT(t)
+//
+//		statusCode := http.StatusOK
+//
+//		endpointCfg := &config.BackendHTTPAPIEndpoint.ActionsPack
+//
+//		response := NewRandomActionsPackResponse()
+//
+//		client, server := initFakeServerSession(endpointCfg, nil, response, statusCode, nil)
+//		defer server.Close()
+//
+//		res, err := client.ActionsPack()
+//		g.Expect(err).NotTo(HaveOccurred())
+//		// A request has been received
+//		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+//		g.Expect(res).Should(Equal(response))
+//	})
+//
+//	t.Run("AppLogout", func(t *testing.T) {
+//		g := NewGomegaWithT(t)
+//
+//		statusCode := http.StatusOK
+//
+//		endpointCfg := &config.BackendHTTPAPIEndpoint.AppLogout
+//
+//		client, server := initFakeServerSession(endpointCfg, nil, nil, statusCode, nil)
+//		defer server.Close()
+//
+//		err := client.AppLogout()
+//		g.Expect(err).NotTo(HaveOccurred())
+//		// A request has been received
+//		g.Expect(len(server.ReceivedRequests())).ToNot(Equal(0))
+//	})
+//}
 
 func initFakeServer(endpointCfg *config.HTTPAPIEndpoint, request, response interface{}, statusCode int, headers http.Header) *ghttp.Server {
 	handlers := []http.HandlerFunc{

@@ -356,7 +356,7 @@ func (this *AppLoginResponse) GetFeatures() api.AppLoginResponse_Feature {
 }
 
 func (this *AppLoginResponse) GetPackId() string {
-	return this.PackId
+	return this.PackID
 }
 
 type AppLoginResponse_Feature api.AppLoginResponse_Feature
