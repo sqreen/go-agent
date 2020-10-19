@@ -18,7 +18,7 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
-func NewReflectedCallbackBindingAccessorContext(capabilities []string, c CallbackContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
+func NewReflectedCallbackBindingAccessorContext(capabilities []string, p callback_types.ProtectionContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
 	var ctx = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
@@ -29,7 +29,7 @@ func NewReflectedCallbackBindingAccessorContext(capabilities []string, c Callbac
 		case "func":
 			ctx.Func = NewFunctionBindingAccessorContext(args, res)
 		case "request":
-			baCtx, err := NewRequestBindingAccessorContext(c.ProtectionContext())
+			baCtx, err := NewRequestBindingAccessorContext(p)
 			if err != nil {
 				return nil, sqerrors.Wrapf(err, "could not create the request binding accessor context")
 			}

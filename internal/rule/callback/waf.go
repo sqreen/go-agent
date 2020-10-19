@@ -301,7 +301,7 @@ func makeFunctionWAFPrologCallback(r RuleContext, wafRule waf_types.Rule, bindin
 }
 
 func runFunctionWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waf_types.Rule, timeout time.Duration, extraParamAccessors functionWAFBindingAccessorMap, strategy *api.ReflectedCallbackConfig, params []reflect.Value, results []reflect.Value) (blocked bool, err error) {
-	baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c, params, results, nil)
+	baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, results, nil)
 	if err != nil {
 		err = sqerrors.Wrap(err, "unexpected error while creating the binding accessor context")
 		return false, err

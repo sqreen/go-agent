@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/sqreen/go-agent/internal/binding-accessor"
-	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/rule/callback"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +20,6 @@ import (
 func TestBindingAccessor(t *testing.T) {
 	type NewContextArgs struct {
 		Args, Res []reflect.Value
-		Req       types.RequestReader
 		Values    interface{}
 	}
 
@@ -231,7 +229,7 @@ func TestBindingAccessor(t *testing.T) {
 		} {
 			tc := tc
 			t.Run(tc.Name, func(t *testing.T) {
-				ctx, err := callback.NewReflectedCallbackBindingAccessorContext(tc.Capabilities, tc.NewContextArgs.Req, tc.NewContextArgs.Args, tc.NewContextArgs.Res, tc.NewContextArgs.Values)
+				ctx, err := callback.NewReflectedCallbackBindingAccessorContext(tc.Capabilities, nil, tc.NewContextArgs.Args, tc.NewContextArgs.Res, tc.NewContextArgs.Values)
 				require.NoError(t, err)
 
 				for _, tc := range tc.TestCases {

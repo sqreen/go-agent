@@ -16,6 +16,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/metrics"
@@ -86,7 +87,7 @@ func TestEngineUsage(t *testing.T) {
 	t.Run("empty state", func(t *testing.T) {
 		instrumentation := &instrumentationMockup{}
 		defer instrumentation.AssertExpectations(t)
-		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 
 		// No problem using the engine without rules
 		require.Empty(t, engine.PackID())
@@ -164,7 +165,7 @@ func TestEngineUsage(t *testing.T) {
 			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
 			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
 
-			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 			engine.Disable()
 			engine.SetRules("yet another pack id", rules)
 		})
@@ -184,7 +185,7 @@ func TestEngineUsage(t *testing.T) {
 			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
 			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
 
-			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 			engine.SetRules("my pack id", rules)
 			// Enable the rules: callbacks should be attached
 			engine.Enable()
@@ -195,7 +196,7 @@ func TestEngineUsage(t *testing.T) {
 			hook1 := &hookMockup{}
 			hook2 := &hookMockup{}
 
-			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
 			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
 			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
@@ -222,7 +223,7 @@ func TestEngineUsage(t *testing.T) {
 			hook1 := &hookMockup{}
 			hook2 := &hookMockup{}
 
-			engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+			engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
 			instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func2")).Return(hook2, nil).Twice()
 			instrumentation.ExpectFind("main.main").Return(rule.HookFace(nil), nil).Once()
@@ -323,7 +324,7 @@ func TestEngineUsage(t *testing.T) {
 		hook2 := &hookMockup{}
 		hook3 := &hookMockup{}
 
-		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 		engine.Enable()
 
 		instrumentation.ExpectFind(fmt.Sprintf("%s.%s", thisPkgPath, "func1")).Return(hook1, nil).Once()
@@ -402,7 +403,7 @@ func TestEngineUsage(t *testing.T) {
 		hook1 := &hookMockup{}
 		hook2 := &hookMockup{}
 
-		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 		engine.Enable()
 
 		instrumentation.ExpectFind(thisPkgPath+".func1").Return(hook1, nil).Once()
@@ -429,7 +430,7 @@ func TestEngineUsage(t *testing.T) {
 		instrumentation := &instrumentationMockup{}
 		hook1 := &hookMockup{}
 
-		engine := rule.NewEngine(logger, instrumentation, metrics, nil, publicKey)
+		engine := rule.NewEngine(logger, instrumentation, metrics, publicKey, 1, 1, time.Minute)
 		engine.Enable()
 
 		// Set rules having signature errors

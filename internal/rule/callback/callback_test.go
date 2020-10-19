@@ -6,9 +6,11 @@ package callback_test
 
 import (
 	"net"
+	"time"
 
-	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
+	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/internal/rule/callback/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 	"github.com/stretchr/testify/mock"
 )
@@ -57,8 +59,9 @@ type CallbackContextMockup struct {
 	mock.Mock
 }
 
-func (c *CallbackContextMockup) ProtectionContext() protectioncontext.ProtectionContext {
-	return c.Called().Get(0).(protectioncontext.ProtectionContext)
+func (c *CallbackContextMockup) ProtectionContext() types.ProtectionContext {
+	v, _ := c.Called().Get(0).(types.ProtectionContext)
+	return v
 }
 
 func (c *CallbackContextMockup) ExpectProtectionContext() *mock.Call {
@@ -85,6 +88,8 @@ type ProtectionContextMockup struct {
 	mock.Mock
 }
 
+var _ types.ProtectionContext = (*ProtectionContextMockup)(nil)
+
 func (p *ProtectionContextMockup) AddRequestParam(name string, v interface{}) {
 	p.Called(name, v)
 }
@@ -93,7 +98,7 @@ func (p *ProtectionContextMockup) ExpectAddRequestParam(name string, v interface
 	return p.On("AddRequestParam", name, v)
 }
 
-func (p *ProtectionContextMockup) HandleAttack(block bool, attack interface{}) (blocked bool) {
+func (p *ProtectionContextMockup) HandleAttack(block bool, attack *event.AttackEvent) (blocked bool) {
 	return p.Called(block, attack).Bool(0)
 }
 
@@ -115,4 +120,12 @@ func (p *ProtectionContextMockup) SqreenTime() *sqtime.SharedStopWatch {
 
 func (p *ProtectionContextMockup) ExpectSqreenTime() *mock.Call {
 	return p.On("SqreenTime")
+}
+
+func (p *ProtectionContextMockup) DeadlineExceeded(needed time.Duration) (exceeded bool) {
+	return p.Called(needed).Bool(0)
+}
+
+func (p *ProtectionContextMockup) ExpectDeadlineExceeded() *mock.Call {
+	return p.On("DeadlineExceeded")
 }

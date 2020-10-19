@@ -33,7 +33,7 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 
 		if vm.hasPre() {
 			r.Pre(func(c CallbackContext) {
-				baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c, params, nil, cfg.Data())
+				baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, nil, cfg.Data())
 				if err != nil {
 					c.Logger().Error(err)
 					return
@@ -73,7 +73,7 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 		if vm.hasPost() {
 			epilogFunc = func(results []reflect.Value) {
 				r.Post(func(c CallbackContext) {
-					baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c, params, results, cfg.Data())
+					baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, results, cfg.Data())
 					if err != nil {
 						c.Logger().Error(err)
 						return
