@@ -5,7 +5,6 @@
 package http
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -132,6 +131,46 @@ func (r *RequestReaderMockup) Params() types.RequestParamMap {
 	return v
 }
 
+func (r *RequestReaderMockup) ExpectMethod() *mock.Call {
+	return r.On("Method")
+}
+
+func (r *RequestReaderMockup) ExpectRequestURI() *mock.Call {
+	return r.On("RequestURI")
+}
+
+func (r *RequestReaderMockup) ExpectHost() *mock.Call {
+	return r.On("Host")
+}
+
+func (r *RequestReaderMockup) ExpectIsTLS() *mock.Call {
+	return r.On("IsTLS")
+}
+
+func (r *RequestReaderMockup) ExpectUserAgent() *mock.Call {
+	return r.On("UserAgent")
+}
+
+func (r *RequestReaderMockup) ExpectReferer() *mock.Call {
+	return r.On("Referer")
+}
+
+func (r *RequestReaderMockup) ExpectQueryForm() *mock.Call {
+	return r.On("QueryForm")
+}
+
+func (r *RequestReaderMockup) ExpectPostForm() *mock.Call {
+	return r.On("PostForm")
+}
+
+func (r *RequestReaderMockup) ExpectParams() *mock.Call {
+	return r.On("Params")
+}
+
+func (r *RequestReaderMockup) ExpectBody() *mock.Call {
+	return r.On("Body")
+}
+
 type ResponseMockup struct {
 	mock.Mock
 }
@@ -140,12 +179,24 @@ func (r *ResponseMockup) Status() int {
 	return r.Called().Int(0)
 }
 
+func (r *ResponseMockup) ExpectStatus() *mock.Call {
+	return r.On("Status")
+}
+
 func (r *ResponseMockup) ContentType() string {
 	return r.Called().String(0)
 }
 
+func (r *ResponseMockup) ExpectContentType() *mock.Call {
+	return r.On("ContentType")
+}
+
 func (r *ResponseMockup) ContentLength() int64 {
 	return r.Called().Get(0).(int64)
+}
+
+func (r *ResponseMockup) ExpectContentLength() *mock.Call {
+	return r.On("ContentLength")
 }
 
 func TestProtectionAPI(t *testing.T) {
@@ -186,7 +237,7 @@ func TestProtectionAPI(t *testing.T) {
 			defer cfg.AssertExpectations(t)
 			defer req.AssertExpectations(t)
 			defer w.AssertExpectations(t)
-			p := NewProtectionContext(context.Background(), r, w, req)
+			p := NewProtectionContext(r, w, req)
 			require.Nil(t, p)
 		})
 
@@ -196,7 +247,7 @@ func TestProtectionAPI(t *testing.T) {
 			defer cfg.AssertExpectations(t)
 			defer req.AssertExpectations(t)
 			defer w.AssertExpectations(t)
-			p := NewProtectionContext(context.Background(), r, w, req)
+			p := NewProtectionContext(r, w, req)
 			require.Nil(t, p)
 		})
 
@@ -208,7 +259,7 @@ func TestProtectionAPI(t *testing.T) {
 			defer req.AssertExpectations(t)
 			defer w.AssertExpectations(t)
 
-			p := NewProtectionContext(context.Background(), r, w, req)
+			p := NewProtectionContext(r, w, req)
 			require.NotNil(t, p)
 		})
 	})
@@ -216,19 +267,18 @@ func TestProtectionAPI(t *testing.T) {
 	t.Run("nil root context", func(t *testing.T) {
 		w := &ResponseWriterMockup{}
 		req := &RequestReaderMockup{}
-		p := NewProtectionContext(context.Background(), nil, w, req)
+		p := NewProtectionContext(nil, w, req)
 		require.Nil(t, p)
 	})
 
 	t.Run("protection/callback api", func(t *testing.T) {
 		ip := net.ParseIP("1.2.3.4")
 		r, cfg, req, w := newMockups(t, ip, false, false)
-		defer r.AssertExpectations(t)
 		defer cfg.AssertExpectations(t)
 		defer req.AssertExpectations(t)
 		defer w.AssertExpectations(t)
 
-		p := NewProtectionContext(context.Background(), r, w, req)
+		p := NewProtectionContext(r, w, req)
 		require.NotNil(t, p)
 
 		require.Equal(t, ip, p.ClientIP())
@@ -236,25 +286,47 @@ func TestProtectionAPI(t *testing.T) {
 		// Handle a non-blocking attack
 		blocked := p.HandleAttack(false, &event.AttackEvent{})
 		require.False(t, blocked)
-		// The context shouldn't be closed
-		require.False(t, p.isContextHandlerCanceled())
-		require.Nil(t, p.Context.Err())
+		r.AssertExpectations(t)
 
 		// Handle a blocking attack
+		r.ExpectCancelContext().Once() // the context should be closed
 		blocked = p.HandleAttack(true, &event.AttackEvent{})
 		require.True(t, blocked)
-		// The context shouldn't be closed
-		require.True(t, p.isContextHandlerCanceled())
-		require.Equal(t, context.Canceled, p.Context.Err())
+		r.AssertExpectations(t)
 
-		// TODO: check the close() behaviour
-		//response := &ResponseMockup{}
-		//r.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
-		//	//events := closed.Events()
-		//	//require.Equal(t, events.AttackEvents)
-		//	return true
-		//})).Once()
-		//p.Close(response)
+		// Handle a blocking attack without logging an attack
+		r.ExpectCancelContext().Once() // the context should be closed
+		blocked = p.HandleAttack(true, nil)
+		require.True(t, blocked)
+		r.AssertExpectations(t)
+
+		// Fake response
+		response := &ResponseMockup{}
+		response.ExpectStatus().Return(433)
+		response.ExpectContentType().Return("sqreen/test")
+		response.ExpectContentLength().Return(int64(4321))
+
+		// Fake request
+		req.ExpectMethod().Return("GET")
+		u, _ := url.Parse("http://test.com/")
+		req.ExpectURL().Return(u)
+		req.ExpectRequestURI().Return(u.RequestURI())
+		req.ExpectHost().Return(u.Host)
+		req.ExpectIsTLS().Return(false)
+		req.ExpectUserAgent().Return("ua")
+		req.ExpectReferer().Return("referer")
+		req.ExpectQueryForm().Return(nil)
+		req.ExpectPostForm().Return(nil)
+		req.ExpectParams().Return(nil)
+
+		// Close the protection context
+		r.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+			events := closed.Events()
+			require.Len(t, events.AttackEvents, 2)
+			return true
+		}))
+		p.Close(response)
+		r.AssertExpectations(t)
 	})
 }
 

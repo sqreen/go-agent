@@ -113,6 +113,10 @@ func (a *RootHTTPProtectionContextMockup) CancelContext() {
 	a.Called()
 }
 
+func (a *RootHTTPProtectionContextMockup) ExpectCancelContext() *mock.Call {
+	return a.On("CancelContext")
+}
+
 func (a *RootHTTPProtectionContextMockup) Close(closed http_protection_types.ClosedProtectionContextFace) {
 	a.Called(closed)
 }
