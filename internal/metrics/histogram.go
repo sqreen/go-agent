@@ -16,10 +16,12 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 )
 
-// TimeHistogram is a metrics store optimized for write accesses to already existing
-// keys (cf. Add). It has a period of time after which the data is considered
-// ready to be retrieved. An empty store is never considered ready and the
-// deadline is computed when the first value is inserted.
+// TimeHistogram is a metrics store optimized for write accesses to already
+// existing keys. The data is stored per time bucket according to the current
+// time and the configured time period. Time buckets are simply the current time
+// aligned on the period (eg. period 1' implies time buckets 0', 1', 2', etc.).
+// A TimeHistogram is ready as soon as it stores data and at least its period
+// has passed.
 type TimeHistogram struct {
 	// Map of time buckets to a pointer to a sync.Map of comparable types to
 	// int64 pointers.
@@ -48,8 +50,7 @@ func NewTimeHistogram(period time.Duration, maxLen uint) *TimeHistogram {
 }
 
 // Add delta to the given key, inserting it if it doesn't exist. This method
-// is thread-safe and optimized for updating existing key which is lock-free
-// when not concurrently retrieving (method `Flush()`) or inserting a new key.
+// is thread-safe and optimized for updating existing keys.
 func (s *TimeHistogram) Add(key interface{}, delta int64) error {
 	// Avoid panic-ing by checking the key type is not nil and comparable.
 	if key == nil {
@@ -212,6 +213,9 @@ func (s *ReadyTimeHistogram) Metrics() ReadyStoreMap {
 	return s.set
 }
 
+// PerfHistogram is a performance monitoring histogram storing performance
+// metrics per time and per "performance bucket". It is based on a
+// TimeHistogram storing those performance buckets.
 type PerfHistogram struct {
 	unit, base float64
 	invLogBase float64

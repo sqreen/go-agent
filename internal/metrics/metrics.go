@@ -5,19 +5,18 @@
 //sqreen:ignore
 
 // Package metrics provides shared metrics stores. A metrics store is a
-// key/value store with a given time period after which the data is considered
-// ready. This package provides an implementation optimized for writes updating
-// already existing keys: lots of goroutines updating a smaller set of keys.
+// key/value store over time. This package provides an implementation optimized
+// for writes updating already existing keys: lots of goroutines updating a
+// smaller set of keys (eg. HTTP status code monitoring, and performance
+// monitoring).
 // The metrics engine allows to create and register new metrics stores that a
-// single reader (Sqreen's agent) can concurrently read. Read and write
-// operations and mutually exclusive - slow polling is better for aggregating
-// more data while not blocking the writers too often.
+// single reader (Sqreen's agent) can concurrently read.
 //
 // Main requirements:
 //
 // - Loss-less kv-stores.
-// - Near zero time impact on the hot path (updates): no need to switch to
-//   another goroutines, no blocking locks.
+// - Optimized for updates so that it doesn't require to switch to another
+//   goroutine, no blocking locks, etc.
 //
 // Design decisions:
 //
@@ -25,28 +24,19 @@
 // sleeping until the period was passed. The major issue was the case when
 // the channels were full, with the choice of either blocking the sending
 // goroutine, or dropping the data to avoid blocking it.
-// This design is now considered not suitable for metrics as they happen at a
-// too frequently to go through a channel. A channel indeed needs at least one
+// This design is now considered not suitable for metrics as they happen too
+// frequently to go through a channel. A channel indeed needs at least one
 // extra reader goroutine that would require too much CPU time to aggregate
-// all the metrics values.
-//
-// Metrics store operations, insertions and updates of integer values, are
-// therefore considered shorter than any "pure-Go" approach with channels and
-// so on. The main challenge here comes from the map whose index cannot be
-// modified concurrently. So the idea is to use a RWLock it in order to
-// mutually exclude the insertions of new values, updates of existing values and
-// retrieval of expired values.
-// The hot path being updates of existing values, the Add() method first tries
-// to only RLock the store in order to avoid locking every other
-// updating-goroutine. The value being a uint64, it can be atomically updated
-// without using an lock for the value.
+// all the metrics values, but a channel also involves too many heavy
+// synchronisation compared to the simpler atomic operations we need.
 //
 // The metrics stores and engine provide a polling interface to retrieve stores
 // whose period are passed. No goroutine is started to automatically swap the
 // stores. This is due to the fact that metrics are sent by the Sqreen agent
-// only during the heartbeat; it can therefore check for expired stores.
-// Metrics stores can therefore be longer than their period and will actually
-// last until they are flushed by the reader goroutine.
+// only during the heartbeat; it can therefore check for expired stores itself
+// when necessary. Note that the data is strictly stored per
+// "time period bucket" so that the observed time lapse is strictly the
+// configured period, as expected by Sqreen's backend.
 package metrics
 
 import (
