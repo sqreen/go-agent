@@ -17,6 +17,7 @@ import (
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
+	"github.com/sqreen/go-agent/sdk/types"
 )
 
 // Event names
@@ -52,7 +53,7 @@ func newIPSecurityResponsePrologCallback(r RuleContext) http_protection.Blocking
 
 			epilog = func(e *error) {
 				writeIPSecurityResponse(ctx, action, ip)
-				*e = securityResponseError{}
+				*e = types.SqreenError{Err: securityResponseError{}}
 			}
 			prologErr = nil
 		})
@@ -95,7 +96,7 @@ func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.Identi
 
 			epilog = func(e *error) {
 				writeUserSecurityResponse(ctx, action, id)
-				*e = securityResponseError{}
+				*e = types.SqreenError{Err: securityResponseError{}}
 			}
 			prologErr = nil
 		})
@@ -108,16 +109,16 @@ func writeUserSecurityResponse(ctx *http_protection.ProtectionContext, action ac
 	// Since this call happens in the handler, we need to close its context
 	// which also let know the HTTP protection layer that it shouldn't continue
 	// with post-handler protections.
-	defer ctx.CancelHandlerContext()
 	var properties protection_context.EventProperties
 	if redirect, ok := action.(actor.RedirectAction); ok {
+		ctx.HandleAttack(false, nil)
 		properties = newRedirectedUserEventProperties(redirect, userID)
 		ctx.TrackEvent(redirectUserEventName).WithProperties(properties)
 		writeRedirectionResponse(ctx.ResponseWriter, redirect.RedirectionURL())
 	} else {
 		properties = newBlockedUserEventProperties(action, userID)
 		ctx.TrackEvent(blockUserEventName).WithProperties(properties)
-		ctx.WriteDefaultBlockingResponse()
+		ctx.HandleAttack(true, nil)
 	}
 }
 
