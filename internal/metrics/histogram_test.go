@@ -66,6 +66,61 @@ func TestTimeHistogram(t *testing.T) {
 			require.False(t, store.Ready())
 		})
 
+		t.Run("Flush", func(t *testing.T) {
+			period := MinTestPeriod
+			store := metrics.NewTimeHistogram(period, MaxStoreLen)
+
+			test1StartedAt := time.Now()
+
+			store.Add("k1", 1)
+			time.Sleep(period)
+			require.True(t, store.Ready())
+
+			// Add new values after the period, meaning they will go in another time
+			// bucket than the previous k1
+			store.Add("k2", 2)
+			store.Add("k1", 1)
+
+			// Flush the store to see if the ongoing bucket is correctly handled
+			ready1 := store.Flush()
+			test1FinishedAt := time.Now()
+			require.NotEmpty(t, ready1)
+
+			// Add new values that should go into the current bucket
+			store.Add("k2", 3)
+			store.Add("k3", 3)
+
+			// Wait until it becomes ready
+			time.Sleep(period)
+			require.True(t, store.Ready())
+
+			ready2 := store.Flush()
+			test2FinishedAt := time.Now()
+			require.NotEmpty(t, ready1)
+
+			checkTimeHistogram(
+				t,
+				period,
+				test1StartedAt,
+				test1FinishedAt,
+				metrics.ReadyStoreMap{
+					"k1": 1,
+				},
+				ready1)
+
+			checkTimeHistogram(
+				t,
+				period,
+				test1FinishedAt,
+				test2FinishedAt,
+				metrics.ReadyStoreMap{
+					"k1": 1,
+					"k2": 5,
+					"k3": 3,
+				},
+				ready2)
+		})
+
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
@@ -856,7 +911,7 @@ func checkTimeHistogram(t *testing.T, period time.Duration, expectedMinStart, ex
 	prevStoreFinish := expectedMinStart
 	for _, ready := range actualMetrics {
 		start := ready.Start()
-		require.True(t, prevStoreFinish.Before(start) || prevStoreFinish.Equal(start))
+		require.True(t, prevStoreFinish.Before(start) || prevStoreFinish.Equal(start), fmt.Sprint(prevStoreFinish, start))
 
 		for k, v := range ready.Metrics() {
 			sum[k] += v
@@ -866,7 +921,7 @@ func checkTimeHistogram(t *testing.T, period time.Duration, expectedMinStart, ex
 	}
 	require.True(t, prevStoreFinish.Before(expectedMaxFinish) || prevStoreFinish.Equal(expectedMaxFinish))
 
-	require.Len(t, expectedMetrics, len(sum))
+	require.Len(t, sum, len(expectedMetrics))
 
 	for k, v := range sum {
 		require.Equal(t, expectedMetrics[k], v)

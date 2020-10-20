@@ -106,14 +106,17 @@ func (s *TimeHistogram) add(key interface{}, delta int64) (uint64, error) {
 // held. It should be used when the store is `Ready()`. This method is
 // thead-safe.
 func (s *TimeHistogram) Flush() (ready []ReadyStore) {
+	start, buckets := s.flush()
+	return makeReadyTimeHistogram(start, s.period, buckets)
+}
+
+func (s *TimeHistogram) flush() (start time.Time, buckets sync.Map) {
 	// Exclusively lock the store in order to get the values and replace it.
 	// No one else can be adding new data into the store
 	s.flushLock.Lock()
-	_, start, buckets := s.flushUnsafe()
-	// Unlock the store which is ready to be used again by concurrent goroutines.
-	s.flushLock.Unlock()
-
-	return makeReadyTimeHistogram(start, s.period, buckets)
+	defer s.flushLock.Unlock()
+	_, start, buckets = s.flushUnsafe()
+	return start, buckets
 }
 
 func (s *TimeHistogram) flushUnsafe() (ongoing uint64, start time.Time, buckets sync.Map) {
@@ -137,6 +140,7 @@ func (s *TimeHistogram) flushUnsafe() (ongoing uint64, start time.Time, buckets 
 		// The current bucket is ongoing: set the start time and bucket list
 		// accordingly.
 		s.start = start.Add(time.Duration(bucket) * s.period)
+		bucket = 0
 		s.buckets.Store(bucket, ongoingBucket)
 		ongoing = bucket
 	} else {
@@ -183,7 +187,6 @@ func (s *TimeHistogram) Ready() bool {
 	s.flushLock.RLock()
 	defer s.flushLock.RUnlock()
 	return !s.start.IsZero() && time.Since(s.start) >= s.period
-	//return !s.deadline.IsZero() && time.Now().After(s.deadline)
 }
 
 func (s *TimeHistogram) bucket() uint64 {
@@ -345,23 +348,15 @@ func (s *PerfHistogram) flush() (start time.Time, timeBuckets, maxValuesTimeBuck
 	ongoing, start, timeBuckets := s.timeHistogram.flushUnsafe()
 	maxValuesTimeBucket = s.maxValues
 
-	s.maxValues = sync.Map{}
 	if ongoing > 0 {
-		// TODO: period 1' - add 10000 + flush + add 100 -> test prochain flush doit donner 10000
 		v, ok := maxValuesTimeBucket.Load(ongoing)
 		sqassert.True(ok)
 		maxValuesTimeBucket.Delete(ongoing)
-		s.maxValues.Store(ongoing, v)
+
+		s.maxValues.Store(0, v)
 	}
 
-	//maxValues = map[uint64]float64{}
-	//timeBuckets.Range(func(k, _ interface{}) bool {
-	//	v, ok := s.maxValues.Load(k)
-	//	sqassert.True(ok)
-	//	// No need for atomic load of v as we are in the exclusive lock section
-	//	maxValues[k.(uint64)] = math.Float64frombits(*v.(*uint64))
-	//	return true
-	//})
+	s.maxValues = sync.Map{}
 
 	return start, timeBuckets, maxValuesTimeBucket
 }
