@@ -15,17 +15,74 @@ import (
 
 func TestSharedStopWatch(t *testing.T) {
 	t.Run("single", func(t *testing.T) {
-		var watch sqtime.SharedStopWatch
-		watch.Start()
+		watch := sqtime.NewSharedStopWatch()
+
+		// Watch 1: single start/stop
+		w1 := watch.Start()
+		time.Sleep(time.Millisecond)
+		expectedDuration := time.Millisecond
+		dt := w1.Stop()
+		require.GreaterOrEqual(t, int64(dt), int64(time.Millisecond))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedDuration))
+
+		// Watch 2: single start/stop
+		w2 := watch.Start()
+		time.Sleep(time.Millisecond)
+		expectedDuration += time.Millisecond
+		dt = w2.Stop()
+		require.GreaterOrEqual(t, int64(dt), int64(time.Millisecond))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedDuration))
+
+		// Interleaved stopwatches
+		// The global duration only increases when every local stop watch is stopped
+		globalDuration := watch.Duration()
+
+		// Watch 3: interleaved start/stop
+		w3 := watch.Start()
+
+		time.Sleep(5 * time.Millisecond)
+		expectedDuration += 5 * time.Millisecond
+
+		// Watch 4: interleaved start/stop, stopped before watch 5
+		w4 := watch.Start()
+
+		// Watch 5:interleaved start/stop, stopped last
+		w5 := watch.Start()
+
+		time.Sleep(5 * time.Millisecond)
+		expectedDuration += 5 * time.Millisecond
+
+		dt = w4.Stop()
+		require.GreaterOrEqual(t, int64(dt), int64(5*time.Millisecond))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(globalDuration))
+
+		time.Sleep(5 * time.Millisecond)
+		expectedDuration += 5 * time.Millisecond
+		dt = w3.Stop()
+		require.GreaterOrEqual(t, int64(dt), int64(2*5*time.Millisecond))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(globalDuration))
+
+		dt = w5.Stop()
+		require.GreaterOrEqual(t, int64(dt), int64(2*5*time.Millisecond))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedDuration))
+	})
+
+	t.Run("api checks", func(t *testing.T) {
+		watch := sqtime.NewSharedStopWatch()
+		local := watch.Start()
 		time.Sleep(time.Microsecond)
-		watch.Stop()
+		dt := local.Stop()
+		require.GreaterOrEqual(t, int64(dt), int64(time.Microsecond))
 		require.GreaterOrEqual(t, int64(watch.Duration()), int64(time.Microsecond))
+
+		dt2 := local.Stop()
+		require.Equal(t, dt, dt2)
 	})
 
 	t.Run("shared", func(t *testing.T) {
 		var (
-			watch        sqtime.SharedStopWatch
-			nbGoroutines = 1000
+			watch        = sqtime.NewSharedStopWatch()
+			nbGoroutines = 8000
 			startBarrier sync.WaitGroup
 			doneBarrier  sync.WaitGroup
 		)
@@ -37,9 +94,14 @@ func TestSharedStopWatch(t *testing.T) {
 			go func() {
 				startBarrier.Wait()
 
-				watch.Start()
+				local := watch.Start()
 				time.Sleep(time.Microsecond)
-				watch.Stop()
+				dt := local.Stop()
+
+				// Avoid using testify assertion helpers to have a faster execution
+				if dt < time.Microsecond {
+					t.Fatalf("local duration is smaller than the sleep time `%s`", dt)
+				}
 
 				doneBarrier.Done()
 			}()

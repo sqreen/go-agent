@@ -20,7 +20,7 @@ type RootHTTPProtectionContext struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	agent         *AgentType
-	sqreenTime    sqtime.SharedStopWatch
+	sqreenTime    *sqtime.SharedStopWatch
 	maxSqreenTime time.Duration
 }
 
@@ -37,11 +37,12 @@ func NewRootHTTPProtectionContext(ctx context.Context) (*RootHTTPProtectionConte
 		cancel:        cancel,
 		agent:         agent,
 		maxSqreenTime: agent.performanceBudget,
+		sqreenTime:    sqtime.NewSharedStopWatch(),
 	}, cancel
 }
 
 func (p *RootHTTPProtectionContext) SqreenTime() *sqtime.SharedStopWatch {
-	return &p.sqreenTime
+	return p.sqreenTime
 }
 
 func (p *RootHTTPProtectionContext) DeadlineExceeded(needed time.Duration) (exceeded bool) {

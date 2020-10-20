@@ -122,7 +122,7 @@ func (a *RootHTTPProtectionContextMockup) Close(closed http_protection_types.Clo
 }
 
 func (a *RootHTTPProtectionContextMockup) ExpectClose(v interface{}) {
-	a.ExpectSqreenTime().Return(&sqtime.SharedStopWatch{})
+	a.ExpectSqreenTime().Return(sqtime.NewSharedStopWatch())
 	a.On("Close", v)
 }
 

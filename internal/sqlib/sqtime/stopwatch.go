@@ -13,77 +13,75 @@ import (
 type (
 	SharedStopWatch struct {
 		lock        sync.RWMutex
+		zeroT       time.Time
 		ongoing     int32
-		oldestStart time.Time
+		oldestStart time.Duration
 		duration    time.Duration
 	}
 
 	LocalStopWatch struct {
-		s                   *SharedStopWatch
-		durationWhenStarted time.Duration
+		s           *SharedStopWatch
+		start, stop time.Duration
 	}
 )
 
-func (s *SharedStopWatch) Start() (ls LocalStopWatch) {
-	ls = LocalStopWatch{s: s}
+func NewSharedStopWatch() *SharedStopWatch {
+	return &SharedStopWatch{
+		zeroT:       time.Now(),
+		oldestStart: -1,
+	}
+}
 
-	if s.updateOngoingCount(1) > 1 {
-		// Hot path: the stopwatch is started
-		// Set the duration since the first start time
-		s.lock.RLock()
-		ls.durationWhenStarted = time.Since(s.oldestStart)
-		s.lock.RUnlock()
+func (s *SharedStopWatch) Start() (ls LocalStopWatch) {
+	ls = LocalStopWatch{
+		s:     s,
+		start: time.Since(s.zeroT),
+		stop:  -1,
+	}
+
+	if atomic.AddInt32(&s.ongoing, 1) > 1 {
 		return
 	}
 
-	// Slow path: the stopwatch is not started and we need to exclusively lock it
-	// to save the current time.
+	// Exclusively lock the watch to enforce the coherency of oldestStart's value
+	// with method Stop()
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// Exclusive lock acquired: check if we really are the first.
-	if s.oldestStart.IsZero() {
-		// We are the first one getting the lock and so we can set the start time
-		s.oldestStart = time.Now()
-		return ls // durationWhenStarted is 0
+	// Check if we really are the first one
+	if s.oldestStart == -1 {
+		// Set oldestStart to now
+		s.oldestStart = ls.start
 	}
 
-	// We are not the first one getting the lock
-	ls.durationWhenStarted = time.Since(s.oldestStart)
-	return ls
+	return
 }
 
-func (ls *LocalStopWatch) Stop() time.Duration {
+func (ls *LocalStopWatch) Stop() (dt time.Duration) {
+	if ls.stop != -1 {
+		// Already stopped
+		return ls.stop - ls.start
+	}
+
 	s := ls.s
+	ls.stop = time.Since(s.zeroT)
 
-	if s.updateOngoingCount(-1) >= 1 {
-		// Hot path: the stopwatch is still ongoing
-		// Return the duration of the  since the first start time
-		s.lock.RLock()
-		dt := time.Since(s.oldestStart) - ls.durationWhenStarted
-		s.lock.RUnlock()
-		return dt
+	if atomic.AddInt32(&s.ongoing, -1) == 0 {
+		// Exclusively lock the watch to enforce the coherency of oldestStart's
+		// value with method Start()
+		s.lock.Lock()
+		defer s.lock.Unlock()
+
+		// Check if we really are the last one
+		if s.oldestStart != -1 {
+			// Update the global duration
+			s.duration += time.Since(s.zeroT) - s.oldestStart
+			// Reset oldestStart
+			s.oldestStart = -1
+		}
 	}
 
-	// The ongoing counter is back to 0 - every stopwatch was stopped so we can
-	// reset the first oldest start time to zero and update the overall stopwatch
-	// duration
-	s.lock.Lock()
-	oldestStart := s.oldestStart
-	s.oldestStart = time.Time{}
-	s.lock.Unlock()
-
-	// Update the overall stopwatch duration
-	dt := time.Since(oldestStart)
-	atomic.AddInt64((*int64)(&s.duration), int64(dt))
-
-	return dt - ls.durationWhenStarted
-}
-
-func (s *SharedStopWatch) updateOngoingCount(delta int32) (ongoing int32) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return atomic.AddInt32(&s.ongoing, delta)
+	return ls.stop - ls.start
 }
 
 func (s *SharedStopWatch) Duration() time.Duration {
