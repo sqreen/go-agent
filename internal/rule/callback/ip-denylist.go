@@ -78,7 +78,7 @@ func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore)
 
 			c.HandleAttack(true, nil)
 
-			_ = c.PushMetricsValue(matched, 1)
+			_ = c.AddMetricsValue(matched, 1)
 
 			epilog = func(e *error) {
 				sqassert.NotNil(e)

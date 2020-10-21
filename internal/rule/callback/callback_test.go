@@ -72,12 +72,12 @@ func (c *CallbackContextMockup) Logger() callback.Logger {
 	return c.Called().Get(0).(callback.Logger)
 }
 
-func (c *CallbackContextMockup) PushMetricsValue(key interface{}, value int64) error {
+func (c *CallbackContextMockup) AddMetricsValue(key interface{}, value int64) error {
 	return c.Called(key, value).Error(0)
 }
 
 func (c *CallbackContextMockup) ExpectPushMetricsValue(key interface{}, value int64) *mock.Call {
-	return c.On("PushMetricsValue", key, value)
+	return c.On("AddMetricsValue", key, value)
 }
 
 func (c *CallbackContextMockup) HandleAttack(shouldBock bool, info interface{}) (blocked bool) {

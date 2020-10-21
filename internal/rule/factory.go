@@ -14,31 +14,37 @@ import (
 // NewCallback returns the callback object or function for the given callback
 // name. An error is returned if the callback name is unknown or an error
 // occurred during the constructor call.
-func NewNativeCallback(name string, r callback.RuleContext, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
+func NewNativeCallback(name string, ctx *nativeRuleContext, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
 	var callbackCtor callback.NativeCallbackConstructorFunc
 	switch name {
 	default:
 		return nil, sqerrors.Errorf("undefined native callback name `%s`", name)
 	case "WriteCustomErrorPage", "WriteBlockingHTMLPage":
+		ctx.SetCritical(true)
 		callbackCtor = callback.NewWriteBlockingHTMLPageCallback
 	case "WriteHTTPRedirection":
+		ctx.SetCritical(true)
 		callbackCtor = callback.NewWriteHTTPRedirectionCallbacks
 	case "AddSecurityHeaders":
 		callbackCtor = callback.NewAddSecurityHeadersCallback
 	case "MonitorHTTPStatusCode":
+		ctx.SetCritical(true)
 		callbackCtor = callback.NewMonitorHTTPStatusCodeCallback
 	case "WAF":
 		callbackCtor = callback.NewWAFCallback
 	case "IPSecurityResponse":
+		ctx.SetCritical(true)
 		callbackCtor = callback.NewIPSecurityResponseCallback
 	case "UserSecurityResponse":
+		ctx.SetCritical(true)
 		callbackCtor = callback.NewUserSecurityResponseCallback
 	case "IPBlockList", "IPDenyList":
+		ctx.SetCritical(true)
 		callbackCtor = callback.NewIPDenyListCallback
 	case "Shellshock":
 		callbackCtor = callback.NewShellshockCallback
 	}
-	return callbackCtor(r, cfg)
+	return callbackCtor(ctx, cfg)
 }
 
 // NewReflectedCallback returns the callback object or function of the given

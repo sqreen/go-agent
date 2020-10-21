@@ -9,25 +9,19 @@ import (
 	"github.com/sqreen/go-agent/internal/rule/callback/types"
 )
 
-// TODO: rename to RuleContext if we don't do ReflectedRuleContext for now
-// TODO: add return values when generics allow to safely return the prolog type
-type RuleContext interface {
-	Pre(func(c CallbackContext))
-	Post(func(c CallbackContext))
-}
+type (
+	RuleContext interface {
+		Pre(pre CallbackFunc)
+		Post(post CallbackFunc)
+	}
+	CallbackFunc = func(c CallbackContext)
+)
 
 type CallbackContext interface {
 	ProtectionContext() types.ProtectionContext
-
-	// Push a new metrics value for the given key into the default metrics store
-	// given by the rule.
-	// TODO: this should be instead performed when the request context is
-	//   closed by checking the metrics stored in the event record and
-	//   pushing them. But the current metrics store interface doesn't allow
-	//   to pass a time (to pass the time of the observation).
-	PushMetricsValue(key interface{}, value int64) error
-	Logger() Logger
+	AddMetricsValue(key interface{}, value int64) error
 	HandleAttack(shouldBock bool, info interface{}) (blocked bool)
+	Logger() Logger
 }
 
 type Logger interface {
