@@ -91,8 +91,9 @@ func withDuration(action Action, duration time.Duration) *timedAction {
 
 // Expired is true when the deadline has expired, false otherwise.
 func (a *timedAction) Expired() bool {
-	// Is the current time after the deadline?
-	return time.Now().After(a.deadline)
+	// Check if we passed the deadline. We use the relative operation
+	// time.Since() to make use monotonic clock only if possible.
+	return time.Since(a.deadline) >= 0
 }
 
 type ipListAction struct {
