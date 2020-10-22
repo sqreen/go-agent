@@ -362,15 +362,17 @@ func (s *PerfHistogram) flush() (start time.Time, timeBuckets, maxValuesTimeBuck
 	ongoing, start, timeBuckets := s.timeHistogram.flushUnsafe()
 	maxValuesTimeBucket = s.maxValues
 
+	// Reset max values
+	s.maxValues = sync.Map{}
 	if ongoing > 0 {
+		// Remove the ongoing value from the returned map
 		v, ok := maxValuesTimeBucket.Load(ongoing)
 		sqassert.True(ok)
 		maxValuesTimeBucket.Delete(ongoing)
 
+		// Set the ongoing value in the new map
 		s.maxValues.Store(0, v)
 	}
-
-	s.maxValues = sync.Map{}
 
 	return start, timeBuckets, maxValuesTimeBucket
 }
