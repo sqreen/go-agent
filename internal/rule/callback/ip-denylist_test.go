@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sqreen/go-agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/internal/rule/callback/_testlib/mockups"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -26,10 +27,10 @@ func TestIPDenyListCallback(t *testing.T) {
 			} {
 				tc := tc
 				t.Run("", func(t *testing.T) {
-					r := &NativeRuleContextMockup{}
+					r := &mockups.NativeRuleContextMockup{}
 					defer r.AssertExpectations(t)
 
-					cfg := &NativeCallbackConfigMockup{}
+					cfg := &mockups.NativeCallbackConfigMockup{}
 					cfg.ExpectData().Return(tc)
 					defer cfg.AssertExpectations(t)
 
@@ -41,9 +42,9 @@ func TestIPDenyListCallback(t *testing.T) {
 	})
 
 	t.Run("Callback", func(t *testing.T) {
-		r := &NativeRuleContextMockup{}
+		r := &mockups.NativeRuleContextMockup{}
 
-		cfg := &NativeCallbackConfigMockup{}
+		cfg := &mockups.NativeCallbackConfigMockup{}
 		// Note that exhaustive tests of the underlying IP list is done in the
 		// corresponding package, and that we are only testing the callback API here
 		// with a few examples.
@@ -65,10 +66,10 @@ func TestIPDenyListCallback(t *testing.T) {
 
 		// Not blocked
 		r.On("Pre", mock.MatchedBy(func(cb func(c callback.CallbackContext)) bool {
-			c := &CallbackContextMockup{}
+			c := &mockups.CallbackContextMockup{}
 			defer c.AssertExpectations(t)
 
-			p := &ProtectionContextMockup{}
+			p := &mockups.ProtectionContextMockup{}
 			defer p.AssertExpectations(t)
 
 			c.ExpectProtectionContext().Return(p)

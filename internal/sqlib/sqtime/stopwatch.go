@@ -75,7 +75,7 @@ func (ls *LocalStopWatch) Stop() (dt time.Duration) {
 		// Check if we really are the last one
 		if s.oldestStart != -1 {
 			// Update the global duration
-			s.duration += time.Since(s.zeroT) - s.oldestStart
+			s.duration += ls.stop - s.oldestStart
 			// Reset oldestStart
 			s.oldestStart = -1
 		}

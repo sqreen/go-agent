@@ -20,18 +20,22 @@ func TestSharedStopWatch(t *testing.T) {
 		// Watch 1: single start/stop
 		w1 := watch.Start()
 		time.Sleep(time.Millisecond)
-		expectedDuration := time.Millisecond
+		expectedMinDuration := time.Millisecond
 		dt := w1.Stop()
+		expectedDuration := dt
+		require.Equal(t, watch.Duration(), expectedDuration)
 		require.GreaterOrEqual(t, int64(dt), int64(time.Millisecond))
-		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedDuration))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedMinDuration))
 
 		// Watch 2: single start/stop
 		w2 := watch.Start()
 		time.Sleep(time.Millisecond)
-		expectedDuration += time.Millisecond
+		expectedMinDuration += time.Millisecond
 		dt = w2.Stop()
+		expectedDuration += dt
+		require.Equal(t, watch.Duration(), expectedDuration)
 		require.GreaterOrEqual(t, int64(dt), int64(time.Millisecond))
-		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedDuration))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedMinDuration))
 
 		// Interleaved stopwatches
 		// The global duration only increases when every local stop watch is stopped
@@ -41,7 +45,7 @@ func TestSharedStopWatch(t *testing.T) {
 		w3 := watch.Start()
 
 		time.Sleep(5 * time.Millisecond)
-		expectedDuration += 5 * time.Millisecond
+		expectedMinDuration += 5 * time.Millisecond
 
 		// Watch 4: interleaved start/stop, stopped before watch 5
 		w4 := watch.Start()
@@ -50,21 +54,21 @@ func TestSharedStopWatch(t *testing.T) {
 		w5 := watch.Start()
 
 		time.Sleep(5 * time.Millisecond)
-		expectedDuration += 5 * time.Millisecond
+		expectedMinDuration += 5 * time.Millisecond
 
 		dt = w4.Stop()
 		require.GreaterOrEqual(t, int64(dt), int64(5*time.Millisecond))
 		require.GreaterOrEqual(t, int64(watch.Duration()), int64(globalDuration))
 
 		time.Sleep(5 * time.Millisecond)
-		expectedDuration += 5 * time.Millisecond
+		expectedMinDuration += 5 * time.Millisecond
 		dt = w3.Stop()
 		require.GreaterOrEqual(t, int64(dt), int64(2*5*time.Millisecond))
 		require.GreaterOrEqual(t, int64(watch.Duration()), int64(globalDuration))
 
 		dt = w5.Stop()
 		require.GreaterOrEqual(t, int64(dt), int64(2*5*time.Millisecond))
-		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedDuration))
+		require.GreaterOrEqual(t, int64(watch.Duration()), int64(expectedMinDuration))
 	})
 
 	t.Run("api checks", func(t *testing.T) {

@@ -7,7 +7,6 @@
 package rule
 
 import (
-	"fmt"
 	"reflect"
 	"runtime"
 	"time"
@@ -86,21 +85,49 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 	return r, nil
 }
 
-func withPerformanceCap(rule string, overBudgetHistogram *metrics.TimeHistogram) NativeCallbackMiddlewareFunc {
+type (
+	timeHistogram interface {
+		Add(key interface{}, delta int64) error
+	}
+
+	performanceHistogram interface {
+		Add(v float64) error
+	}
+)
+
+func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCallbackMiddlewareFunc {
+	var (
+		before = rule + "/before"
+		after  = rule + "/after"
+	)
+
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) {
-			if c.ProtectionContext().DeadlineExceeded(0) {
+			p := c.ProtectionContext()
+
+			// Check if the sqreen time deadline is exceeded before calling the
+			// callback
+			if p.DeadlineExceeded(0) {
 				// TODO: log error once
-				_ = overBudgetHistogram.Add(rule, 1)
+				_ = overBudgetHistogram.Add(before, 1)
 				return
 			}
+
+			// Check if the sqreen time deadline is exceeded after calling the
+			// callback
+			defer func() {
+				if p.DeadlineExceeded(0) {
+					// TODO: log error once
+					_ = overBudgetHistogram.Add(after, 1)
+				}
+			}()
 
 			cb(c)
 		}
 	}
 }
 
-func withPerformanceMonitoring(perfHistogram *metrics.PerfHistogram) NativeCallbackMiddlewareFunc {
+func withPerformanceMonitoring(perfHistogram performanceHistogram) NativeCallbackMiddlewareFunc {
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) {
 			sq := c.ProtectionContext().SqreenTime()
@@ -109,9 +136,8 @@ func withPerformanceMonitoring(perfHistogram *metrics.PerfHistogram) NativeCallb
 				duration := sw.Stop()
 				// Compute the milliseconds floating point value out of the nanoseconds
 				ms := float64(duration.Nanoseconds()) / float64(time.Millisecond)
-				if err := perfHistogram.Add(ms); err != nil {
-					// TODO: log once
-				}
+				// TODO: log the error once
+				_ = perfHistogram.Add(ms)
 			}()
 
 			cb(c)
@@ -132,8 +158,8 @@ func withSafeCall(l plog.ErrorLogger) NativeCallbackMiddlewareFunc {
 	}
 }
 
-func withCallCount(store *metrics.TimeHistogram, rule, rulepackID string) NativeCallbackMiddlewareFunc {
-	callCounterID := fmt.Sprintf("%s/%s/pre", rulepackID, rule)
+func withCallCount(rulepackID, rule, cb string, store timeHistogram) NativeCallbackMiddlewareFunc {
+	callCounterID := rulepackID + "/" + rule + "/" + cb
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) {
 			if err := store.Add(callCounterID, 1); err != nil {
@@ -184,7 +210,7 @@ func (r *nativeRuleContext) buildPreMiddlewares() {
 
 	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod)
 
-	r.pre = buildMiddlewares(r, overBudgetHist, perfHist, callCountHist)
+	r.pre = buildMiddlewares(r, "pre", overBudgetHist, perfHist, callCountHist)
 }
 
 func (r *nativeRuleContext) buildPostMiddlewares() {
@@ -200,10 +226,10 @@ func (r *nativeRuleContext) buildPostMiddlewares() {
 
 	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod)
 
-	r.post = buildMiddlewares(r, overBudgetHist, perfHist, callCountHist)
+	r.post = buildMiddlewares(r, "post", overBudgetHist, perfHist, callCountHist)
 }
 
-func buildMiddlewares(r *nativeRuleContext, overBudgetHist *metrics.TimeHistogram, perfHist *metrics.PerfHistogram, callCountHist *metrics.TimeHistogram) (m []NativeCallbackMiddlewareFunc) {
+func buildMiddlewares(r *nativeRuleContext, cb string, overBudgetHist *metrics.TimeHistogram, perfHist *metrics.PerfHistogram, callCountHist *metrics.TimeHistogram) (m []NativeCallbackMiddlewareFunc) {
 	m = append(m, withSafeCall(r.logger))
 
 	if overBudgetHist != nil {
@@ -215,7 +241,7 @@ func buildMiddlewares(r *nativeRuleContext, overBudgetHist *metrics.TimeHistogra
 	}
 
 	if callCountHist != nil {
-		m = append(m, withCallCount(callCountHist, r.name, r.rulepackID))
+		m = append(m, withCallCount(r.rulepackID, r.name, cb, callCountHist))
 	}
 
 	return m

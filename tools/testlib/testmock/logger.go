@@ -10,14 +10,18 @@ type LoggerMockup struct {
 	mock.Mock
 }
 
-func (l LoggerMockup) Debug(v ...interface{}) {
+func (l *LoggerMockup) Debug(v ...interface{}) {
 	l.Called(v)
 }
 
-func (l LoggerMockup) Debugf(format string, v ...interface{}) {
+func (l *LoggerMockup) Debugf(format string, v ...interface{}) {
 	l.Called(format, v)
 }
 
-func (l LoggerMockup) Error(err error) {
+func (l *LoggerMockup) Error(err error) {
 	l.Called(err)
+}
+
+func (l *LoggerMockup) ExpectError(err interface{}) *mock.Call {
+	return l.On("Error", err)
 }

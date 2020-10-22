@@ -1,8 +1,8 @@
-// Copyright (c) 2016 - 2019 Sqreen. All Rights Reserved.
+// Copyright (c) 2016 - 2020 Sqreen. All Rights Reserved.
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package callback_test
+package mockups
 
 import (
 	"net"
@@ -126,6 +126,6 @@ func (p *ProtectionContextMockup) DeadlineExceeded(needed time.Duration) (exceed
 	return p.Called(needed).Bool(0)
 }
 
-func (p *ProtectionContextMockup) ExpectDeadlineExceeded() *mock.Call {
-	return p.On("DeadlineExceeded")
+func (p *ProtectionContextMockup) ExpectDeadlineExceeded(needed time.Duration) *mock.Call {
+	return p.On("DeadlineExceeded", needed)
 }
