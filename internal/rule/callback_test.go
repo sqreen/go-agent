@@ -5,7 +5,6 @@
 package rule
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/sqreen/go-agent/tools/testlib/testmock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 )
 
 func TestCallbackMiddlewares(t *testing.T) {
@@ -39,7 +39,7 @@ func TestCallbackMiddlewares(t *testing.T) {
 			logger.ExpectError(mock.MatchedBy(func(err error) bool {
 				// The panic error should be logged and contain the panic argument
 				expected := &sqsafe.PanicError{}
-				require.True(t, errors.As(err, &expected))
+				require.True(t, xerrors.As(err, &expected))
 				return expected.Err.Error() == "oops"
 			})).Once()
 			defer logger.AssertExpectations(t)
