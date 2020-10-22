@@ -89,7 +89,7 @@ func NewWAFCallback(rule RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCa
 	if err != nil {
 		return nil, sqerrors.Wrap(err, "unexpected configuration error")
 	}
-	return newWAFPrologCallback(rule, cfg.BlockingMode(), wafRule, bindingAccessors, timeout), nil
+	return newWAFPrologCallback(rule, wafRule, bindingAccessors, timeout), nil
 }
 
 type (
@@ -99,14 +99,21 @@ type (
 
 var ErrWAFProtection = errors.New("waf protection triggered")
 
-func newWAFPrologCallback(rule RuleContext, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
+func newWAFPrologCallback(rule RuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) *wafCallbackObject {
 	return &wafCallbackObject{
 		wafRule: wafRule,
-		prolog:  makeWAFPrologCallback(rule, blockingMode, wafRule, bindingAccessors, timeout),
+		prolog:  makeWAFPrologCallback(rule, wafRule, bindingAccessors, timeout),
 	}
 }
 
 func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waf_types.Rule, timeout time.Duration) (blocked bool, err error) {
+	p := c.ProtectionContext()
+
+	// Check that we have `timeout` amount of time available
+	if p.DeadlineExceeded(timeout) {
+		return false, nil
+	}
+
 	baCtx, err := MakeWAFCallbackBindingAccessorContext(c)
 	if err != nil {
 		return false, err
@@ -125,6 +132,16 @@ func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.Bindi
 			continue
 		}
 		args[expr] = value
+
+		// Check we haven't exceeded the time deadline if any
+		if p.DeadlineExceeded(0) {
+			return false, nil
+		}
+	}
+
+	// Check that we still have `timeout` amount of time available
+	if p.DeadlineExceeded(timeout) {
+		return false, nil
 	}
 
 	// TODO: args caching
@@ -148,7 +165,7 @@ func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.Bindi
 	return c.HandleAttack(action == waf_types.BlockAction, attackInfo), nil
 }
 
-func makeWAFPrologCallback(rule RuleContext, blockingMode bool, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
+func makeWAFPrologCallback(rule RuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {
 	return func(**http_protection.ProtectionContext) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
 		rule.Pre(func(c CallbackContext) {
 			blocked, err := runWAF(c, bindingAccessors, wafRule, timeout)
