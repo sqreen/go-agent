@@ -5,7 +5,6 @@
 package metrics
 
 import (
-	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -327,15 +326,6 @@ func (s *PerfHistogram) Flush() (ready []ReadyStore) {
 	start, timeBuckets, maxValues := s.flush()
 
 	timeHist := makeReadyTimeHistogram(start, s.timeHistogram.period, timeBuckets)
-
-	defer func() {
-		if v := recover(); v != nil {
-			for _, timeHist := range timeHist {
-				fmt.Printf("%+#v\n", timeHist.Metrics())
-			}
-			panic(v)
-		}
-	}()
 
 	for _, timeHist := range timeHist {
 		timeHist := timeHist.(*ReadyTimeHistogram)
