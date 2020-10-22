@@ -96,7 +96,7 @@ func TestTimeHistogram(t *testing.T) {
 
 			ready2 := store.Flush()
 			test2FinishedAt := time.Now()
-			require.NotEmpty(t, ready1)
+			require.NotEmpty(t, ready2)
 
 			checkTimeHistogram(
 				t,
@@ -430,12 +430,9 @@ func TestTimeHistogram(t *testing.T) {
 					// Wait one more period to get the last metrics
 					time.Sleep(5 * period)
 
-					ready = append(ready, store.Flush()...)
-
-					// All goroutines are done, so get the last data left
-					//for _, ready := range store.Flush() {
-					//	metricsArray = append(metricsArray, ready.(*metrics.ReadyTimeHistogram))
-					//}
+					if store.Ready() {
+						ready = append(ready, store.Flush()...)
+					}
 
 					// Notify we are done and so the data is ready to be checked
 					close(done)
@@ -629,6 +626,68 @@ func TestPerfHistogram(t *testing.T) {
 			require.False(t, store.Ready())
 		})
 
+		t.Run("Flush", func(t *testing.T) {
+			period := MinTestPeriod
+			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
+			require.NoError(t, err)
+
+			require.Empty(t, store.Flush())
+
+			test1StartedAt := time.Now()
+
+			store.Add(1)
+			time.Sleep(period)
+			require.True(t, store.Ready())
+
+			// Add new values after the period, meaning they will go in another time
+			// bucket than the previous k1
+			store.Add(2)
+			store.Add(1)
+
+			// Flush the store to see if the ongoing bucket is correctly handled
+			ready1 := store.Flush()
+			test1FinishedAt := time.Now()
+			require.NotEmpty(t, ready1)
+
+			// Add new values that should go into the current bucket
+			store.Add(3)
+			store.Add(3)
+
+			// Wait until it becomes ready
+			time.Sleep(period)
+			require.True(t, store.Ready())
+
+			ready2 := store.Flush()
+			test2FinishedAt := time.Now()
+			require.NotEmpty(t, ready2)
+
+			checkPerfHistogram(
+				t,
+				period,
+				test1StartedAt,
+				test1FinishedAt,
+				metrics.ReadyStoreMap{
+					uint64(1): 1,
+				},
+				ready1,
+				1,
+				10,
+				10)
+
+			checkPerfHistogram(
+				t,
+				period,
+				test1FinishedAt,
+				test2FinishedAt,
+				metrics.ReadyStoreMap{
+					uint64(1): 4,
+				},
+				ready2,
+				3,
+				10,
+				10)
+		})
+
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
@@ -819,8 +878,10 @@ func TestPerfHistogram(t *testing.T) {
 					time.Sleep(2 * period)
 
 					// All goroutines are done, so get the last data left
-					for _, ready := range store.Flush() {
-						metricsArray = append(metricsArray, ready.(*metrics.ReadyPerfHistogram))
+					if store.Ready() {
+						for _, ready := range store.Flush() {
+							metricsArray = append(metricsArray, ready.(*metrics.ReadyPerfHistogram))
+						}
 					}
 
 					// Notify we are done and so the data is ready to be checked
