@@ -172,10 +172,10 @@ func TestCallbackMiddlewares(t *testing.T) {
 		defer perfHist.AssertExpectations(t)
 
 		sleep := time.Millisecond
-		var perf time.Duration
+		var perf float64
 		perfHist.ExpectAdd(mock.MatchedBy(func(v float64) bool {
-			perf = time.Duration(v * float64(time.Millisecond))
-			return perf >= sleep
+			perf = v
+			return v >= 1.0 // v is in ms - so >= sleep is equivalent to >= 1.0
 		})).Return(nil).Once()
 
 		m := withPerformanceMonitoring(perfHist)
@@ -188,6 +188,6 @@ func TestCallbackMiddlewares(t *testing.T) {
 		cb(c)
 
 		require.True(t, called)
-		require.Equal(t, perf, sqreenTime.Duration())
+		require.Equal(t, perf, float64(sqreenTime.Duration().Nanoseconds())/float64(time.Millisecond))
 	})
 }
