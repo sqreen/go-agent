@@ -16,9 +16,9 @@ package callback_test
 //		InvalidTestCases: []interface{}{
 //			33,
 //			"yet another wrong type",
-//			&RuleContextMockup{},
+//			&NativeRuleContextMockup{},
 //			// Binding accessor error
-//			&RuleContextMockup{
+//			&NativeRuleContextMockup{
 //				config: &api.WAFRuleDataEntry{
 //					BindingAccessors: []string{
 //						`#.Request.UserAgent`,
@@ -27,7 +27,7 @@ package callback_test
 //				},
 //			},
 //			// WAF Rule json error
-//			&RuleContextMockup{
+//			&NativeRuleContextMockup{
 //				config: &api.WAFRuleDataEntry{
 //					BindingAccessors: []string{
 //						`#.Request.UserAgent`,
@@ -36,14 +36,14 @@ package callback_test
 //				},
 //			},
 //			// Empty list of binding accessors
-//			&RuleContextMockup{
+//			&NativeRuleContextMockup{
 //				config: &api.WAFRuleDataEntry{
 //					BindingAccessors: []string{},
 //					WAFRules:         `{"rules": [{"rule_id": "1","filters": [{"operator": "@rx","targets": ["#.Request.UserAgent"],"value": "Arachni"}]}],"flows": [{"name": "arachni_detection","steps": [{"id": "start","rule_ids": ["1"],"on_match": "exit_block"}]}]}`,
 //				},
 //			},
 //			// Empty WAF Rule
-//			&RuleContextMockup{
+//			&NativeRuleContextMockup{
 //				config: &api.WAFRuleDataEntry{
 //					BindingAccessors: []string{
 //						`#.Request.UserAgent`,
@@ -56,7 +56,7 @@ package callback_test
 //			// -- Blocking Mode
 //			// Block action
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.UserAgent`,
@@ -71,7 +71,7 @@ package callback_test
 //			},
 //			// Monitor action
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.UserAgent`,
@@ -85,7 +85,7 @@ package callback_test
 //			},
 //			// No action
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.UserAgent`,
@@ -100,7 +100,7 @@ package callback_test
 //			// -- Monitoring Mode
 //			// Block action
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.UserAgent`,
@@ -114,7 +114,7 @@ package callback_test
 //			},
 //			// Monitor action
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.UserAgent`,
@@ -128,7 +128,7 @@ package callback_test
 //			},
 //			// No action
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.UserAgent`,
@@ -144,8 +144,8 @@ package callback_test
 //	})
 //}
 //
-//func testInAppWAFCallback(req *http.Request, expectedErr error, shouldReportAttack, blockingMode bool) func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
-//	return func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
+//func testInAppWAFCallback(req *http.Request, expectedErr error, shouldReportAttack, blockingMode bool) func(t *testing.T, rule *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
+//	return func(t *testing.T, rule *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
 //		actualProlog, ok := prolog.(callback.WAFPrologCallbackType)
 //		require.True(t, ok)
 //
@@ -267,7 +267,7 @@ package callback_test
 //			}
 //
 //			b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
-//				wafRule := &RuleContextMockup{
+//				wafRule := &NativeRuleContextMockup{
 //					config: &api.WAFRuleDataEntry{
 //						BindingAccessors: []string{
 //							`#.Request.FilteredParams | flat_values`,

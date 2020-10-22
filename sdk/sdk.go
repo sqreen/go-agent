@@ -14,7 +14,7 @@ import (
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 )
 
-// Deprecated: type name of Context.
+// Deprecated: type name alias of Context.
 type HTTPRequestRecord = Context
 
 // Context is Sqreen's request context associated to a HTTP request by the
@@ -55,16 +55,21 @@ type EventUserIdentifiersMap map[string]string
 //		// ...
 //	}
 //
-func FromContext(ctx context.Context) *Context {
-	v := protection_context.FromContext(ctx)
+func FromContext(ctx context.Context) Context {
+	v := ctx.Value(protection_context.ContextKey)
 	if v == nil {
-		return &Context{events: disabledEventRecorder{}}
+		// Try with a string since frameworks such as Gin implement it with keys of
+		// type string.
+		v = ctx.Value(protection_context.ContextKey.String)
 	}
-	c, ok := v.(protection_context.EventRecorderGetter)
-	if !ok {
-		return &Context{events: disabledEventRecorder{}}
+
+	actual, ok := v.(protection_context.EventRecorder)
+
+	if !ok || actual == nil {
+		return Context{events: disabledEventRecorder{}}
 	}
-	return &Context{events: c.EventRecorder()}
+
+	return Context{events: actual}
 }
 
 // TrackEvent allows to track a custom security events with the given event name.
@@ -77,7 +82,7 @@ func FromContext(ctx context.Context) *Context {
 //	sqreen := sdk.FromContext(ctx)
 //	sqreen.TrackEvent("my.event").WithUserIdentifiers(uid).WithProperties(props)
 //
-func (ctx *Context) TrackEvent(event string) *TrackEvent {
+func (ctx Context) TrackEvent(event string) *TrackEvent {
 	return &TrackEvent{event: ctx.events.TrackEvent(event)}
 }
 

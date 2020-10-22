@@ -5,6 +5,7 @@
 package sqecho
 
 import (
+	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/sdk"
 	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
@@ -24,25 +24,18 @@ import (
 )
 
 func TestMiddleware(t *testing.T) {
-	t.Run("without middleware", func(t *testing.T) {
-		body := testlib.RandUTF8String(4096)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-
-		// Create an Echo context
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		// Define a Echo handler
+	t.Run("sdk methods", func(t *testing.T) {
+		// Define a handler performing 4 track events (aka custom event internally)
 		h := func(c echo.Context) error {
 			{
-				// using echo's context interface
+				// using echo's context
 				sq := FromContext(c)
 				require.NotNil(t, sq)
 				sq.TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now()).WithUserIdentifiers(sdk.EventUserIdentifiersMap{"my": "id"})
 				sq.ForUser(sdk.EventUserIdentifiersMap{"my": "id"}).TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now())
 			}
 			{
-				// using echo's context interface
+				// using the request context
 				sq := sdk.FromContext(c.Request().Context())
 				require.NotNil(t, sq)
 				sq.TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now()).WithUserIdentifiers(sdk.EventUserIdentifiersMap{"my": "id"})
@@ -54,75 +47,86 @@ func TestMiddleware(t *testing.T) {
 			}
 			return c.String(http.StatusOK, string(body))
 		}
-		// Perform the request and record the output
-		err := h(c)
-		// Check the request was performed as expected
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, body, rec.Body.String())
-	})
 
-	t.Run("without middleware", func(t *testing.T) {
-		body := testlib.RandUTF8String(4096)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		for _, tc := range []struct {
+			name string
+			test func(t *testing.T, h echo.HandlerFunc, c echo.Context)
+		}{
+			{
+				name: "without middleware",
+				test: func(t *testing.T, h echo.HandlerFunc, c echo.Context) {
+					require.NoError(t, h(c))
+				},
+			},
 
-		// Create an Echo context
-		e := echo.New()
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		// Define a Echo handler
-		h := func(c echo.Context) error {
 			{
-				// using echo's context interface
-				sq := FromContext(c)
-				require.NotNil(t, sq)
-				sq.TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now()).WithUserIdentifiers(sdk.EventUserIdentifiersMap{"my": "id"})
-				sq.ForUser(sdk.EventUserIdentifiersMap{"my": "id"}).TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now())
-			}
+				name: "with middleware",
+				test: func(t *testing.T, h echo.HandlerFunc, c echo.Context) {
+					ctx := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+					ctx.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+						require.Equal(t, 4, len(closed.Events().CustomEvents))
+						return true
+					}))
+					defer ctx.AssertExpectations(t)
+
+					// Create the middleware function
+					m := middleware(ctx)
+
+					// Wrap and call the handler
+					err := m(h)(c)
+					require.NoError(t, err)
+				},
+			},
+
 			{
-				// using echo's context interface
-				sq := sdk.FromContext(c.Request().Context())
-				require.NotNil(t, sq)
-				sq.TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now()).WithUserIdentifiers(sdk.EventUserIdentifiersMap{"my": "id"})
-				sq.ForUser(sdk.EventUserIdentifiersMap{"my": "id"}).TrackEvent("my event").WithProperties(sdk.EventPropertyMap{"my": "prop"}).WithTimestamp(time.Now())
-			}
-			body, err := ioutil.ReadAll(c.Request().Body)
-			if err != nil {
-				return err
-			}
-			return c.String(http.StatusOK, string(body))
+				name: "without agent",
+				test: func(t *testing.T, h echo.HandlerFunc, c echo.Context) {
+					// Create the middleware function with a nil root context
+					m := middleware(nil)
+					// Wrap and call the handler
+					err := m(h)(c)
+					require.NoError(t, err)
+				},
+			},
+		} {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				// Perform the request and record the output
+				rec := httptest.NewRecorder()
+				body := testlib.RandUTF8String(4096)
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+				// Create a context
+				c := echo.New().NewContext(req, rec)
+				// Perfom the test
+				tc.test(t, h, c)
+				// Check the request was performed as expected
+				require.Equal(t, http.StatusOK, rec.Code)
+				require.Equal(t, body, rec.Body.String())
+			})
 		}
-		// Perform the request and record the output
-		err := Middleware()(h)(c)
-		// Check the request was performed as expected
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, body, rec.Body.String())
 	})
 
-	t.Run("control flow", func(t *testing.T) {
+	t.Run("data and control flow", func(t *testing.T) {
 		middlewareResponseBody := testlib.RandUTF8String(4096)
 		middlewareResponseStatus := 433
 		handlerResponseBody := testlib.RandUTF8String(4096)
 		handlerResponseStatus := 533
-		agent := &mockups.AgentMockup{}
-		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{})
-		agent.ExpectIsIPAllowed(mock.Anything).Return(false)
-		agent.ExpectIsPathAllowed(mock.Anything).Return(false)
-		agent.ExpectSendClosedRequestContext(mock.Anything).Return(nil)
-		defer agent.AssertExpectations(t) // inaccurate but worth it
+
+		root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+		root.ExpectClose(mock.Anything)
+		defer root.AssertExpectations(t) // inaccurate but worth it
 
 		for _, tc := range []struct {
-			name  string
-			agent protectioncontext.AgentFace
+			name string
+			ctx  types.RootProtectionContext
 		}{
 			{
-				name:  "agent disabled",
-				agent: nil,
+				name: "agent disabled",
+				ctx:  nil,
 			},
 			{
-				name:  "agent enabled",
-				agent: agent,
+				name: "agent enabled",
+				ctx:  root,
 			},
 		} {
 			tc := tc
@@ -133,10 +137,15 @@ func TestMiddleware(t *testing.T) {
 					handler     func(echo.Context) error
 					test        func(t *testing.T, rec *httptest.ResponseRecorder, err error)
 				}{
+					//
+					// Control flow tests
+					// When an handlers, including middlewares, block.
+					//
+
 					{
 						name: "sqreen first/the middleware aborts before the handler",
 						middlewares: []echo.MiddlewareFunc{
-							middleware(tc.agent),
+							middleware(tc.ctx),
 							func(next echo.HandlerFunc) echo.HandlerFunc {
 								return func(c echo.Context) error {
 									c.String(middlewareResponseStatus, middlewareResponseBody)
@@ -159,7 +168,7 @@ func TestMiddleware(t *testing.T) {
 					{
 						name: "sqreen first/the handler aborts",
 						middlewares: []echo.MiddlewareFunc{
-							middleware(tc.agent),
+							middleware(tc.ctx),
 							func(next echo.HandlerFunc) echo.HandlerFunc {
 								return func(c echo.Context) error {
 									err := next(c)
@@ -183,7 +192,7 @@ func TestMiddleware(t *testing.T) {
 					{
 						name: "sqreen first/no one aborts",
 						middlewares: []echo.MiddlewareFunc{
-							middleware(tc.agent),
+							middleware(tc.ctx),
 							func(next echo.HandlerFunc) echo.HandlerFunc {
 								return func(c echo.Context) error {
 									err := c.String(middlewareResponseStatus, middlewareResponseBody)
@@ -209,7 +218,7 @@ func TestMiddleware(t *testing.T) {
 					{
 						name: "sqreen first/the middleware aborts after the handler",
 						middlewares: []echo.MiddlewareFunc{
-							middleware(tc.agent),
+							middleware(tc.ctx),
 							func(next echo.HandlerFunc) echo.HandlerFunc {
 								return func(c echo.Context) error {
 									err := next(c)
@@ -243,7 +252,7 @@ func TestMiddleware(t *testing.T) {
 									return errors.New("middleware abort")
 								}
 							},
-							middleware(tc.agent),
+							middleware(tc.ctx),
 						},
 						handler: func(c echo.Context) error {
 							// Do nothing so that the calling middleware can handle the response.
@@ -274,7 +283,7 @@ func TestMiddleware(t *testing.T) {
 									panic("unexpected control flow")
 								}
 							},
-							middleware(tc.agent),
+							middleware(tc.ctx),
 						},
 						handler: func(echo.Context) error {
 							// Make sure echo doesn't call the handler when one of the
@@ -299,7 +308,7 @@ func TestMiddleware(t *testing.T) {
 									return err
 								}
 							},
-							middleware(tc.agent),
+							middleware(tc.ctx),
 						},
 						handler: func(c echo.Context) error {
 							err := c.String(handlerResponseStatus, handlerResponseBody)
@@ -328,7 +337,7 @@ func TestMiddleware(t *testing.T) {
 									return nil
 								}
 							},
-							middleware(tc.agent),
+							middleware(tc.ctx),
 						},
 						handler: func(c echo.Context) error {
 							err := c.String(handlerResponseStatus, handlerResponseBody)
@@ -339,6 +348,54 @@ func TestMiddleware(t *testing.T) {
 							require.NoError(t, err)
 							require.Equal(t, middlewareResponseStatus, rec.Code)
 							require.Equal(t, middlewareResponseBody+handlerResponseBody+middlewareResponseBody, rec.Body.String())
+						},
+					},
+
+					//
+					// Context data flow tests
+					//
+					{
+						name: "middleware1, sqreen, middleware2, handler",
+						middlewares: []echo.MiddlewareFunc{
+							func(next echo.HandlerFunc) echo.HandlerFunc {
+								return func(c echo.Context) error {
+									c.Set("m10", "v10")
+									c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), "m11", "v11")))
+									return next(c)
+								}
+							},
+							middleware(tc.ctx),
+							func(next echo.HandlerFunc) echo.HandlerFunc {
+								return func(c echo.Context) error {
+									c.Set("m20", "v20")
+									c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), "m21", "v21")))
+									return next(c)
+								}
+							},
+						},
+						handler: func(c echo.Context) error {
+							// From Gin's context
+							if v, ok := c.Get("m10").(string); !ok || v != "v10" {
+								panic("couldn't get the context value m10")
+							}
+							if v, ok := c.Get("m20").(string); !ok || v != "v20" {
+								panic("couldn't get the context value m20")
+							}
+
+							// From the request context
+							reqCtx := c.Request().Context()
+							if v, ok := reqCtx.Value("m11").(string); !ok || v != "v11" {
+								panic("couldn't get the context value m11")
+							}
+							if v, ok := reqCtx.Value("m21").(string); !ok || v != "v21" {
+								panic("couldn't get the context value m21")
+							}
+
+							return c.NoContent(http.StatusOK)
+						},
+						test: func(t *testing.T, rec *httptest.ResponseRecorder, err error) {
+							require.NoError(t, err)
+							require.Equal(t, http.StatusOK, rec.Code)
 						},
 					},
 				} {
@@ -369,48 +426,52 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("response observation", func(t *testing.T) {
-		expectedStatusCode := 433
-
-		agent := &mockups.AgentMockup{}
-		agent.ExpectConfig().Return(&mockups.AgentConfigMockup{}).Once()
-		agent.ExpectIsIPAllowed(mock.Anything).Return(false).Once()
-		agent.ExpectIsPathAllowed(mock.Anything).Return(false).Once()
-		var responseStatusCode int
-		agent.ExpectSendClosedRequestContext(mock.MatchedBy(func(recorded types.ClosedRequestContextFace) bool {
-			resp := recorded.Response()
+		var (
+			responseStatusCode    int
+			responseContentType   string
+			responseContentLength int64
+		)
+		root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+		root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+			resp := closed.Response()
 			responseStatusCode = resp.Status()
+			responseContentLength = resp.ContentLength()
+			responseContentType = resp.ContentType()
 			return true
-		})).Return(nil)
-		defer agent.AssertExpectations(t)
+		}))
+		defer root.AssertExpectations(t)
 
-		// Create a route
-		router := echo.New()
-		router.Use(middleware(agent))
-		router.GET("/", func(c echo.Context) error {
-			return c.NoContent(expectedStatusCode)
-		})
+		expectedStatusCode := 433
+		expectedContentLength := int64(len("\"hello\"\n"))
+		expectedContentType := echo.MIMEApplicationJSONCharsetUTF8
+
+		h := func(c echo.Context) error {
+			return c.JSON(expectedStatusCode, "hello")
+		}
 
 		// Perform the request and record the output
 		rec := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
-		var err error
-		router.HTTPErrorHandler = func(e error, _ echo.Context) {
-			err = e
-		}
-		router.ServeHTTP(rec, req)
+
+		m := middleware(root)
+		c := echo.New().NewContext(req, rec)
+
+		// Wrap and call the handler
+		err := m(h)(c)
 
 		// Check the result
 		require.NoError(t, err)
-		require.Equal(t, expectedStatusCode, responseStatusCode)
 		require.Equal(t, expectedStatusCode, rec.Code)
+		require.Equal(t, expectedStatusCode, responseStatusCode)
+		require.Equal(t, expectedContentLength, responseContentLength)
+		require.Equal(t, expectedContentType, responseContentType)
 	})
-
 }
 
-func middleware(agent protectioncontext.AgentFace) echo.MiddlewareFunc {
+func middleware(p types.RootProtectionContext) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			return middlewareHandler(agent, next, c)
+			return middlewareHandlerFromRootProtectionContext(p, next, c)
 		}
 	}
 }

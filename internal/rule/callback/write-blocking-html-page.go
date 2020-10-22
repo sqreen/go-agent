@@ -13,11 +13,11 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-// NewWriteCustomErrorPageCallback returns the native prolog and epilog
+// NewWriteBlockingHTMLPageCallback returns the native prolog and epilog
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWriteBlockingHTMLPageCallback(_ RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var statusCode = 500 // default status code
 	if data := cfg.Data(); data != nil {
 		cfg, ok := data.(*api.CustomErrorPageRuleDataEntry)
@@ -26,18 +26,19 @@ func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqho
 		}
 		statusCode = cfg.StatusCode
 	}
-	return newWriteCustomErrorPagePrologCallback(statusCode), nil
+	return newWriteBlockingHTMLPagePrologCallback(statusCode), nil
 }
 
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
-func newWriteCustomErrorPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+func newWriteBlockingHTMLPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
+	return func(m **httpprotection.ProtectionContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
 		ctx := *m
 		// Note that the header must be written first since writing the body first
 		// leads to the default OK status.
 		ctx.ResponseWriter.WriteHeader(statusCode)
-		ctx.ResponseWriter.WriteString(blockedBySqreenPage)
+		// TODO: log error once
+		_, _ = ctx.ResponseWriter.WriteString(blockedBySqreenPage)
 		return nil, nil
 	}
 }

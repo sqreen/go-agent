@@ -12,13 +12,16 @@ import (
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-func NewMonitorHTTPStatusCodeCallback(rule RuleFace, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
-	return newMonitorHTTPStatusCodePrologCallback(rule), nil
+func NewMonitorHTTPStatusCodeCallback(r RuleContext, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
+	return newMonitorHTTPStatusCodePrologCallback(r), nil
 }
 
-func newMonitorHTTPStatusCodePrologCallback(rule RuleFace) http_protection.ResponseMonitoringPrologCallbackType {
-	return func(_ **http_protection.RequestContext, r *types.ResponseFace) (http_protection.NonBlockingEpilogCallbackType, error) {
-		_ = rule.PushMetricsValue((*r).Status(), 1)
+func newMonitorHTTPStatusCodePrologCallback(r RuleContext) http_protection.ResponseMonitoringPrologCallbackType {
+	return func(_ **http_protection.ProtectionContext, resp *types.ResponseFace) (http_protection.NonBlockingEpilogCallbackType, error) {
+		r.Pre(func(c CallbackContext) {
+			// TODO: log once
+			_ = c.AddMetricsValue((*resp).Status(), 1)
+		})
 		return nil, nil
 	}
 }

@@ -19,7 +19,7 @@ import (
 // NewWriteHTTPRedirectionCallbacks returns the native callback applying the
 // the rule-configured HTTP redirection to the HTTP protection response writer
 // using the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWriteHTTPRedirectionCallbacks(_ RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var redirectionURL string
 	if cfg := cfg.Data(); cfg != nil {
 		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)
@@ -41,7 +41,7 @@ func NewWriteHTTPRedirectionCallbacks(rule RuleFace, cfg NativeCallbackConfig) (
 // The prolog callback modifies the function arguments in order to perform an
 // HTTP redirection.
 func newWriteHTTPRedirectionPrologCallback(url string) httpprotection.NonBlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+	return func(m **httpprotection.ProtectionContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
 		ctx := *m
 		ctx.ResponseWriter.Header().Set("Location", url)
 		ctx.ResponseWriter.WriteHeader(http.StatusSeeOther)

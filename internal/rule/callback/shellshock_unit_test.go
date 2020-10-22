@@ -37,12 +37,12 @@ package callback
 //	mock.Mock
 //}
 //
-//func (r *RuleMockup) PushMetricsValue(key interface{}, value int64) error {
+//func (r *RuleMockup) AddMetricsValue(key interface{}, value int64) error {
 //	return r.Called(key, value).Error(0)
 //}
 //
 //func (r *RuleMockup) ExpectPushMetricsValue(key interface{}, value int64) *mock.Call {
-//	return r.On("PushMetricsValue", key, value)
+//	return r.On("AddMetricsValue", key, value)
 //}
 //
 //func (r *RuleMockup) NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent {

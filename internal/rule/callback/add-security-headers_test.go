@@ -23,14 +23,14 @@ package callback_test
 //		},
 //		ValidTestCases: []ValidTestCase{
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: []interface{}{
 //						[]string{"k", "v"},
 //						[]string{"one", "two"},
 //						[]string{"canonical-header", "the value"},
 //					},
 //				},
-//				TestCallback: func(t *testing.T, _ *RuleContextMockup, prolog sqhook.PrologCallback) {
+//				TestCallback: func(t *testing.T, _ *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
 //					expectedHeaders := http.Header{
 //						"K":                []string{"v"},
 //						"One":              []string{"two"},

@@ -6,7 +6,7 @@ package callback_test
 
 //func TestNewWriteCustomErrorPageCallbacks(t *testing.T) {
 //	RunNativeCallbackTest(t, TestConfig{
-//		CallbacksCtor: callback.NewWriteCustomErrorPageCallback,
+//		CallbacksCtor: callback.NewWriteBlockingHTMLPageCallback,
 //		ExpectProlog:  true,
 //		PrologType:    reflect.TypeOf(callback.WriteCustomErrorPagePrologCallbackType(nil)),
 //		EpilogType:    reflect.TypeOf(callback.WriteCustomErrorPageEpilogCallbackType(nil)),
@@ -16,11 +16,11 @@ package callback_test
 //		},
 //		ValidTestCases: []ValidTestCase{
 //			{
-//				Rule:         &RuleContextMockup{},
+//				Rule:         &NativeRuleContextMockup{},
 //				TestCallback: testWriteCustomErrorPageCallbacks(500),
 //			},
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.CustomErrorPageRuleDataEntry{StatusCode: 33},
 //				},
 //				TestCallback: testWriteCustomErrorPageCallbacks(33),
@@ -29,8 +29,8 @@ package callback_test
 //	})
 //}
 
-//func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
-//	return func(t *testing.T, _ *RuleContextMockup, prolog sqhook.PrologCallback) {
+//func testWriteCustomErrorPageCallbacks(expectedStatusCode int) func(t *testing.T, rule *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
+//	return func(t *testing.T, _ *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
 //		actualProlog, ok := prolog.(callback.WriteCustomErrorPagePrologCallbackType)
 //		require.True(t, ok)
 //		var (

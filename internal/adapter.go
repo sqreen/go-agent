@@ -9,6 +9,7 @@ package internal
 import (
 	"encoding/json"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -47,6 +48,14 @@ func (a *closedHTTPRequestContextEventAPIAdapter) GetRulespackId() string {
 
 func (a *closedHTTPRequestContextEventAPIAdapter) GetClientIp() string {
 	return a.adaptee.request.ClientIP().String()
+}
+
+func (a *closedHTTPRequestContextEventAPIAdapter) GetStart() time.Time {
+	return a.adaptee.start
+}
+
+func (a *closedHTTPRequestContextEventAPIAdapter) GetEnd() time.Time {
+	return a.adaptee.finish
 }
 
 type httpRequestAPIAdapter struct {
@@ -205,7 +214,20 @@ func (a *attackEventAPIAdapter) GetBacktrace() []api.StackFrame {
 	return stackTraceAPIAdapter(a.StackTrace).GetBacktrace()
 }
 
-type stackTraceAPIAdapter errors.StackTrace
+type stackTraceAPIAdapter []uintptr
+
+type errorStackTraceAPIAdapter errors.StackTrace
+
+func (a errorStackTraceAPIAdapter) GetBacktrace() []api.StackFrame {
+	if len(a) == 0 {
+		return nil
+	}
+	bt := make([]api.StackFrame, len(a))
+	for i, f := range a {
+		bt[i] = *api.NewStackFrameFromFace(apiStackFrame(f))
+	}
+	return bt
+}
 
 func (a stackTraceAPIAdapter) GetBacktrace() []api.StackFrame {
 	if len(a) == 0 {
@@ -300,16 +322,46 @@ func (a *closedHTTPRequestContextEventAPIAdapter) GetDataPoints() []*api.Request
 	return nil
 }
 
-func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*metrics.ReadyStore) []api.MetricResponse {
-	var metricsArray []api.MetricResponse
-	if readyMetrics := expiredMetrics; len(readyMetrics) > 0 {
-		metricsArray = make([]api.MetricResponse, 0, len(readyMetrics))
-		for name, values := range readyMetrics {
-			observations := make(map[string]int64, len(values.Metrics()))
-			for k, v := range values.Metrics() {
+func newMetricsAPIAdapter(logger plog.ErrorLogger, readyMetrics map[string]metrics.ReadyStore) []api.MetricsTimeBucket {
+	if len(readyMetrics) == 0 {
+		return nil
+	}
+
+	metricsArray := make([]api.MetricsTimeBucket, 0, len(readyMetrics))
+	for id, store := range readyMetrics {
+		var observation api.MetricsData
+
+		switch store := store.(type) {
+		default:
+			logger.Error(sqerrors.Errorf("unexpected metrics store type `%T`", store))
+
+		case *metrics.ReadyPerfHistogram:
+			metrics := store.Metrics()
+			obs := make(map[string]interface{}, len(metrics)+1)
+			for k, v := range metrics {
+				bucket, ok := k.(uint64)
+				if !ok {
+					logger.Error(sqerrors.Errorf("unexpected performance bucket value's type `%T`", bucket))
+					continue
+				}
+				key := strconv.FormatUint(bucket, 10)
+				obs[key] = v
+			}
+			obs["max"] = store.Max()
+
+			observation = api.PerfMetricsData{
+				Unit:   store.Unit(),
+				Base:   store.Base(),
+				Values: obs,
+			}
+
+		case *metrics.ReadyTimeHistogram:
+			metrics := store.Metrics()
+			obs := make(api.SumMetricsData, len(metrics))
+			for k, v := range metrics {
 				// String keys are directly added
 				if s, ok := k.(string); ok {
-					observations[s] = v
+					obs[s] = v
 					continue
 				}
 
@@ -319,18 +371,28 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, expiredMetrics map[string]*me
 					logger.Error(sqerrors.Wrapf(err, "could not marshal to json key the value `%v` of type `%T`", k, k))
 					continue
 				}
-				observations[string(jsonKey)] = v
+
+				obs[string(jsonKey)] = v
 			}
-			if len(observations) > 0 {
-				metricsArray = append(metricsArray, api.MetricResponse{
-					Name:        name,
-					Start:       values.Start(),
-					Finish:      values.Finish(),
-					Observation: api.Struct{Value: observations},
-				})
+
+			if len(obs) == 0 {
+				continue
 			}
+			observation = obs
 		}
+
+		if observation == nil {
+			continue
+		}
+
+		metricsArray = append(metricsArray, api.MetricsTimeBucket{
+			Name:        id,
+			Start:       store.Start(),
+			Finish:      store.Finish(),
+			Observation: observation,
+		})
 	}
+
 	return metricsArray
 }
 

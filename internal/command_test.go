@@ -107,6 +107,18 @@ func TestCommandManager(t *testing.T) {
 			Command:           "get_bundle",
 			ExpectedAgentCall: agent.ExpectSendAppBundle,
 		},
+		{
+			Command:           "performance_budget",
+			ExpectedAgentCall: agent.ExpectSetPerformanceBudget,
+			Args: []json.RawMessage{
+				json.RawMessage(`33.1234`),
+			},
+			ExpectedArgs: []interface{}{33.1234},
+			BadArgs: [][]json.RawMessage{
+				{json.RawMessage(`1.234`), json.RawMessage(`2`)},
+				{json.RawMessage(`{}}`)},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -346,6 +358,14 @@ func (a *agentMockup) ReloadRules() (string, error) {
 func (a *agentMockup) SendAppBundle() error {
 	ret := a.Called()
 	return ret.Error(0)
+}
+
+func (a *agentMockup) SetPerformanceBudget(budget float64) error {
+	return a.Called(budget).Error(0)
+}
+
+func (a *agentMockup) ExpectSetPerformanceBudget(args ...interface{}) *mock.Call {
+	return a.On("SetPerformanceBudget", args...)
 }
 
 func (a *agentMockup) ExpectSendAppBundle(...interface{}) *mock.Call {

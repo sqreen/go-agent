@@ -2,8 +2,12 @@
 // Please refer to our terms for more information:
 // https://www.sqreen.io/terms.html
 
-package version
+package internal
 
-const version = "1.0.0"
+import "time"
 
-func Version() string { return version }
+const (
+	perfHistogramUnit   = 0.1
+	perfHistogramBase   = 2.0
+	perfHistogramPeriod = time.Minute
+)

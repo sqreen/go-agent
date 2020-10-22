@@ -33,13 +33,13 @@ func Test(t *testing.T) {
 			},
 
 			{
-				Symbol:   "my-app/vendor/github.com/sqreen/go-agent/internal/protection/http.(*RequestContext).Foo",
-				Expected: "github.com/sqreen/go-agent/internal/protection/http.(*RequestContext).Foo",
+				Symbol:   "my-app/vendor/github.com/sqreen/go-agent/internal/protection/http.(*ProtectionContext).Foo",
+				Expected: "github.com/sqreen/go-agent/internal/protection/http.(*ProtectionContext).Foo",
 			},
 
 			{
-				Symbol:   "github.com/sqreen/go-agent/internal/protection/http.(*RequestContext).Foo",
-				Expected: "github.com/sqreen/go-agent/internal/protection/http.(*RequestContext).Foo",
+				Symbol:   "github.com/sqreen/go-agent/internal/protection/http.(*ProtectionContext).Foo",
+				Expected: "github.com/sqreen/go-agent/internal/protection/http.(*ProtectionContext).Foo",
 			},
 		} {
 			tc := tc
