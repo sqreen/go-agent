@@ -75,7 +75,8 @@ func (ls *LocalStopWatch) Stop() (dt time.Duration) {
 		// Check if we really are the last one
 		if s.oldestStart != -1 {
 			// Update the global duration
-			atomic.StoreInt64((*int64)(&s.duration), int64(ls.stop-s.oldestStart))
+			duration := atomic.LoadInt64((*int64)(&s.duration))
+			atomic.StoreInt64((*int64)(&s.duration), duration+int64(ls.stop-s.oldestStart))
 			// Reset oldestStart
 			s.oldestStart = -1
 		}
