@@ -65,11 +65,12 @@ type AppLoginResponse struct {
 }
 
 type AppLoginResponse_Feature struct {
-	BatchSize      uint32 `json:"batch_size"`
-	MaxStaleness   uint32 `json:"max_staleness"`
-	HeartbeatDelay uint32 `json:"heartbeat_delay"`
-	UseSignals     bool   `json:"use_signals"`
-	PerfLevel      int    `json:"perf_level"`
+	BatchSize        uint32 `json:"batch_size"`
+	MaxStaleness     uint32 `json:"max_staleness"`
+	HeartbeatDelay   uint32 `json:"heartbeat_delay"`
+	UseSignals       bool   `json:"use_signals"`
+	PerfLevel        int    `json:"perf_level"`
+	EventQueueLength uint   `json:"event_queue_length"`
 }
 
 type CommandRequest struct {

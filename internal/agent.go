@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -86,7 +88,7 @@ func (instance *agentInstanceType) set(agent *AgentType) {
 //   it and silently return.
 func (instance *agentInstanceType) start() {
 	instance.startOnce.Do(func() {
-		_ = sqsafe.Go(func() error {
+		sqsafe.Go(func() error {
 			// Level 1
 			// Backoff-sleep loop to retry starting the agent
 			// To properly work, this level relies on:
@@ -161,7 +163,7 @@ func (instance *agentInstanceType) start() {
 				time.Sleep(d)
 			}
 			return nil
-		})
+		}, nil)
 	})
 }
 
@@ -330,9 +332,7 @@ func (a *AgentType) sendClosedHTTPProtectionContext(ctx http_protection_types.Cl
 	if !event.shouldSend() {
 		return
 	}
-	if err := a.eventMng.send(event); err != nil {
-		a.logger.Error(sqerrors.Wrapf(err, "could not send the closed http protection context"))
-	}
+	a.eventMng.send(event)
 }
 
 type withNotificationError struct {
@@ -390,11 +390,12 @@ func (a *AgentType) Serve() error {
 	}
 
 	// start the event manager's loop
-	a.eventMng = newEventManager(a, batchSize, maxStaleness)
-	eventMngErrChan := sqsafe.Go(func() error {
-		a.eventMng.Loop(a.ctx, a.client)
-		return nil
-	})
+	queueLength := appLoginRes.Features.EventQueueLength
+	if queueLength == 0 {
+		queueLength = config.EventQueueDefaultLength
+	}
+	a.eventMng = newEventManager(a, queueLength, uint32(runtime.NumCPU()), batchSize, maxStaleness)
+	a.eventMng.Start()
 
 	a.setRunning(true)
 	defer a.setRunning(false)
@@ -434,7 +435,10 @@ func (a *AgentType) Serve() error {
 			a.logger.Debug("successfully logged out")
 			return nil
 
-		case err := <-eventMngErrChan:
+		case err := <-a.eventMng.errChan:
+			if err == nil {
+				continue
+			}
 			// Unexpected error from the event manager's loop as it should stop
 			// when the agent stops.
 			return err
@@ -553,28 +557,37 @@ func (a *AgentType) gracefulStop() {
 }
 
 type eventManager struct {
-	agent        *AgentType
-	count        int
-	eventsChan   chan Event
-	maxStaleness time.Duration
+	agent          *AgentType
+	maxBatchLength int
+	eventsChan     chan Event
+	maxStaleness   time.Duration
+	stats          *metrics.TimeHistogram
+	maxGoroutines  uint32
+	nbGoroutines   uint32
+	errChan        chan error
 }
 
-func newEventManager(agent *AgentType, count int, maxStaleness time.Duration) *eventManager {
+func newEventManager(agent *AgentType, queueLength uint, maxGoroutines uint32, maxBatchLength int, maxStaleness time.Duration) *eventManager {
+	stats := agent.metrics.TimeHistogram("event_management", time.Minute)
 	return &eventManager{
-		agent:        agent,
-		eventsChan:   make(chan Event, count*100),
-		count:        count,
-		maxStaleness: maxStaleness,
+		agent:          agent,
+		eventsChan:     make(chan Event, queueLength),
+		maxBatchLength: maxBatchLength,
+		maxStaleness:   maxStaleness,
+		stats:          stats,
+		maxGoroutines:  maxGoroutines,
+		errChan:        make(chan error, maxGoroutines),
 	}
 }
 
-func (m *eventManager) send(r Event) error {
+func (m *eventManager) send(e Event) {
 	select {
-	case m.eventsChan <- r:
-		return nil
+	case m.eventsChan <- e:
+		m.stats.Add("queue_ingress", 1)
 	default:
-		// The channel buffer is full - drop this new event
-		return sqerrors.New("event dropped: the event channel is full")
+		// The channel buffer is full - drop this event
+		m.scaleUp()
+		m.stats.Add("queue_dropped", 1)
 	}
 }
 
@@ -584,9 +597,34 @@ func stopTimer(t *time.Timer) {
 	}
 }
 
-func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
+func (m *eventManager) ErrChan() <-chan error {
+	return m.errChan
+}
+
+func (m *eventManager) Start() {
+	atomic.StoreUint32(&m.nbGoroutines, 1)
+	m.start()
+}
+
+func (m *eventManager) start() {
+	sqsafe.Go(func() error {
+		m.loop()
+		return nil
+	}, m.errChan)
+}
+
+func (m *eventManager) scaleUp() {
+	if n := atomic.LoadUint32(&m.nbGoroutines); n == 0 || n == m.maxGoroutines {
+		return
+	}
+	atomic.AddUint32(&m.nbGoroutines, 1)
+	m.start()
+	m.stats.Add("scale", 1)
+}
+
+func (m *eventManager) loop() {
 	var (
-		// We can't create a stopped timer so we initializae it with a large value
+		// We can't create a stopped timer so we initialize it with a large value
 		// of 24 hours and stop it immediately. Calls to Reset() will correctly
 		// set the configured timer value.
 		stalenessTimer = time.NewTimer(24 * time.Hour)
@@ -595,7 +633,12 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	stopTimer(stalenessTimer)
 	defer stopTimer(stalenessTimer)
 
-	batch := make([]Event, 0, m.count)
+	ctx := m.agent.ctx
+	client := m.agent.client
+	batch := make([]Event, 0, m.maxBatchLength)
+	req := &api.BatchRequest{
+		Batch: make([]api.BatchRequest_Event, 0, cap(batch)),
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -603,13 +646,14 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 
 		case <-stalenessChan:
 			m.agent.logger.Debug("event batch data staleness reached")
-			m.sendBatch(ctx, client, batch)
+			m.sendBatch(ctx, client, batch, req)
 			batch = batch[0:0]
 			stalenessChan = nil
 
 		case event := <-m.eventsChan:
 			batch = append(batch, event)
-			m.agent.logger.Debugf("new event `%T` added to the event batch", event)
+			m.stats.Add("queue_egress", 1)
+			m.agent.logger.Debugf("event `%T` added to the event batch", event)
 
 			batchLen := len(batch)
 			switch {
@@ -618,10 +662,10 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 				stalenessChan = stalenessTimer.C
 				m.agent.logger.Debug("batching events for ", m.maxStaleness)
 
-			case batchLen >= m.count:
+			case batchLen >= m.maxBatchLength:
 				// No more room in the batch
 				m.agent.logger.Debugf("sending the batch of %d events", batchLen)
-				m.sendBatch(ctx, client, batch)
+				m.sendBatch(ctx, client, batch, req)
 				batch = batch[0:0]
 				stalenessChan = nil
 				stopTimer(stalenessTimer)
@@ -630,11 +674,10 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	}
 }
 
-func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, batch []Event) {
-	req := api.BatchRequest{
-		Batch: make([]api.BatchRequest_Event, 0, len(batch)),
-	}
-
+func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, batch []Event, req *api.BatchRequest) {
+	defer func() {
+		req.Batch = req.Batch[0:0]
+	}()
 	for _, e := range batch {
 		var event api.BatchRequest_EventFace
 		switch actual := e.(type) {
@@ -656,9 +699,10 @@ func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, ba
 	}
 
 	// Send the batch.
-	if err := client.Batch(ctx, &req); err != nil {
-		// Log the error and drop the batch
-		m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
+	if err := client.Batch(ctx, req); err != nil {
+		m.stats.Add("backend_dropped", int64(len(req.Batch)))
+	} else {
+		m.stats.Add("backend_egress", int64(len(req.Batch)))
 	}
 }
 
