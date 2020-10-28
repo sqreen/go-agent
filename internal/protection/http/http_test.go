@@ -14,200 +14,22 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/sqreen/go-agent/internal/event"
+	http_protection_mockups "github.com/sqreen/go-agent/internal/protection/http/_testlib/mockups"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
-	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
+	middleware_mockups "github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-type ResponseWriterMockup struct {
-	mock.Mock
-}
-
-func (r *ResponseWriterMockup) Header() http.Header {
-	h, _ := r.Called().Get(0).(http.Header)
-	return h
-}
-
-func (r *ResponseWriterMockup) Write(bytes []byte) (int, error) {
-	ret := r.Called(bytes)
-	return ret.Int(0), ret.Error(1)
-}
-
-func (r *ResponseWriterMockup) WriteHeader(statusCode int) {
-	r.Called(statusCode)
-}
-
-func (r *ResponseWriterMockup) WriteString(s string) (n int, err error) {
-	ret := r.Called(s)
-	return ret.Int(0), ret.Error(1)
-}
-
-type RequestReaderMockup struct {
-	mock.Mock
-}
-
-func (r *RequestReaderMockup) Body() []byte {
-	value, _ := r.Called().Get(0).([]byte)
-	return value
-}
-
-func (r *RequestReaderMockup) Header(header string) (value *string) {
-	value, _ = r.Called(header).Get(0).(*string)
-	return value
-}
-
-func (r *RequestReaderMockup) Headers() http.Header {
-	h, _ := r.Called().Get(0).(http.Header)
-	return h
-}
-
-func (r *RequestReaderMockup) ExpectHeaders() *mock.Call {
-	return r.On("Headers")
-}
-
-func (r *RequestReaderMockup) Method() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) URL() *url.URL {
-	u, _ := r.Called().Get(0).(*url.URL)
-	return u
-}
-
-func (r *RequestReaderMockup) ExpectURL() *mock.Call {
-	return r.On("URL")
-}
-
-func (r *RequestReaderMockup) RequestURI() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) Host() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) RemoteAddr() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) ExpectRemoteAddr() *mock.Call {
-	return r.On("RemoteAddr")
-}
-
-func (r *RequestReaderMockup) IsTLS() bool {
-	return r.Called().Bool(0)
-}
-
-func (r *RequestReaderMockup) UserAgent() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) Referer() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) QueryForm() url.Values {
-	v, _ := r.Called().Get(0).(url.Values)
-	return v
-}
-
-func (r *RequestReaderMockup) PostForm() url.Values {
-	v, _ := r.Called().Get(0).(url.Values)
-	return v
-}
-
-func (r *RequestReaderMockup) ClientIP() net.IP {
-	ip, _ := r.Called().Get(0).(net.IP)
-	return ip
-}
-
-func (r *RequestReaderMockup) ExpectClientIP() *mock.Call {
-	return r.On("ClientIP")
-}
-
-func (r *RequestReaderMockup) Params() types.RequestParamMap {
-	v, _ := r.Called().Get(0).(types.RequestParamMap)
-	return v
-}
-
-func (r *RequestReaderMockup) ExpectMethod() *mock.Call {
-	return r.On("Method")
-}
-
-func (r *RequestReaderMockup) ExpectRequestURI() *mock.Call {
-	return r.On("RequestURI")
-}
-
-func (r *RequestReaderMockup) ExpectHost() *mock.Call {
-	return r.On("Host")
-}
-
-func (r *RequestReaderMockup) ExpectIsTLS() *mock.Call {
-	return r.On("IsTLS")
-}
-
-func (r *RequestReaderMockup) ExpectUserAgent() *mock.Call {
-	return r.On("UserAgent")
-}
-
-func (r *RequestReaderMockup) ExpectReferer() *mock.Call {
-	return r.On("Referer")
-}
-
-func (r *RequestReaderMockup) ExpectQueryForm() *mock.Call {
-	return r.On("QueryForm")
-}
-
-func (r *RequestReaderMockup) ExpectPostForm() *mock.Call {
-	return r.On("PostForm")
-}
-
-func (r *RequestReaderMockup) ExpectParams() *mock.Call {
-	return r.On("Params")
-}
-
-func (r *RequestReaderMockup) ExpectBody() *mock.Call {
-	return r.On("Body")
-}
-
-type ResponseMockup struct {
-	mock.Mock
-}
-
-func (r *ResponseMockup) Status() int {
-	return r.Called().Int(0)
-}
-
-func (r *ResponseMockup) ExpectStatus() *mock.Call {
-	return r.On("Status")
-}
-
-func (r *ResponseMockup) ContentType() string {
-	return r.Called().String(0)
-}
-
-func (r *ResponseMockup) ExpectContentType() *mock.Call {
-	return r.On("ContentType")
-}
-
-func (r *ResponseMockup) ContentLength() int64 {
-	return r.Called().Get(0).(int64)
-}
-
-func (r *ResponseMockup) ExpectContentLength() *mock.Call {
-	return r.On("ContentLength")
-}
-
 func TestProtectionAPI(t *testing.T) {
-	newMockups := func(t *testing.T, ip net.IP, allowPath, allowIP bool) (*mockups.RootHTTPProtectionContextMockup, *mockups.HTTPProtectionConfigMockup, *RequestReaderMockup, *ResponseWriterMockup) {
-		r := &mockups.RootHTTPProtectionContextMockup{}
+	newMockups := func(t *testing.T, ip net.IP, allowPath, allowIP bool) (*middleware_mockups.RootHTTPProtectionContextMockup, *middleware_mockups.HTTPProtectionConfigMockup, *http_protection_mockups.RequestReaderMockup, *http_protection_mockups.ResponseWriterMockup) {
+		r := &middleware_mockups.RootHTTPProtectionContextMockup{}
 
-		cfg := mockups.NewHTTPProtectionConfigMockup()
+		cfg := middleware_mockups.NewHTTPProtectionConfigMockup()
 
-		responseWriterMockup := &ResponseWriterMockup{}
+		responseWriterMockup := &http_protection_mockups.ResponseWriterMockup{}
 
-		requestReaderMockup := &RequestReaderMockup{}
+		requestReaderMockup := &http_protection_mockups.RequestReaderMockup{}
 
 		// Path passlist
 		u, err := url.Parse("https://test.com/foo/bar/")
@@ -265,8 +87,8 @@ func TestProtectionAPI(t *testing.T) {
 	})
 
 	t.Run("nil root context", func(t *testing.T) {
-		w := &ResponseWriterMockup{}
-		req := &RequestReaderMockup{}
+		w := &http_protection_mockups.ResponseWriterMockup{}
+		req := &http_protection_mockups.RequestReaderMockup{}
 		p := NewProtectionContext(nil, w, req)
 		require.Nil(t, p)
 	})
@@ -301,7 +123,7 @@ func TestProtectionAPI(t *testing.T) {
 		r.AssertExpectations(t)
 
 		// Fake response
-		response := &ResponseMockup{}
+		response := &http_protection_mockups.ResponseMockup{}
 		response.ExpectStatus().Return(433)
 		response.ExpectContentType().Return("sqreen/test")
 		response.ExpectContentLength().Return(int64(4321))

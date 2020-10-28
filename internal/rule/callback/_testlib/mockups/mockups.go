@@ -42,7 +42,7 @@ func (r *NativeRuleContextMockup) Pre(cb func(c callback.CallbackContext)) {
 	r.Called(cb)
 }
 
-func (r *NativeRuleContextMockup) ExpectPre(cb func(c callback.CallbackContext)) *mock.Call {
+func (r *NativeRuleContextMockup) ExpectPre(cb interface{}) *mock.Call {
 	return r.On("Pre", cb)
 }
 
@@ -50,7 +50,7 @@ func (r *NativeRuleContextMockup) Post(cb func(c callback.CallbackContext)) {
 	r.Called(cb)
 }
 
-func (r *NativeRuleContextMockup) ExpectPost(cb func(c callback.CallbackContext)) *mock.Call {
+func (r *NativeRuleContextMockup) ExpectPost(cb interface{}) *mock.Call {
 	return r.On("Post", cb)
 }
 
@@ -75,12 +75,16 @@ func (c *CallbackContextMockup) AddMetricsValue(key interface{}, value int64) er
 	return c.Called(key, value).Error(0)
 }
 
-func (c *CallbackContextMockup) ExpectPushMetricsValue(key interface{}, value int64) *mock.Call {
+func (c *CallbackContextMockup) ExpectAddMetricsValue(key interface{}, value int64) *mock.Call {
 	return c.On("AddMetricsValue", key, value)
 }
 
 func (c *CallbackContextMockup) HandleAttack(shouldBock bool, opts ...event.AttackEventOption) (blocked bool) {
 	return c.Called(shouldBock, opts).Bool(0)
+}
+
+func (c *CallbackContextMockup) ExpectHandleAttack(shouldBock bool, opts interface{}) *mock.Call {
+	return c.On("HandleAttack", shouldBock, opts)
 }
 
 type ProtectionContextMockup struct {

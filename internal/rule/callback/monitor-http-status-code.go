@@ -23,7 +23,7 @@ func NewMonitorHTTPStatusCodeCallback(r RuleContext, _ NativeCallbackConfig) (sq
 func newMonitorHTTPStatusCodePrologCallback(r RuleContext) http_protection.ResponseMonitoringPrologCallbackType {
 	return func(_ **http_protection.ProtectionContext, resp *types.ResponseFace) (http_protection.NonBlockingEpilogCallbackType, error) {
 		r.Pre(func(c CallbackContext) {
-			// TODO: log once
+			sqassert.NotNil(resp)
 			status := (*resp).Status()
 			_ = c.AddMetricsValue(status, 1)
 			if status == http.StatusNotFound {
