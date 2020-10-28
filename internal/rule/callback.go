@@ -8,7 +8,6 @@ package rule
 
 import (
 	"reflect"
-	"runtime"
 	"time"
 
 	"github.com/dop251/goja"
@@ -17,11 +16,27 @@ import (
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/internal/rule/callback/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
+
+type ProtectionContext interface {
+	callback.ProtectionContext
+	HandleAttack(block bool, attack *event.AttackEvent) (blocked bool)
+}
+
+func FromGLS() ProtectionContext {
+	v := sqgls.Get()
+	actual, _ := v.(ProtectionContext)
+	return actual
+}
+
+// Static assert that protection contexts correctly implement the
+// ProtectionContext interface
+var _ ProtectionContext = (*http_protection.ProtectionContext)(nil)
 
 type nativeRuleContext struct {
 	name         string
@@ -163,6 +178,7 @@ func withCallCount(rulepackID, rule, cb string, store timeHistogram) NativeCallb
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) {
 			if err := store.Add(callCounterID, 1); err != nil {
+				// TODO: error type switch - log once non max store errors
 				c.Logger().Error(err)
 			}
 			cb(c)
@@ -254,33 +270,35 @@ func wrapCallback(cb NativeCallbackFunc, middlewares []NativeCallbackMiddlewareF
 	return cb
 }
 
-type nativeCallbackContext struct {
-	r *nativeRuleContext
-	p types.ProtectionContext
-}
+type (
+	callbackContext struct {
+		r *nativeRuleContext
+		p ProtectionContext
+	}
+)
 
-func makeCallbackContext(r *nativeRuleContext) (c nativeCallbackContext, ok bool) {
-	p := types.FromGLS()
+func makeCallbackContext(r *nativeRuleContext) (c callbackContext, ok bool) {
+	p := FromGLS()
 	if p == nil {
 		ok = false
 		return
 	}
 
-	return nativeCallbackContext{
+	return callbackContext{
 		r: r,
 		p: p,
 	}, true
 }
 
-func (c nativeCallbackContext) ProtectionContext() types.ProtectionContext {
+func (c callbackContext) ProtectionContext() callback.ProtectionContext {
 	return c.p
 }
 
-func (c nativeCallbackContext) Logger() callback.Logger {
+func (c callbackContext) Logger() callback.Logger {
 	return c.r.logger
 }
 
-func (c nativeCallbackContext) AddMetricsValue(key interface{}, value int64) error {
+func (c callbackContext) AddMetricsValue(key interface{}, value int64) error {
 	if err := c.r.defaultMetricsStore.Add(key, value); err != nil {
 		sqErr := sqerrors.Wrapf(err, "rule `%s`: could not add a value to the default metrics store", c.r.name)
 		switch err.(type) {
@@ -294,28 +312,23 @@ func (c nativeCallbackContext) AddMetricsValue(key interface{}, value int64) err
 	return nil
 }
 
-func (c nativeCallbackContext) HandleAttack(shouldBlock bool, info interface{}) (blocked bool) {
+func (c callbackContext) HandleAttack(shouldBlock bool, opts ...event.AttackEventOption) (blocked bool) {
 	block := !c.r.testMode && c.r.blockingMode && shouldBlock
-	var attack *event.AttackEvent
-	if info != nil {
-		attack = &event.AttackEvent{
-			Rule:       c.r.name,
-			Test:       c.r.testMode,
-			Blocked:    block,
-			Timestamp:  time.Now(),
-			Info:       info,
-			StackTrace: callers(),
-			AttackType: c.r.attackType,
-		}
-	}
-	return c.p.HandleAttack(block, attack)
-}
 
-func callers() []uintptr {
-	const depth = 32
-	var pcs [depth]uintptr
-	n := runtime.Callers(3, pcs[:])
-	return pcs[0:n]
+	attack := &event.AttackEvent{
+		Rule:       c.r.name,
+		Test:       c.r.testMode,
+		Blocked:    block,
+		AttackType: c.r.attackType,
+		Timestamp:  time.Now(),
+	}
+
+	// Apply the attack options
+	for _, opt := range opts {
+		opt(attack)
+	}
+
+	return c.p.HandleAttack(block, attack)
 }
 
 type (

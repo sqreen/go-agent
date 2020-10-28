@@ -12,6 +12,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/sqreen/go-agent/internal/binding-accessor"
+	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
@@ -51,7 +52,7 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 					return
 				}
 
-				blocked = c.HandleAttack(true, noScrub(result.Record))
+				blocked = c.HandleAttack(true, event.WithAttackInfo(noScrub(result.Record)), event.WithStackTrace())
 				if !blocked {
 					return
 				}
@@ -91,7 +92,7 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 						return
 					}
 
-					blocked = c.HandleAttack(true, noScrub(result.Record))
+					blocked = c.HandleAttack(true, event.WithAttackInfo(noScrub(result.Record)), event.WithStackTrace())
 					if !blocked {
 						return
 					}

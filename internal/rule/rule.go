@@ -168,7 +168,7 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 		}
 
 		// Create the rule context
-		ruleCtx, err := newNativeRuleContext(&r, rulepackID, e.metricsEngine, e.logger, e.perfHistogramUnit, e.perfHistogramBase, e.perfHistogramPeriod)
+		ruleCtx, err := newNativeRuleContext(&r, rulepackID, e.metricsEngine, logger, e.perfHistogramUnit, e.perfHistogramBase, e.perfHistogramPeriod)
 		if err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
 			continue

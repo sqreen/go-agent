@@ -13,12 +13,11 @@ import (
 
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
-	callback_types "github.com/sqreen/go-agent/internal/rule/callback/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
 )
 
-func NewReflectedCallbackBindingAccessorContext(capabilities []string, p callback_types.ProtectionContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
+func NewReflectedCallbackBindingAccessorContext(capabilities []string, p ProtectionContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
 	var ctx = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
@@ -193,7 +192,7 @@ func (b BindingAccessorResultCache) Get(expr string) (value interface{}, exists 
 	return
 }
 
-func NewRequestBindingAccessorContext(p callback_types.ProtectionContext) (*HTTPRequestBindingAccessorContext, error) {
+func NewRequestBindingAccessorContext(p ProtectionContext) (*HTTPRequestBindingAccessorContext, error) {
 	switch actual := p.(type) {
 	default:
 		return nil, sqerrors.Errorf("unexpected request type `%T`", actual)

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/binding-accessor"
+	"github.com/sqreen/go-agent/internal/event"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
@@ -162,7 +163,7 @@ func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.Bindi
 
 	attackInfo := api.WAFAttackInfo{WAFData: info}
 
-	return c.HandleAttack(action == waf_types.BlockAction, attackInfo), nil
+	return c.HandleAttack(action == waf_types.BlockAction, event.WithAttackInfo(attackInfo)), nil
 }
 
 func makeWAFPrologCallback(rule RuleContext, wafRule waf_types.Rule, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, timeout time.Duration) sqhook.PrologCallback {

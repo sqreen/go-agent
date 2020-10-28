@@ -86,7 +86,6 @@ func (r *Record) AddUserSignup(id UserIdentifierMap, ip net.IP) {
 	r.addUserEvent(event)
 }
 
-// TODO: rename as "metrics" or "observations"
 type UserEventFace interface {
 	isUserEvent()
 }
