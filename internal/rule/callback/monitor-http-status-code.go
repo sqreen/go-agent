@@ -7,8 +7,12 @@
 package callback
 
 import (
+	"net/http"
+
+	"github.com/sqreen/go-agent/internal/event"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
@@ -20,7 +24,14 @@ func newMonitorHTTPStatusCodePrologCallback(r RuleContext) http_protection.Respo
 	return func(_ **http_protection.ProtectionContext, resp *types.ResponseFace) (http_protection.NonBlockingEpilogCallbackType, error) {
 		r.Pre(func(c CallbackContext) {
 			// TODO: log once
-			_ = c.AddMetricsValue((*resp).Status(), 1)
+			status := (*resp).Status()
+			_ = c.AddMetricsValue(status, 1)
+			if status == http.StatusNotFound {
+				// Enforce test to true despite the rule's - current backend-internals
+				// detail
+				blocked := c.HandleAttack(false, event.WithAttackInfo(struct{}{}), event.WithTest(true))
+				sqassert.False(blocked)
+			}
 		})
 		return nil, nil
 	}
