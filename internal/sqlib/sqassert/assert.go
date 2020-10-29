@@ -10,7 +10,13 @@ import "github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 
 func True(c bool) {
 	if !c {
-		doPanic(sqerrors.New("sqassert: false condition"))
+		doPanic(sqerrors.New("sqassert: unexpected false value"))
+	}
+}
+
+func False(c bool) {
+	if c {
+		doPanic(sqerrors.New("sqassert: unexpected true value"))
 	}
 }
 

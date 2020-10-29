@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
@@ -89,7 +90,7 @@ func newShellshockPrologCallback(r RuleContext, regexps []*regexp.Regexp) Shells
 							VariableValue: value,
 						}
 
-						if blocked := c.HandleAttack(true, info); blocked {
+						if blocked := c.HandleAttack(true, event.WithAttackInfo(info), event.WithStackTrace()); blocked {
 							epilog = func(_ **os.Process, callErr *error) {
 								*callErr = types.SqreenError{Err: errors.New("shellshock protection")}
 							}

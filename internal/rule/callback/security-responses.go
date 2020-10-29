@@ -84,18 +84,23 @@ func NewUserSecurityResponseCallback(r RuleContext, _ NativeCallbackConfig) (sqh
 }
 
 func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.IdentifyUserPrologCallbackType {
-	return func(ctx **http_protection.ProtectionContext, uid *map[string]string) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
+	return func(callCtx **http_protection.ProtectionContext, uid *map[string]string) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
 		r.Pre(func(c CallbackContext) {
-			ctx := *ctx
-			sqassert.NotNil(ctx)
+			p, ok := c.ProtectionContext().(*http_protection.ProtectionContext)
+			if !ok {
+				// TODO: log once
+				return
+			}
+			sqassert.True(*callCtx == p)
+
 			id := *uid
-			action, exists := ctx.FindActionByUserID(id)
+			action, exists := p.FindActionByUserID(id)
 			if !exists {
 				return
 			}
 
 			epilog = func(e *error) {
-				writeUserSecurityResponse(ctx, action, id)
+				writeUserSecurityResponse(p, action, id)
 				*e = types.SqreenError{Err: securityResponseError{}}
 			}
 			prologErr = nil
@@ -105,20 +110,20 @@ func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.Identi
 	}
 }
 
-func writeUserSecurityResponse(ctx *http_protection.ProtectionContext, action actor.Action, userID map[string]string) {
+func writeUserSecurityResponse(p *http_protection.ProtectionContext, action actor.Action, userID map[string]string) {
 	// Since this call happens in the handler, we need to close its context
 	// which also let know the HTTP protection layer that it shouldn't continue
 	// with post-handler protections.
 	var properties protection_context.EventProperties
 	if redirect, ok := action.(actor.RedirectAction); ok {
-		ctx.HandleAttack(false, nil)
+		p.HandleAttack(false, nil)
 		properties = newRedirectedUserEventProperties(redirect, userID)
-		ctx.TrackEvent(redirectUserEventName).WithProperties(properties)
-		writeRedirectionResponse(ctx.ResponseWriter, redirect.RedirectionURL())
+		p.TrackEvent(redirectUserEventName).WithProperties(properties)
+		writeRedirectionResponse(p.ResponseWriter, redirect.RedirectionURL())
 	} else {
 		properties = newBlockedUserEventProperties(action, userID)
-		ctx.TrackEvent(blockUserEventName).WithProperties(properties)
-		ctx.HandleAttack(true, nil)
+		p.TrackEvent(blockUserEventName).WithProperties(properties)
+		p.HandleAttack(true, nil)
 	}
 }
 

@@ -27,13 +27,11 @@ package sqsafe
 //			// ...
 //		}
 //
-func Go(f func() error) <-chan error {
-	c := make(chan error, 1)
+func Go(f func() error, c chan error) {
 	go func() {
-		if err := Call(f); err != nil {
+		err := Call(f)
+		if c != nil {
 			c <- err
 		}
-		close(c)
 	}()
-	return c
 }

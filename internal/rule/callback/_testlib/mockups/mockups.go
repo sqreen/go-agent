@@ -10,7 +10,6 @@ import (
 
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/rule/callback"
-	"github.com/sqreen/go-agent/internal/rule/callback/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 	"github.com/stretchr/testify/mock"
 )
@@ -43,7 +42,7 @@ func (r *NativeRuleContextMockup) Pre(cb func(c callback.CallbackContext)) {
 	r.Called(cb)
 }
 
-func (r *NativeRuleContextMockup) ExpectPre(cb func(c callback.CallbackContext)) *mock.Call {
+func (r *NativeRuleContextMockup) ExpectPre(cb interface{}) *mock.Call {
 	return r.On("Pre", cb)
 }
 
@@ -51,7 +50,7 @@ func (r *NativeRuleContextMockup) Post(cb func(c callback.CallbackContext)) {
 	r.Called(cb)
 }
 
-func (r *NativeRuleContextMockup) ExpectPost(cb func(c callback.CallbackContext)) *mock.Call {
+func (r *NativeRuleContextMockup) ExpectPost(cb interface{}) *mock.Call {
 	return r.On("Post", cb)
 }
 
@@ -59,8 +58,8 @@ type CallbackContextMockup struct {
 	mock.Mock
 }
 
-func (c *CallbackContextMockup) ProtectionContext() types.ProtectionContext {
-	v, _ := c.Called().Get(0).(types.ProtectionContext)
+func (c *CallbackContextMockup) ProtectionContext() callback.ProtectionContext {
+	v, _ := c.Called().Get(0).(callback.ProtectionContext)
 	return v
 }
 
@@ -76,19 +75,23 @@ func (c *CallbackContextMockup) AddMetricsValue(key interface{}, value int64) er
 	return c.Called(key, value).Error(0)
 }
 
-func (c *CallbackContextMockup) ExpectPushMetricsValue(key interface{}, value int64) *mock.Call {
+func (c *CallbackContextMockup) ExpectAddMetricsValue(key interface{}, value int64) *mock.Call {
 	return c.On("AddMetricsValue", key, value)
 }
 
-func (c *CallbackContextMockup) HandleAttack(shouldBock bool, info interface{}) (blocked bool) {
-	return c.Called(shouldBock, info).Bool(0)
+func (c *CallbackContextMockup) HandleAttack(shouldBock bool, opts ...event.AttackEventOption) (blocked bool) {
+	return c.Called(shouldBock, opts).Bool(0)
+}
+
+func (c *CallbackContextMockup) ExpectHandleAttack(shouldBock bool, opts interface{}) *mock.Call {
+	return c.On("HandleAttack", shouldBock, opts)
 }
 
 type ProtectionContextMockup struct {
 	mock.Mock
 }
 
-var _ types.ProtectionContext = (*ProtectionContextMockup)(nil)
+var _ callback.ProtectionContext = (*ProtectionContextMockup)(nil)
 
 func (p *ProtectionContextMockup) AddRequestParam(name string, v interface{}) {
 	p.Called(name, v)
@@ -102,8 +105,8 @@ func (p *ProtectionContextMockup) HandleAttack(block bool, attack *event.AttackE
 	return p.Called(block, attack).Bool(0)
 }
 
-func (p *ProtectionContextMockup) ExpectHandleAttack(block bool, attack interface{}) *mock.Call {
-	return p.On("HandleAttack", block, attack)
+func (p *ProtectionContextMockup) ExpectHandleAttack(block bool, opts ...event.AttackEventOption) *mock.Call {
+	return p.On("HandleAttack", block, opts)
 }
 
 func (p *ProtectionContextMockup) ClientIP() net.IP {
