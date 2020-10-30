@@ -25,7 +25,7 @@ func NewRootHTTPProtectionContextMockup(ctx context.Context, ip string, path str
 	cfg := NewHTTPProtectionConfigMockup()
 	r.ExpectConfig().Return(cfg)
 
-	r.ExpectContext().Return(ctx)
+	r.ExpectContext().Maybe().Return(ctx)
 
 	return r
 }

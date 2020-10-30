@@ -86,7 +86,7 @@ func Middleware() echo.MiddlewareFunc {
 	}
 }
 
-func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next echo.HandlerFunc, c echo.Context) error {
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next echo.HandlerFunc, c echo.Context) (err error) {
 	w := &responseWriterImpl{c: c}
 	r := &requestReaderImpl{c: c}
 	p := http_protection.NewProtectionContext(ctx, w, r)
@@ -95,7 +95,7 @@ func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext,
 	}
 
 	defer func() {
-		p.Close(w.closeResponseWriter())
+		p.Close(w.closeResponseWriter(err))
 	}()
 
 	return middlewareHandlerFromProtectionContext(p, next, c)
@@ -215,11 +215,11 @@ type responseWriterImpl struct {
 	closed bool
 }
 
-func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
+func (w *responseWriterImpl) closeResponseWriter(err error) types.ResponseFace {
 	if !w.closed {
 		w.closed = true
 	}
-	return newObservedResponse(w)
+	return newObservedResponse(w, err)
 }
 
 func (w *responseWriterImpl) Header() http.Header {
@@ -257,7 +257,7 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(r *responseWriterImpl) *observedResponse {
+func newObservedResponse(r *responseWriterImpl, err error) *observedResponse {
 	response := r.c.Response()
 
 	headers := response.Header()
@@ -277,7 +277,18 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 		}
 	}
 
-	status := response.Status
+	// Echo's status code is not necessarily in the response's Status field.
+	// For example, it can be based on the handler's returned error.
+	// Echo's status code field is 200 by default...
+	var status int
+	switch actual := err.(type) {
+	case *echo.HTTPError:
+		// Take the returned error status code
+		status = actual.Code
+	default:
+		// Take the response status code
+		status = response.Status
+	}
 
 	return &observedResponse{
 		contentType:   ct,

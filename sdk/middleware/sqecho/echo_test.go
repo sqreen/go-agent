@@ -426,27 +426,65 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("response observation", func(t *testing.T) {
+		t.Run("direct http header write", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
+
+			expectedStatusCode := 433
+			expectedContentLength := int64(len("\"hello\"\n"))
+			expectedContentType := echo.MIMEApplicationJSONCharsetUTF8
+
+			h := func(c echo.Context) error {
+				return c.JSON(expectedStatusCode, "hello")
+			}
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+
+			m := middleware(root)
+			c := echo.New().NewContext(req, rec)
+
+			// Wrap and call the handler
+			err := m(h)(c)
+
+			// Check the result
+			require.NoError(t, err)
+			require.Equal(t, expectedStatusCode, rec.Code)
+			require.Equal(t, expectedStatusCode, responseStatusCode)
+			require.Equal(t, expectedContentLength, responseContentLength)
+			require.Equal(t, expectedContentType, responseContentType)
+		})
+	})
+
+	t.Run("echo handler error", func(t *testing.T) {
 		var (
-			responseStatusCode    int
-			responseContentType   string
-			responseContentLength int64
+			responseStatusCode int
 		)
 		root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
 		root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
 			resp := closed.Response()
 			responseStatusCode = resp.Status()
-			responseContentLength = resp.ContentLength()
-			responseContentType = resp.ContentType()
 			return true
 		}))
 		defer root.AssertExpectations(t)
 
-		expectedStatusCode := 433
-		expectedContentLength := int64(len("\"hello\"\n"))
-		expectedContentType := echo.MIMEApplicationJSONCharsetUTF8
+		expectedError := echo.ErrNotFound
 
 		h := func(c echo.Context) error {
-			return c.JSON(expectedStatusCode, "hello")
+			return expectedError
 		}
 
 		// Perform the request and record the output
@@ -460,11 +498,9 @@ func TestMiddleware(t *testing.T) {
 		err := m(h)(c)
 
 		// Check the result
-		require.NoError(t, err)
-		require.Equal(t, expectedStatusCode, rec.Code)
-		require.Equal(t, expectedStatusCode, responseStatusCode)
-		require.Equal(t, expectedContentLength, responseContentLength)
-		require.Equal(t, expectedContentType, responseContentType)
+		require.Error(t, err)
+		require.Equal(t, expectedError, err)
+		require.Equal(t, expectedError.Code, responseStatusCode)
 	})
 }
 
