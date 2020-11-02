@@ -16,6 +16,7 @@ import (
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
+	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 	"github.com/sqreen/go-agent/sdk/types"
 )
@@ -38,17 +39,17 @@ func (securityResponseError) Error() string { return "aborted by a security resp
 
 func newIPSecurityResponsePrologCallback(r RuleContext) http_protection.BlockingPrologCallbackType {
 	return func(ctx **http_protection.ProtectionContext) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
-		r.Pre(func(c CallbackContext) {
+		r.Pre(func(c CallbackContext) error {
 			ctx := *ctx
 			sqassert.NotNil(ctx)
 			ip := c.ProtectionContext().ClientIP()
 			action, exists, err := ctx.FindActionByIP(ip)
 			if err != nil {
-				c.Logger().Error(err)
-				return
+				type errKey struct{}
+				return sqerrors.WithKey(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP action data structure", ip), errKey{})
 			}
 			if !exists {
-				return
+				return nil
 			}
 
 			epilog = func(e *error) {
@@ -56,6 +57,7 @@ func newIPSecurityResponsePrologCallback(r RuleContext) http_protection.Blocking
 				*e = types.SqreenError{Err: securityResponseError{}}
 			}
 			prologErr = nil
+			return nil
 		})
 
 		return
@@ -84,19 +86,15 @@ func NewUserSecurityResponseCallback(r RuleContext, _ NativeCallbackConfig) (sqh
 }
 
 func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.IdentifyUserPrologCallbackType {
-	return func(callCtx **http_protection.ProtectionContext, uid *map[string]string) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
-		r.Pre(func(c CallbackContext) {
-			p, ok := c.ProtectionContext().(*http_protection.ProtectionContext)
-			if !ok {
-				// TODO: log once
-				return
-			}
-			sqassert.True(*callCtx == p)
+	return func(ctx **http_protection.ProtectionContext, uid *map[string]string) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
+		r.Pre(func(c CallbackContext) error {
+			sqassert.NotNil(ctx)
+			p := *ctx
 
 			id := *uid
 			action, exists := p.FindActionByUserID(id)
 			if !exists {
-				return
+				return nil
 			}
 
 			epilog = func(e *error) {
@@ -104,6 +102,7 @@ func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.Identi
 				*e = types.SqreenError{Err: securityResponseError{}}
 			}
 			prologErr = nil
+			return nil
 		})
 
 		return

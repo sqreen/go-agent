@@ -21,7 +21,6 @@ import (
 
 func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.ReflectedPrologCallback, error) {
 	pool := newVMPool(cfg)
-	// TODO: move this into a JSNativeRuleContext
 	sqassert.NotNil(pool)
 	strategy := cfg.Strategy()
 	sqassert.NotNil(strategy)
@@ -33,28 +32,31 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 		var blocked bool
 
 		if vm.hasPre() {
-			r.Pre(func(c CallbackContext) {
+			r.Pre(func(c CallbackContext) error {
+				type (
+					baErrorKey struct{}
+					jsErrorKey struct{}
+				)
+
 				baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, nil, cfg.Data())
 				if err != nil {
-					c.Logger().Error(err)
-					return
+					return sqerrors.WithKey(err, baErrorKey{})
 				}
 
 				result, err := vm.callPre(baCtx)
 				if err != nil {
 					// TODO: api adding more information to the error such as the
 					//   rule name, etc.
-					c.Logger().Error(err)
-					return
+					return sqerrors.WithKey(err, jsErrorKey{})
 				}
 
 				if raise := result.Status == "raise"; !raise {
-					return
+					return nil
 				}
 
 				blocked = c.HandleAttack(true, event.WithAttackInfo(noScrub(result.Record)), event.WithStackTrace())
 				if !blocked {
-					return
+					return nil
 				}
 
 				// Abort the function call according to the blocking strategy
@@ -64,6 +66,7 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 					results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
 				}
 				prologErr = sqhook.AbortError
+				return nil
 			})
 		}
 
@@ -73,34 +76,38 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 
 		if vm.hasPost() {
 			epilogFunc = func(results []reflect.Value) {
-				r.Post(func(c CallbackContext) {
+				r.Post(func(c CallbackContext) error {
+					type (
+						baErrorKey struct{}
+						jsErrorKey struct{}
+					)
+
 					baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, results, cfg.Data())
 					if err != nil {
-						c.Logger().Error(err)
-						return
+						return sqerrors.WithKey(err, baErrorKey{})
 					}
 
 					result, err := vm.callPost(baCtx)
 					if err != nil {
 						// TODO: api adding more information to the error such as the
 						//   rule name, etc.
-						c.Logger().Error(err)
-						return
+						return sqerrors.WithKey(err, jsErrorKey{})
 					}
 
 					if raise := result.Status == "raise"; !raise {
-						return
+						return nil
 					}
 
 					blocked = c.HandleAttack(true, event.WithAttackInfo(noScrub(result.Record)), event.WithStackTrace())
 					if !blocked {
-						return
+						return nil
 					}
 
 					// Abort the function call according to the blocking strategy
 					abortErr := types.SqreenError{Err: attackError{}}
 					errorIndex := strategy.Protection.BlockStrategy.RetIndex
 					results[errorIndex].Elem().Set(reflect.ValueOf(abortErr))
+					return nil
 				})
 			}
 			prologErr = nil

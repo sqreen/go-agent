@@ -18,7 +18,7 @@ type (
 		Pre(pre CallbackFunc)
 		Post(post CallbackFunc)
 	}
-	CallbackFunc = func(c CallbackContext)
+	CallbackFunc = func(c CallbackContext) error
 )
 
 type CallbackContext interface {

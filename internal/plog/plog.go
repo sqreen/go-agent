@@ -106,7 +106,7 @@ type (
 
 // NewLogger returns a Logger instance wrapping one logger instance per level.
 // They can thus be individually enabled or disabled.
-func NewLogger(level LogLevel, out io.Writer, errChan chan error) Logger {
+func NewLogger(level LogLevel, out io.Writer, errChan chan error) *Logger {
 	var levelLogger DebugLevelLogger
 	switch level {
 	case Debug:
@@ -125,7 +125,7 @@ func NewLogger(level LogLevel, out io.Writer, errChan chan error) Logger {
 		levelLogger = makeDisabledLogger(errChan)
 	}
 
-	return Logger{
+	return &Logger{
 		DebugLevelLogger: levelLogger,
 	}
 }

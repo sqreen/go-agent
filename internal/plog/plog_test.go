@@ -22,12 +22,15 @@ func TestLogger(t *testing.T) {
 	} {
 		level := level // new scope
 		t.Run(level.String(), func(t *testing.T) {
-			for _, errChanLen := range []int{1, 1024} {
+			for _, errChanLen := range []int{0, 1, 1024} {
 				errChanLen := errChanLen // new scope
 				t.Run(fmt.Sprintf("with chan buffer length %d", errChanLen), func(t *testing.T) {
 					g := gomega.NewGomegaWithT(t)
 					output := gbytes.NewBuffer()
-					errChan := make(chan error, errChanLen)
+					var errChan chan error
+					if errChanLen > 0 {
+						errChan = make(chan error, errChanLen)
+					}
 					logger := plog.NewLogger(level, output, errChan)
 
 					// Perform log calls
@@ -58,7 +61,9 @@ func TestLogger(t *testing.T) {
 					}
 
 					// The error should have been sent into the channel
-					g.Eventually(errChan).Should(gomega.Receive(gomega.Equal(err)))
+					if errChanLen > 0 {
+						g.Eventually(errChan).Should(gomega.Receive(gomega.Equal(err)))
+					}
 				})
 			}
 		})
@@ -74,12 +79,16 @@ func TestWithBackoff(t *testing.T) {
 	} {
 		level := level // new scope
 		t.Run(level.String(), func(t *testing.T) {
-			for _, errChanLen := range []int{1, 2, 3, 1024} {
+			for _, errChanLen := range []int{0, 1, 2, 3, 1024} {
 				errChanLen := errChanLen // new scope
 				t.Run(fmt.Sprintf("with chan buffer length %d", errChanLen), func(t *testing.T) {
 					g := gomega.NewGomegaWithT(t)
 					output := gbytes.NewBuffer()
-					errChan := make(chan error, errChanLen)
+
+					var errChan chan error
+					if errChanLen > 0 {
+						errChan = make(chan error, errChanLen)
+					}
 					logger := plog.WithBackoff(plog.NewLogger(level, output, errChan))
 
 					// Perform log calls

@@ -38,7 +38,7 @@ type NativeRuleContextMockup struct {
 	mock.Mock
 }
 
-func (r *NativeRuleContextMockup) Pre(cb func(c callback.CallbackContext)) {
+func (r *NativeRuleContextMockup) Pre(cb func(c callback.CallbackContext) error) {
 	r.Called(cb)
 }
 
@@ -46,7 +46,7 @@ func (r *NativeRuleContextMockup) ExpectPre(cb interface{}) *mock.Call {
 	return r.On("Pre", cb)
 }
 
-func (r *NativeRuleContextMockup) Post(cb func(c callback.CallbackContext)) {
+func (r *NativeRuleContextMockup) Post(cb func(c callback.CallbackContext) error) {
 	r.Called(cb)
 }
 

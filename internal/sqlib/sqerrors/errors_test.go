@@ -48,8 +48,10 @@ func TestWithInfo(t *testing.T) {
 
 func TestWithKey(t *testing.T) {
 	// Checking the Go assumption that the type is correctly taken into account
-	type t1 struct{}
-	type t2 struct{}
+	type (
+		t1 struct{}
+		t2 struct{}
+	)
 	require.NotEqual(t, t1{}, t2{})
 
 	err := errors.New("an error")
@@ -59,6 +61,24 @@ func TestWithKey(t *testing.T) {
 	got, ok := sqerrors.Key(err)
 	require.True(t, ok)
 	require.Equal(t, key, got)
+
+	// Test two defined types identical but in distinct code blocks indeed two
+	// distinct types
+	err1 := sqerrors.New("my error")
+	{
+		type t3 struct{}
+		err1 = sqerrors.WithKey(err1, t3{})
+	}
+	err2 := sqerrors.New("my error")
+	{
+		type t3 struct{}
+		err2 = sqerrors.WithKey(err2, t3{})
+	}
+	k1, exists := sqerrors.Key(err1)
+	require.True(t, exists)
+	k2, exists := sqerrors.Key(err2)
+	require.True(t, exists)
+	require.NotEqual(t, k1, k2)
 }
 
 func TestErrorCollection(t *testing.T) {

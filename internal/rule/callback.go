@@ -46,7 +46,7 @@ type nativeRuleContext struct {
 	critical     bool
 	attackType   string
 	rulepackID   string
-	logger       Logger
+	logger       plog.DebugLevelLogger
 
 	pre  []NativeCallbackMiddlewareFunc
 	post []NativeCallbackMiddlewareFunc
@@ -63,11 +63,11 @@ type nativeRuleContext struct {
 var _ callback.RuleContext = &nativeRuleContext{}
 
 type (
-	NativeCallbackFunc           = func(c callback.CallbackContext)
+	NativeCallbackFunc           = func(c callback.CallbackContext) error
 	NativeCallbackMiddlewareFunc = func(cb NativeCallbackFunc) NativeCallbackFunc
 )
 
-func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metrics.Engine, logger Logger, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) (*nativeRuleContext, error) {
+func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metrics.Engine, logger plog.DebugLevelLogger, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) (*nativeRuleContext, error) {
 	var (
 		metricsStores       map[string]*metrics.TimeHistogram
 		defaultMetricsStore *metrics.TimeHistogram
@@ -86,7 +86,7 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 		blockingMode:        rule.Block,
 		attackType:          rule.AttackType,
 		rulepackID:          rulepackID,
-		logger:              logger,
+		logger:              plog.WithBackoff(logger),
 		metricsEngine:       metricsEngine,
 		metricsStores:       metricsStores,
 		defaultMetricsStore: defaultMetricsStore,
@@ -117,7 +117,7 @@ func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCa
 	)
 
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
-		return func(c callback.CallbackContext) {
+		return func(c callback.CallbackContext) error {
 			p := c.ProtectionContext()
 
 			// Check if the sqreen time deadline is exceeded before calling the
@@ -125,7 +125,7 @@ func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCa
 			if p.DeadlineExceeded(0) {
 				// TODO: log error once
 				_ = overBudgetHistogram.Add(before, 1)
-				return
+				return nil
 			}
 
 			// Check if the sqreen time deadline is exceeded after calling the
@@ -137,14 +137,14 @@ func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCa
 				}
 			}()
 
-			cb(c)
+			return cb(c)
 		}
 	}
 }
 
 func withPerformanceMonitoring(perfHistogram performanceHistogram) NativeCallbackMiddlewareFunc {
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
-		return func(c callback.CallbackContext) {
+		return func(c callback.CallbackContext) error {
 			sq := c.ProtectionContext().SqreenTime()
 			sw := sq.Start()
 			defer func() {
@@ -155,20 +155,17 @@ func withPerformanceMonitoring(perfHistogram performanceHistogram) NativeCallbac
 				_ = perfHistogram.Add(ms)
 			}()
 
-			cb(c)
+			return cb(c)
 		}
 	}
 }
 
-func withSafeCall(l plog.ErrorLogger) NativeCallbackMiddlewareFunc {
+func withSafeCall() NativeCallbackMiddlewareFunc {
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
-		return func(c callback.CallbackContext) {
-			if err := sqsafe.Call(func() error {
-				cb(c)
-				return nil
-			}); err != nil {
-				l.Error(err)
-			}
+		return func(c callback.CallbackContext) error {
+			return sqsafe.Call(func() error {
+				return cb(c)
+			})
 		}
 	}
 }
@@ -176,12 +173,10 @@ func withSafeCall(l plog.ErrorLogger) NativeCallbackMiddlewareFunc {
 func withCallCount(rulepackID, rule, cb string, store timeHistogram) NativeCallbackMiddlewareFunc {
 	callCounterID := rulepackID + "/" + rule + "/" + cb
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
-		return func(c callback.CallbackContext) {
-			if err := store.Add(callCounterID, 1); err != nil {
-				// TODO: error type switch - log once non max store errors
-				c.Logger().Error(err)
-			}
-			cb(c)
+		return func(c callback.CallbackContext) error {
+			// TODO: error type switch - log once non max store errors
+			_ = store.Add(callCounterID, 1)
+			return cb(c)
 		}
 	}
 }
@@ -190,7 +185,7 @@ func (r *nativeRuleContext) Pre(pre NativeCallbackFunc) {
 	r.call(pre, r.pre)
 }
 
-func (r *nativeRuleContext) Post(post func(c callback.CallbackContext)) {
+func (r *nativeRuleContext) Post(post func(c callback.CallbackContext) error) {
 	r.call(post, r.post)
 }
 
@@ -200,7 +195,10 @@ func (r *nativeRuleContext) call(cb NativeCallbackFunc, m []NativeCallbackMiddle
 		return
 	}
 	cb = wrapCallback(cb, m)
-	cb(c)
+	if err := cb(c); err != nil {
+		// TODO: add rule info
+		r.logger.Error(err)
+	}
 }
 
 func (r *nativeRuleContext) SetCritical(critical bool) {
@@ -246,7 +244,7 @@ func (r *nativeRuleContext) buildPostMiddlewares() {
 }
 
 func buildMiddlewares(r *nativeRuleContext, cb string, overBudgetHist *metrics.TimeHistogram, perfHist *metrics.PerfHistogram, callCountHist *metrics.TimeHistogram) (m []NativeCallbackMiddlewareFunc) {
-	m = append(m, withSafeCall(r.logger))
+	m = append(m, withSafeCall())
 
 	if overBudgetHist != nil {
 		m = append(m, withPerformanceCap(r.name, overBudgetHist))
@@ -306,6 +304,7 @@ func (c callbackContext) AddMetricsValue(key interface{}, value int64) error {
 			// TODO: log once
 			return nil
 		default:
+			// TODO: log once and rather return true/false imo to let the caller know
 			return sqErr
 		}
 	}

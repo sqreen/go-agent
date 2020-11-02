@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	logger = plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger = plog.NewLogger(plog.Debug, os.Stderr, nil)
 	fuzzer = fuzz.New().NilChance(0)
 )
 
