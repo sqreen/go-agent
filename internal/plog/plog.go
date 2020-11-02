@@ -15,6 +15,10 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert/sqsync"
+	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
 
 // LogLevel represents the log level. Higher levels include lowers.
@@ -69,117 +73,192 @@ func ParseLogLevel(level string) LogLevel {
 
 // Logger structure wrapping logger interfaces, one per level.
 type Logger struct {
-	ErrorLogger
-	InfoLogger
-	DebugLogger
-	// Channel of logged errors, no matter if it is disabled.
-	errChan chan error
+	DebugLevelLogger
 }
 
-type ErrorLogger interface {
-	Error(err error)
-}
+type (
+	DebugLevelLogger interface {
+		DebugLogger
+		InfoLevelLogger
+	}
 
-type InfoLogger interface {
-	Info(v ...interface{})
-	Infof(format string, v ...interface{})
-}
+	InfoLevelLogger interface {
+		InfoLogger
+		ErrorLevelLogger
+	}
 
-type DebugLogger interface {
-	Debug(v ...interface{})
-	Debugf(format string, v ...interface{})
-}
+	ErrorLevelLogger ErrorLogger
+
+	ErrorLogger interface {
+		Error(err error)
+	}
+
+	InfoLogger interface {
+		Info(v ...interface{})
+		Infof(format string, v ...interface{})
+	}
+
+	DebugLogger interface {
+		Debug(v ...interface{})
+		Debugf(format string, v ...interface{})
+	}
+)
 
 // NewLogger returns a Logger instance wrapping one logger instance per level.
 // They can thus be individually enabled or disabled.
-func NewLogger(level LogLevel, output io.Writer, errChanBufferLen int) *Logger {
-	disabled := disabledLogger{}
-	var errChan chan error
-	if errChanBufferLen > 0 {
-		errChan = make(chan error, errChanBufferLen)
-	}
-	logger := &Logger{
-		ErrorLogger: disabled,
-		InfoLogger:  disabled,
-		DebugLogger: disabled,
-		errChan:     errChan,
-	}
-	enabled := enabledLogger{Writer: output, level: level}
+func NewLogger(level LogLevel, out io.Writer, errChan chan error) Logger {
+	var levelLogger DebugLevelLogger
 	switch level {
 	case Debug:
-		logger.DebugLogger = enabled
-		fallthrough
+		levelLogger = debugLevelLogger{
+			infoLevelLogger: infoLevelLogger{
+				errorLevelLogger: newErrorLevelLogger(out, errChan, true),
+			},
+		}
 	case Info:
-		logger.InfoLogger = enabled
-		fallthrough
+		levelLogger = infoLevelLogger{
+			errorLevelLogger: newErrorLevelLogger(out, errChan, true),
+		}
 	case Error:
-		logger.ErrorLogger = enabled
-		break
-	}
-	return logger
-}
-
-// ErrChan returns the error channel. When Error logs are produced, the logged
-// error is sent into the channel.
-func (l *Logger) ErrChan() <-chan error {
-	return l.errChan
-}
-
-// Error logs the error and send it into the error channel. If the channel is
-// full, the send operation is dropped but the logging is still produced.
-func (l *Logger) Error(err error) {
-	// Non-blocking send into the error channel
-	select {
-	case l.errChan <- err:
+		levelLogger = newErrorLevelLogger(out, errChan, false)
 	default:
+		levelLogger = makeDisabledLogger(errChan)
 	}
-	l.ErrorLogger.Error(err)
+
+	return Logger{
+		DebugLevelLogger: levelLogger,
+	}
 }
 
-// Enabled logger instance.
-type enabledLogger struct {
-	io.Writer
-	level LogLevel
+func newErrorLevelLogger(out io.Writer, errChan chan error, debugLevel bool) *errorLevelLogger {
+	return &errorLevelLogger{
+		writer: &logWriter{
+			start: time.Now(),
+			out:   out,
+		},
+		errChan:        errChan,
+		debugLevel:     debugLevel,
+		disabledLogger: makeDisabledLogger(errChan),
+	}
 }
 
-func (l enabledLogger) Debug(v ...interface{}) {
-	_, _ = l.Write(formatLog(Debug, time.Now(), fmt.Sprint(v...)))
+type (
+	debugLevelLogger struct {
+		infoLevelLogger
+	}
+
+	infoLevelLogger struct {
+		*errorLevelLogger
+	}
+
+	errorLevelLogger struct {
+		disabledLogger
+		writer *logWriter
+		// Channel of logged errors, no matter if it is disabled.
+		errChan    <-chan error
+		debugLevel bool
+	}
+
+	disabledLogger struct {
+		errChan chan error
+	}
+)
+
+func (l debugLevelLogger) Debug(v ...interface{}) {
+	l.writer.write(Debug, fmt.Sprint(v...))
 }
 
-func (l enabledLogger) Debugf(format string, v ...interface{}) {
-	_, _ = l.Write(formatLog(Debug, time.Now(), fmt.Sprintf(format, v...)))
+func (l debugLevelLogger) Debugf(format string, v ...interface{}) {
+	l.writer.write(Debug, fmt.Sprintf(format, v...))
 }
 
-func (l enabledLogger) Info(v ...interface{}) {
-	_, _ = l.Write(formatLog(Info, time.Now(), fmt.Sprint(v...)))
+func (l infoLevelLogger) Info(v ...interface{}) {
+	l.writer.write(Info, fmt.Sprint(v...))
 }
 
-func (l enabledLogger) Infof(format string, v ...interface{}) {
-	_, _ = l.Write(formatLog(Info, time.Now(), fmt.Sprintf(format, v...)))
+func (l infoLevelLogger) Infof(format string, v ...interface{}) {
+	l.writer.write(Info, fmt.Sprintf(format, v...))
 }
 
-func (l enabledLogger) Error(err error) {
+func (l *errorLevelLogger) Error(err error) {
+	// Call disabledLogger's Error() for its error channel
+	l.disabledLogger.Error(err)
+
 	// Most detailed error format, including stacktrace when available.
 	var format string
-	if l.level == Debug {
+	if l.debugLevel {
 		format = "%+v"
 	} else {
 		format = "%v"
 	}
-	_, _ = l.Write(formatLog(Error, time.Now(), fmt.Sprintf(format, err)))
+	l.writer.write(Error, fmt.Sprintf(format, err))
 }
 
-// Time formatting layout with microsecond precision.
-const TimestampLayout = "2006-01-02T15:04:05.999999"
-
-func formatLog(level LogLevel, now time.Time, message string) []byte {
-	return []byte(fmt.Sprintf("sqreen/%s - %s - %s\n", level.String(), now.Format(TimestampLayout), message))
+func makeDisabledLogger(errChan chan error) disabledLogger {
+	return disabledLogger{
+		errChan: errChan,
+	}
 }
 
-type disabledLogger struct {}
-
-func (disabledLogger) Error(error)                   {}
+func (l disabledLogger) Error(err error) {
+	select {
+	case l.errChan <- err:
+	default:
+	}
+}
 func (disabledLogger) Info(...interface{})           {}
 func (disabledLogger) Infof(string, ...interface{})  {}
 func (disabledLogger) Debug(...interface{})          {}
 func (disabledLogger) Debugf(string, ...interface{}) {}
+
+// Time formatting layout with microsecond precision.
+const TimestampLayout = "2006-01-02T15:04:05.999999"
+
+type logWriter struct {
+	start time.Time
+	out   io.Writer
+}
+
+func (l *logWriter) write(level LogLevel, message string) {
+	var str strings.Builder
+	str.WriteString("sqreen/")
+	str.WriteString(level.String())
+	str.WriteString(" - ")
+	now := l.start.Add(time.Since(l.start)).Format(TimestampLayout)
+	str.WriteString(now)
+	str.WriteString(" - ")
+	str.WriteString(message)
+	str.WriteString("\n")
+	_, _ = io.WriteString(l.out, str.String())
+}
+
+type backoffLogger struct {
+	DebugLevelLogger
+	// Map of sqtime.BackoffCounter counters
+	counters sqsync.UInt64Map
+	common   sqtime.BackoffCounter
+}
+
+func WithBackoff(logger DebugLevelLogger) DebugLevelLogger {
+	if actual, ok := logger.(*backoffLogger); ok {
+		return actual
+	}
+
+	return &backoffLogger{
+		DebugLevelLogger: logger,
+	}
+}
+
+func (l *backoffLogger) Error(err error) {
+	var counter *sqtime.BackoffCounter
+	if k, exists := sqerrors.Key(err); exists {
+		counter = (*sqtime.BackoffCounter)(l.counters.Get(k))
+	} else {
+		counter = &l.common
+	}
+
+	counter.Do(func(_ uint64) {
+		// TODO: use count in sqerrors.WithInfo()?
+		l.DebugLevelLogger.Error(err)
+	})
+}

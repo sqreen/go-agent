@@ -27,11 +27,10 @@ func TestWithInfo(t *testing.T) {
 
 	t.Run("multiple info", func(t *testing.T) {
 		err := errors.New("an error")
-		info := map[string]string{
+		err = sqerrors.WithInfo(err, map[string]string{
 			"k1": "v1",
 			"k2": "v2",
-		}
-		err = sqerrors.WithInfo(err, info)
+		})
 		err = sqerrors.Wrap(err, "an error occurred")
 		err = sqerrors.WithInfo(err, map[string]string{"key": "value"})
 		err = sqerrors.Wrap(err, "an error occurred")
@@ -41,10 +40,25 @@ func TestWithInfo(t *testing.T) {
 		err = sqerrors.Wrap(err, "an error occurred")
 		err = sqerrors.WithInfo(err, 33)
 
-		// Check that we get the deepest level
+		// Check that we get the earliest level
 		got := sqerrors.Info(err)
-		require.Equal(t, info, got)
+		require.Equal(t, 33, got)
 	})
+}
+
+func TestWithKey(t *testing.T) {
+	// Checking the Go assumption that the type is correctly taken into account
+	type t1 struct{}
+	type t2 struct{}
+	require.NotEqual(t, t1{}, t2{})
+
+	err := errors.New("an error")
+	key := t1{}
+	err = sqerrors.WithKey(err, key)
+	err = sqerrors.Wrap(err, "an error occurred")
+	got, ok := sqerrors.Key(err)
+	require.True(t, ok)
+	require.Equal(t, key, got)
 }
 
 func TestErrorCollection(t *testing.T) {
