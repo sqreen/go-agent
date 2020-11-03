@@ -389,43 +389,119 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("response observation", func(t *testing.T) {
-		var (
-			responseStatusCode    int
-			responseContentType   string
-			responseContentLength int64
-		)
-		root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
-		root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
-			resp := closed.Response()
-			responseStatusCode = resp.Status()
-			responseContentLength = resp.ContentLength()
-			responseContentType = resp.ContentType()
-			return true
-		}))
-		defer root.AssertExpectations(t)
+		t.Run("handler response", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
 
-		expectedStatusCode := 433
-		expectedContentLength := int64(len(`"hello"`))
-		expectedContentType := "application/json; charset=utf-8"
+			expectedStatusCode := 433
+			expectedContentLength := int64(len(`"hello"`))
+			expectedContentType := "application/json; charset=utf-8"
 
-		// Create a route
-		router := gin.New()
-		router.Use(middleware(root))
-		router.GET("/", func(c *gin.Context) {
-			c.JSON(expectedStatusCode, "hello")
+			// Create a route
+			router := gin.New()
+			router.Use(middleware(root))
+			router.GET("/", func(c *gin.Context) {
+				c.JSON(expectedStatusCode, "hello")
+			})
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+			router.ServeHTTP(rec, req)
+
+			// Check the result
+			require.Equal(t, expectedStatusCode, rec.Code)
+			require.Equal(t, expectedStatusCode, responseStatusCode)
+			require.Equal(t, expectedContentLength, responseContentLength)
+			require.Equal(t, expectedContentLength, int64(rec.Body.Len()))
+			require.Equal(t, expectedContentType, responseContentType)
+			require.Equal(t, expectedContentType, rec.Header().Get("Content-Type"))
 		})
 
-		// Perform the request and record the output
-		rec := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/", nil)
-		router.ServeHTTP(rec, req)
+		t.Run("default response", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
 
-		// Check the result
-		require.Equal(t, expectedStatusCode, rec.Code)
-		require.Equal(t, expectedStatusCode, responseStatusCode)
-		require.Equal(t, expectedContentLength, responseContentLength)
-		require.Equal(t, expectedContentType, responseContentType)
+			// Create a route
+			router := gin.New()
+			router.Use(middleware(root))
+			router.GET("/", func(c *gin.Context) {
+				// Do nothing, so that Gin's response fields have their default values
+			})
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+			router.ServeHTTP(rec, req)
+
+			// Check the result
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, http.StatusOK, responseStatusCode)
+			require.Equal(t, int64(rec.Body.Len()), responseContentLength)
+			require.Equal(t, rec.Header().Get("Content-Type"), responseContentType)
+		})
+
+		t.Run("not found endpoint", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
+
+			// Create a route
+			router := gin.New()
+			router.Use(middleware(root))
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+			router.ServeHTTP(rec, req)
+
+			// Check the result
+			require.Equal(t, http.StatusNotFound, rec.Code)
+			require.Equal(t, http.StatusNotFound, responseStatusCode)
+			require.Equal(t, int64(0), responseContentLength)
+			// Gin writes the response after the middleware so we can't observe the
+			// content type and length
+			//require.Equal(t, int64(0), int64(rec.Body.Len()))
+			require.Equal(t, "", responseContentType)
+			//require.Equal(t, "", rec.Header().Get("Content-Type"))
+		})
 	})
+
 }
 
 func middleware(p types.RootProtectionContext) gin.HandlerFunc {
