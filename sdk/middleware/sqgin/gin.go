@@ -266,11 +266,10 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 	// less than 0 when not set by default with Gin.
 	cl := int64(r.c.Writer.Size())
 	if cl < 0 {
+		cl = 0
 		if contentLength := headers.Get("Content-Length"); contentLength != "" {
 			if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
 				cl = l
-			} else {
-				cl = 0
 			}
 		}
 	}
