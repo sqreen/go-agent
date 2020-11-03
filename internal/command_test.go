@@ -21,7 +21,7 @@ import (
 
 func TestCommandManager(t *testing.T) {
 	var agent agentMockup
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 	mng := internal.NewCommandManager(&agent, logger)
 	require.NotNil(t, mng)
 

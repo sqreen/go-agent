@@ -32,7 +32,7 @@ import (
 )
 
 type Engine struct {
-	logger Logger
+	logger plog.DebugLevelLogger
 	// Map rules to their corresponding symbol in order to be able to modify them
 	// at run time by atomically replacing a running rule.
 	// TODO: write a test to check two HookFaces are correctly comparable
@@ -47,14 +47,8 @@ type Engine struct {
 	perfHistogramPeriod                  time.Duration
 }
 
-// Logger interface required by this package.
-type Logger interface {
-	plog.DebugLogger
-	plog.ErrorLogger
-}
-
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) *Engine {
+func NewEngine(logger plog.DebugLevelLogger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) *Engine {
 	if instrumentationEngine == nil {
 		instrumentationEngine = defaultInstrumentationEngine
 	}

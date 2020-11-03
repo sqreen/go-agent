@@ -81,7 +81,7 @@ func TestEngineUsage(t *testing.T) {
 	require.NoError(t, err)
 	publicKey := &privateKey.PublicKey
 
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 	metrics := metrics.NewEngine()
 
 	t.Run("empty state", func(t *testing.T) {

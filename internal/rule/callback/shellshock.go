@@ -63,19 +63,19 @@ type ShellshockAttackInfo struct {
 
 func newShellshockPrologCallback(r RuleContext, regexps []*regexp.Regexp) ShellshockPrologCallbackType {
 	return func(_ *string, _ *[]string, attr **os.ProcAttr) (epilog ShellshockEpilogCallbackType, prologErr error) {
-		r.Pre(func(c CallbackContext) {
+		r.Pre(func(c CallbackContext) error {
 			env := (*attr).Env
 			if env == nil {
 				env = os.Environ()
 			}
 			if len(env) == 0 {
-				return
+				return nil
 			}
 			for _, env := range env {
 				v := strings.SplitN(env, `=`, 2)
 				if l := len(v); l <= 0 || l > 2 {
-					c.Logger().Error(sqerrors.Errorf("unexpected number of elements split by `=` in `%s`", env))
-					return
+					type errKey struct{}
+					return sqerrors.WithKey(sqerrors.Errorf("unexpected number of elements split by `=` in `%s`", env), errKey{})
 				} else if l == 1 {
 					// Skip empty values
 					continue
@@ -95,11 +95,12 @@ func newShellshockPrologCallback(r RuleContext, regexps []*regexp.Regexp) Shells
 								*callErr = types.SqreenError{Err: errors.New("shellshock protection")}
 							}
 							prologErr = sqhook.AbortError
-							return
+							return nil
 						}
 					}
 				}
 			}
+			return nil
 		})
 		return
 	}

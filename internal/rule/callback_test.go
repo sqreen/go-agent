@@ -5,6 +5,7 @@
 package rule
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -25,30 +26,40 @@ func TestCallbackMiddlewares(t *testing.T) {
 			// No error should be logged
 			defer logger.AssertExpectations(t)
 
-			m := withSafeCall(logger)
+			m := withSafeCall()
 			var called bool
-			cb := m(func(c callback.CallbackContext) {
+			cb := m(func(c callback.CallbackContext) error {
 				called = true
+				return nil
 			})
-			cb(nil)
+			require.NoError(t, cb(nil))
 			require.True(t, called)
 		})
 
 		t.Run("panic", func(t *testing.T) {
-			logger := &testmock.LoggerMockup{}
-			logger.ExpectError(mock.MatchedBy(func(err error) bool {
-				// The panic error should be logged and contain the panic argument
-				expected := &sqsafe.PanicError{}
-				require.True(t, xerrors.As(err, &expected))
-				return expected.Err.Error() == "oops"
-			})).Once()
-			defer logger.AssertExpectations(t)
-
-			m := withSafeCall(logger)
-			cb := m(func(c callback.CallbackContext) {
+			m := withSafeCall()
+			cb := m(func(c callback.CallbackContext) error {
 				panic("oops")
+				return nil
 			})
-			cb(nil)
+			err := cb(nil)
+			require.Error(t, err)
+
+			expected := &sqsafe.PanicError{}
+			require.True(t, xerrors.As(err, &expected))
+			require.Equal(t, expected.Err.Error(), "oops")
+		})
+
+		t.Run("error", func(t *testing.T) {
+			m := withSafeCall()
+			errOops := errors.New("oops")
+			cb := m(func(c callback.CallbackContext) error {
+				return errOops
+			})
+			err := cb(nil)
+			require.Error(t, err)
+
+			require.Equal(t, errOops, err)
 		})
 
 	})
@@ -64,14 +75,15 @@ func TestCallbackMiddlewares(t *testing.T) {
 		m := withCallCount("pack", "rule", "callback", timeHist)
 
 		var called int
-		h := m(func(c callback.CallbackContext) {
+		h := m(func(c callback.CallbackContext) error {
 			called += 1
+			return nil
 		})
 
 		// Call the handler 3 times
-		h(nil)
-		h(nil)
-		h(nil)
+		require.NoError(t, h(nil))
+		require.NoError(t, h(nil))
+		require.NoError(t, h(nil))
 
 		require.Equal(t, 3, called)
 	})
@@ -93,11 +105,12 @@ func TestCallbackMiddlewares(t *testing.T) {
 
 			m := withPerformanceCap("rule", timeHist)
 			var called bool
-			cb := m(func(c callback.CallbackContext) {
+			cb := m(func(c callback.CallbackContext) error {
 				called = true
+				return nil
 			})
 
-			cb(c)
+			require.NoError(t, cb(c))
 			require.True(t, called)
 		})
 
@@ -119,11 +132,12 @@ func TestCallbackMiddlewares(t *testing.T) {
 
 				m := withPerformanceCap("rule", timeHist)
 				var called bool
-				cb := m(func(c callback.CallbackContext) {
+				cb := m(func(c callback.CallbackContext) error {
 					called = true
+					return nil
 				})
 
-				cb(c)
+				require.NoError(t, cb(c))
 				require.False(t, called)
 			})
 
@@ -146,11 +160,12 @@ func TestCallbackMiddlewares(t *testing.T) {
 
 				m := withPerformanceCap("rule", timeHist)
 				var called bool
-				cb := m(func(c callback.CallbackContext) {
+				cb := m(func(c callback.CallbackContext) error {
 					called = true
+					return nil
 				})
 
-				cb(c)
+				require.NoError(t, cb(c))
 				require.True(t, called)
 			})
 		})
@@ -180,12 +195,13 @@ func TestCallbackMiddlewares(t *testing.T) {
 
 		m := withPerformanceMonitoring(perfHist)
 		var called bool
-		cb := m(func(c callback.CallbackContext) {
+		cb := m(func(c callback.CallbackContext) error {
 			called = true
 			time.Sleep(sleep)
+			return nil
 		})
 
-		cb(c)
+		require.NoError(t, cb(c))
 
 		require.True(t, called)
 		require.Equal(t, perf, float64(sqreenTime.Duration().Nanoseconds())/float64(time.Millisecond))

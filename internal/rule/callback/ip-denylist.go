@@ -64,16 +64,16 @@ func (e IPDenyListError) Error() string {
 
 func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore) IPDenyListPrologCallbackType {
 	return func(**http_protection.ProtectionContext) (epilog IPDenyListEpilogCallbackType, prologErr error) {
-		r.Pre(func(c CallbackContext) {
+		r.Pre(func(c CallbackContext) error {
 			ip := c.ProtectionContext().ClientIP()
 			exists, matched, err := denylist.Find(ip)
 			if err != nil {
-				c.Logger().Error(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP denylist", ip))
-				return
+				type errKey struct{}
+				return sqerrors.WithKey(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP denylist", ip), errKey{})
 			}
 
 			if !exists {
-				return
+				return nil
 			}
 
 			c.HandleAttack(true, nil)
@@ -92,6 +92,7 @@ func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore)
 				c.Logger().Debug(err.Error())
 				*e = err
 			}
+			return nil
 		})
 		return
 	}

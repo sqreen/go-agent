@@ -42,11 +42,11 @@ func TestMonitorHTTPStatusCodeCallback(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, epilog)
 
-		r.AssertCalled(t, "Pre", mock.MatchedBy(func(cb func(callback.CallbackContext)) bool {
+		r.AssertCalled(t, "Pre", mock.MatchedBy(func(cb func(callback.CallbackContext) error) bool {
 			c := &mockups.CallbackContextMockup{}
 			defer c.AssertExpectations(t)
 			c.ExpectAddMetricsValue(expectedStatusCode, 1).Return(nil).Once()
-			cb(c)
+			require.NoError(t, cb(c))
 			return true
 		}))
 	})
@@ -73,7 +73,7 @@ func TestMonitorHTTPStatusCodeCallback(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, epilog)
 
-		r.AssertCalled(t, "Pre", mock.MatchedBy(func(cb func(callback.CallbackContext)) bool {
+		r.AssertCalled(t, "Pre", mock.MatchedBy(func(cb func(callback.CallbackContext) error) bool {
 			c := &mockups.CallbackContextMockup{}
 			defer c.AssertExpectations(t)
 			c.ExpectAddMetricsValue(expectedStatusCode, 1).Return(nil).Once()
@@ -84,7 +84,7 @@ func TestMonitorHTTPStatusCodeCallback(t *testing.T) {
 				}
 				return assert.Equal(t, &event.AttackEvent{Test: true, Info: struct{}{}}, attack)
 			})).Return(false).Once()
-			cb(c)
+			require.NoError(t, cb(c))
 			return true
 		}))
 	})

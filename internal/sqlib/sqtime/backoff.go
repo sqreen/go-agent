@@ -4,7 +4,10 @@
 
 package sqtime
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 type Backoff struct {
 	current, max time.Duration
@@ -26,4 +29,16 @@ func (b *Backoff) Next() (duration time.Duration, max bool) {
 	}
 	b.current *= time.Duration(b.rate)
 	return b.current, false
+}
+
+type BackoffCounter uint64
+
+// Do atomically increments backoff counter and calls function `f` along with
+// the incremented counter value when the new count is a power of two.
+func (c *BackoffCounter) Do(f func(count uint64)) {
+	v := atomic.AddUint64((*uint64)(c), 1)
+	// Is power of two? (0 included)
+	if (v & (v - 1)) == 0 {
+		f(v)
+	}
 }

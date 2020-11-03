@@ -97,7 +97,7 @@ func (instance *agentInstanceType) start() {
 			//   - the correctness of sub-level error handling (ie. they don't panic).
 			// Any panics from these would stop the execution of this level.
 			backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-			logger := plog.NewLogger(plog.Info, os.Stderr, 0)
+			logger := plog.NewLogger(plog.Info, os.Stderr, nil)
 			for {
 				err := sqsafe.Call(func() error {
 					// Level 2
@@ -184,6 +184,7 @@ type AgentType struct {
 	runningAccessLock sync.RWMutex
 	running           bool
 	performanceBudget time.Duration
+	errLoggerChan     chan error
 }
 
 type staticMetrics struct {
@@ -201,7 +202,8 @@ type staticMetrics struct {
 const errorChanBufferLength = 256
 
 func New(cfg *config.Config) *AgentType {
-	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
+	errLoggerChan := make(chan error, errorChanBufferLength)
+	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errLoggerChan)
 
 	agentVersion := version.Version()
 	logger.Infof("go agent v%s", agentVersion)
@@ -265,9 +267,10 @@ func New(cfg *config.Config) *AgentType {
 	// AgentType graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &AgentType{
-		logger:  logger,
-		isDone:  make(chan struct{}),
-		metrics: metrics,
+		logger:        logger,
+		errLoggerChan: errLoggerChan,
+		isDone:        make(chan struct{}),
+		metrics:       metrics,
 		staticMetrics: staticMetrics{
 			sdkUserLoginSuccess:      metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod),
 			sdkUserLoginFailure:      metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod),
@@ -443,7 +446,7 @@ func (a *AgentType) Serve() error {
 			// when the agent stops.
 			return err
 
-		case err := <-a.logger.ErrChan():
+		case err := <-a.errLoggerChan:
 			// Logged errors.
 			if xerrors.As(err, &withNotificationError{}) {
 				t, ok := sqerrors.Timestamp(err)

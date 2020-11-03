@@ -18,7 +18,7 @@ import (
 )
 
 func TestUserConfig(t *testing.T) {
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 	cfg, unset := newTestConfig(t, logger)
 	defer unset()
 
@@ -91,7 +91,7 @@ func TestUserConfig(t *testing.T) {
 }
 
 func TestConfigValidation(t *testing.T) {
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 
 	t.Run("no token", func(t *testing.T) {
 		cfg, err := New(logger)
@@ -142,7 +142,7 @@ func TestFileLocation(t *testing.T) {
 	binDirFile := newCfgFile(t, binDir, `token: `+binDirToken)
 	defer os.Remove(binDirFile)
 
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 	cfg, err := New(logger)
 	require.NoError(t, err)
 
@@ -250,7 +250,7 @@ func TestStripRegexp(t *testing.T) {
 		cwdFile := newCfgFile(t, ".", `token: mytoken`)
 		defer os.Remove(cwdFile)
 
-		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+		logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 		cfg, err := New(logger)
 
 		require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestStripRegexp(t *testing.T) {
 `+configKeyStripSensitiveValueRegexp+`: ""`)
 		defer os.Remove(cwdFile)
 
-		logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+		logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 		cfg, err := New(logger)
 
 		require.NoError(t, err)
@@ -314,7 +314,7 @@ func TestDefaultConfiguration(t *testing.T) {
 	cwdFile := newCfgFile(t, ".", `token: mytoken`)
 	defer os.Remove(cwdFile)
 
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 	cfg, err := New(logger)
 
 	require.NoError(t, err)

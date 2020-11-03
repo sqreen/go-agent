@@ -65,7 +65,7 @@ func TestIPDenyListCallback(t *testing.T) {
 		require.True(t, ok)
 
 		// Not blocked
-		r.On("Pre", mock.MatchedBy(func(cb func(c callback.CallbackContext)) bool {
+		r.ExpectPre(mock.MatchedBy(func(cb func(c callback.CallbackContext) error) bool {
 			c := &mockups.CallbackContextMockup{}
 			defer c.AssertExpectations(t)
 
@@ -75,7 +75,7 @@ func TestIPDenyListCallback(t *testing.T) {
 			c.ExpectProtectionContext().Return(p)
 			p.ExpectClientIP().Return(net.ParseIP("11.22.33.44")).Once()
 
-			cb(c)
+			require.NoError(t, cb(c))
 			return true
 		})).Once()
 
