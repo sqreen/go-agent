@@ -33,21 +33,15 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 
 		if vm.hasPre() {
 			r.Pre(func(c CallbackContext) error {
-				type (
-					baErrorKey struct{}
-					jsErrorKey struct{}
-				)
-
 				baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, nil, cfg.Data())
 				if err != nil {
-					return sqerrors.WithKey(err, baErrorKey{})
+					type errKey struct{}
+					return sqerrors.WithKey(err, errKey{})
 				}
 
 				result, err := vm.callPre(baCtx)
 				if err != nil {
-					// TODO: api adding more information to the error such as the
-					//   rule name, etc.
-					return sqerrors.WithKey(err, jsErrorKey{})
+					return err
 				}
 
 				if raise := result.Status == "raise"; !raise {
@@ -77,21 +71,15 @@ func NewJSExecCallback(r RuleContext, cfg JSReflectedCallbackConfig) (sqhook.Ref
 		if vm.hasPost() {
 			epilogFunc = func(results []reflect.Value) {
 				r.Post(func(c CallbackContext) error {
-					type (
-						baErrorKey struct{}
-						jsErrorKey struct{}
-					)
-
 					baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, results, cfg.Data())
 					if err != nil {
-						return sqerrors.WithKey(err, baErrorKey{})
+						type errKey struct{}
+						return sqerrors.WithKey(err, errKey{})
 					}
 
 					result, err := vm.callPost(baCtx)
 					if err != nil {
-						// TODO: api adding more information to the error such as the
-						//   rule name, etc.
-						return sqerrors.WithKey(err, jsErrorKey{})
+						return err
 					}
 
 					if raise := result.Status == "raise"; !raise {
@@ -237,7 +225,8 @@ func call(vm *goja.Runtime, descr *jsCallbackFunc, baCtx bindingaccessor.Context
 	for i, ba := range descr.funcCallParams {
 		v, err := ba(baCtx)
 		if err != nil {
-			return err
+			type errKey int
+			return sqerrors.WithKey(err, errKey(i))
 		}
 
 		var jsVal goja.Value
@@ -252,7 +241,8 @@ func call(vm *goja.Runtime, descr *jsCallbackFunc, baCtx bindingaccessor.Context
 
 	v, err := descr.callback(goja.Undefined(), jsParams...)
 	if err != nil {
-		return err
+		type errKey struct{}
+		return sqerrors.WithKey(err, errKey{})
 	}
 
 	return vm.ExportTo(v, result)

@@ -118,7 +118,8 @@ func runWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.Bindi
 		value, err := ba(baCtx)
 		if err != nil {
 			// Log the error and continue
-			c.Logger().Error(sqerrors.WithKey(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr), expr))
+			type errKey string
+			c.Logger().Error(sqerrors.WithKey(sqerrors.Wrapf(err, "binding accessor execution error `%s`", expr), errKey(expr)))
 			continue
 		}
 		if value == nil {
@@ -311,7 +312,9 @@ func makeFunctionWAFPrologCallback(r RuleContext, wafRule waf_types.Rule, bindin
 func runFunctionWAF(c CallbackContext, bindingAccessors map[string]bindingaccessor.BindingAccessorFunc, wafRule waf_types.Rule, timeout time.Duration, extraParamAccessors functionWAFBindingAccessorMap, strategy *api.ReflectedCallbackConfig, params []reflect.Value, results []reflect.Value) (blocked bool, err error) {
 	baCtx, err := NewReflectedCallbackBindingAccessorContext(strategy.BindingAccessor.Capabilities, c.ProtectionContext(), params, results, nil)
 	if err != nil {
+		type errKey struct{}
 		err = sqerrors.Wrap(err, "unexpected error while creating the binding accessor context")
+		err = sqerrors.WithKey(err, errKey{})
 		return false, err
 	}
 

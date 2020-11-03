@@ -244,6 +244,11 @@ func WithBackoff(logger DebugLevelLogger) DebugLevelLogger {
 		return actual
 	}
 
+	// Don't backoff when in debug level mode
+	if _, isDebugLevel := logger.(*debugLevelLogger); isDebugLevel {
+		return logger
+	}
+
 	return &backoffLogger{
 		DebugLevelLogger: logger,
 	}
