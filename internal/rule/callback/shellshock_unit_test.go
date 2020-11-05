@@ -4,9 +4,6 @@
 
 package callback
 
-// TODO: higher-level callback API that will allow to avoid the missing GLS
-//  during testing, while a callback framework should be completely mockable.
-
 //func TestShellshockCallbacks(t *testing.T) {
 //	regexps := []*regexp.Regexp{
 //		regexp.MustCompile(`oh my regexp`),

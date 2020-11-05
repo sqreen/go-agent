@@ -44,6 +44,10 @@ func (a *RootHTTPProtectionContextMockup) FindActionByIP(ip net.IP) (action acto
 	return
 }
 
+func (a *RootHTTPProtectionContextMockup) ExpectFindActionByIP(ip net.IP) *mock.Call {
+	return a.On("FindActionByIP", ip)
+}
+
 func (a *RootHTTPProtectionContextMockup) FindActionByUserID(userID map[string]string) (action actor.Action, exists bool) {
 	rets := a.Called(userID)
 	if v := rets.Get(0); v != nil {
@@ -51,6 +55,10 @@ func (a *RootHTTPProtectionContextMockup) FindActionByUserID(userID map[string]s
 	}
 	exists = rets.Bool(1)
 	return
+}
+
+func (a *RootHTTPProtectionContextMockup) ExpectFindActionByUserID(userID map[string]string) *mock.Call {
+	return a.On("FindActionByUserID", userID)
 }
 
 func (a *RootHTTPProtectionContextMockup) Logger() *plog.Logger {
