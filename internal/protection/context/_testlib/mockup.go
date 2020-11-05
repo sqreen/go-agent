@@ -25,7 +25,7 @@ func (e *EventRecorderMockup) TrackEvent(event string) protection_context.Custom
 	return r
 }
 
-func (e *EventRecorderMockup) ExpectTrackEvent(event string) *mock.Call {
+func (e *EventRecorderMockup) ExpectTrackEvent(event interface{}) *mock.Call {
 	return e.On("TrackEvent", event)
 }
 
@@ -33,7 +33,7 @@ func (e *EventRecorderMockup) TrackUserSignup(id map[string]string) {
 	e.Called(id)
 }
 
-func (e *EventRecorderMockup) ExpectTrackUserSignup(id map[string]string) *mock.Call {
+func (e *EventRecorderMockup) ExpectTrackUserSignup(id interface{}) *mock.Call {
 	return e.On("TrackUserSignup", id)
 }
 
@@ -41,7 +41,7 @@ func (e *EventRecorderMockup) TrackUserAuth(id map[string]string, success bool) 
 	e.Called(id, success)
 }
 
-func (e *EventRecorderMockup) ExpectTrackUserAuth(id map[string]string, success bool) *mock.Call {
+func (e *EventRecorderMockup) ExpectTrackUserAuth(id, success interface{}) *mock.Call {
 	return e.On("TrackUserAuth", id, success)
 }
 
@@ -49,7 +49,7 @@ func (e *EventRecorderMockup) IdentifyUser(id map[string]string) error {
 	return e.Called(id).Error(0)
 }
 
-func (e *EventRecorderMockup) ExpectIdentifyUser(id map[string]string) *mock.Call {
+func (e *EventRecorderMockup) ExpectIdentifyUser(id interface{}) *mock.Call {
 	return e.On("IdentifyUser", id)
 }
 
@@ -57,7 +57,7 @@ func (e *EventRecorderMockup) WithTimestamp(t time.Time) {
 	e.Called(t)
 }
 
-func (e *EventRecorderMockup) ExpectWithTimestamp(t time.Time) *mock.Call {
+func (e *EventRecorderMockup) ExpectWithTimestamp(t interface{}) *mock.Call {
 	return e.On("WithTimestamp", t)
 }
 
@@ -65,7 +65,7 @@ func (e *EventRecorderMockup) WithProperties(props protection_context.EventPrope
 	e.Called(props)
 }
 
-func (e *EventRecorderMockup) ExpectWithProperties(props protection_context.EventProperties) *mock.Call {
+func (e *EventRecorderMockup) ExpectWithProperties(props interface{}) *mock.Call {
 	return e.On("WithProperties", props)
 }
 
@@ -73,6 +73,6 @@ func (e *EventRecorderMockup) WithUserIdentifiers(id map[string]string) {
 	e.Called(id)
 }
 
-func (e *EventRecorderMockup) ExpectWithUserIdentifiers(id map[string]string) *mock.Call {
+func (e *EventRecorderMockup) ExpectWithUserIdentifiers(id interface{}) *mock.Call {
 	return e.On("WithUserIdentifiers", id)
 }
