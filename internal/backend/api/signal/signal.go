@@ -137,7 +137,9 @@ func newAttackPayload(test, block bool, infos interface{}) *api.SignalPayload {
 
 func fromLegacyTrackEvent(track *legacy_api.RequestRecord_Observed_SDKEvent_Args_Track, t time.Time) *api.Point {
 	var name strings.Builder
-	name.WriteString("sq.sdk.")
+	if !strings.HasPrefix(track.Event, "sq.") {
+		name.WriteString("sq.sdk.")
+	}
 	name.WriteString(track.Event)
 	return api.NewPoint(name.String(), "sqreen:sdk:track", t, nil, nil, nil, nil, nil, newTrackEventPayload(track.Options.Properties, track.Options.UserIdentifiers))
 }

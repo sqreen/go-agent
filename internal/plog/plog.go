@@ -18,6 +18,7 @@ import (
 
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert/sqsync"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
 
@@ -255,15 +256,29 @@ func WithBackoff(logger DebugLevelLogger) DebugLevelLogger {
 }
 
 func (l *backoffLogger) Error(err error) {
-	var counter *sqtime.BackoffCounter
-	if k, exists := sqerrors.Key(err); exists {
-		counter = (*sqtime.BackoffCounter)(l.counters.Get(k))
-	} else {
-		counter = &l.common
-	}
+	// Wrap the following in a safe call to avoid sync.Map indexing panic (eg.
+	// non-comparable error key)
+	safeCallErr := sqsafe.Call(func() error {
+		var counter *sqtime.BackoffCounter
+		if k, exists := sqerrors.Key(err); exists {
+			counter = (*sqtime.BackoffCounter)(l.counters.Get(k))
+		} else {
+			counter = &l.common
+		}
 
-	counter.Do(func(_ uint64) {
-		// TODO: use count in sqerrors.WithInfo()?
-		l.DebugLevelLogger.Error(err)
+		counter.Do(func(_ uint64) {
+			// TODO: use count in sqerrors.WithInfo()?
+			l.DebugLevelLogger.Error(err)
+		})
+
+		return nil
 	})
+
+	if safeCallErr != nil {
+		// A panic occurred so we fall back to the common counter but also append
+		// the returned error to it
+		l.common.Do(func(_ uint64) {
+			l.DebugLevelLogger.Error(sqerrors.ErrorCollection{safeCallErr, err})
+		})
+	}
 }

@@ -22,6 +22,10 @@ func (r *ResponseWriterMockup) Header() http.Header {
 	return h
 }
 
+func (r *ResponseWriterMockup) ExpectHeader() *mock.Call {
+	return r.On("Header")
+}
+
 func (r *ResponseWriterMockup) Write(bytes []byte) (int, error) {
 	ret := r.Called(bytes)
 	return ret.Int(0), ret.Error(1)
@@ -29,6 +33,10 @@ func (r *ResponseWriterMockup) Write(bytes []byte) (int, error) {
 
 func (r *ResponseWriterMockup) WriteHeader(statusCode int) {
 	r.Called(statusCode)
+}
+
+func (r *ResponseWriterMockup) ExpectWriteHeader(statusCode int) *mock.Call {
+	return r.On("WriteHeader", statusCode)
 }
 
 func (r *ResponseWriterMockup) WriteString(s string) (n int, err error) {

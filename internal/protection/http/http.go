@@ -66,6 +66,21 @@ func NewProtectionContext(ctx types.RootProtectionContext, w types.ResponseWrite
 	return p
 }
 
+func NewTestProtectionContext(ctx types.RootProtectionContext, clientIP net.IP, w types.ResponseWriter, r types.RequestReader) *ProtectionContext {
+	rr := &requestReader{
+		RequestReader: r,
+		clientIP:      clientIP,
+		requestParams: make(types.RequestParamMap),
+	}
+
+	return &ProtectionContext{
+		RootProtectionContext: ctx,
+		ResponseWriter:        w,
+		RequestReader:         rr,
+		requestReader:         rr,
+	}
+}
+
 // Helper types for callbacks who must be designed for this protection so that
 // they are the source of truth and so that the compiler catches type issues
 // when compiling (versus when the callback is attached).
@@ -95,11 +110,11 @@ func (p *ProtectionContext) TrackEvent(event string) protection_context.CustomEv
 }
 
 func (p *ProtectionContext) TrackUserSignup(id map[string]string) {
-	p.events.AddUserSignup(id, p.RequestReader.ClientIP())
+	p.events.AddUserSignup(id, p.ClientIP())
 }
 
 func (p *ProtectionContext) TrackUserAuth(id map[string]string, success bool) {
-	p.events.AddUserAuth(id, p.RequestReader.ClientIP(), success)
+	p.events.AddUserAuth(id, p.ClientIP(), success)
 }
 
 func (p *ProtectionContext) IdentifyUser(id map[string]string) error {
