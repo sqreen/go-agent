@@ -15,6 +15,7 @@ import (
 	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
+	"github.com/sqreen/go-agent/internal/sqlib/sqsql"
 )
 
 func NewReflectedCallbackBindingAccessorContext(capabilities []string, p ProtectionContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
@@ -84,8 +85,14 @@ func NewSQLBindingAccessorContext() *SQLBindingAccessorContextType {
 }
 
 func (*SQLBindingAccessorContextType) Dialect(db *sql.DB, dialects map[string]interface{}) (string, error) {
+	drv := sqsql.Unwrap(db.Driver())
+	if drv == nil {
+		type errKey struct{}
+		return "", sqerrors.WithKey(sqerrors.New("unexpected nil SQL driver"), errKey{})
+	}
+
 	// Get the actual unreferenced type so that we can get its package path.
-	drvType := reflect.ValueOf(db.Driver()).Type()
+	drvType := reflect.ValueOf(drv).Type()
 loop:
 	for {
 		switch drvType.Kind() {

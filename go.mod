@@ -3,7 +3,6 @@ module github.com/sqreen/go-agent
 go 1.12
 
 require (
-	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/dave/dst v0.23.1
 	github.com/dlclark/regexp2 v1.2.0 // indirect
 	github.com/dop251/goja v0.0.0-20200526165454-f1752421c432
@@ -29,6 +28,7 @@ require (
 	github.com/sqreen/go-libsqreen v0.7.1
 	github.com/sqreen/go-sdk/signal v1.2.0
 	github.com/stretchr/testify v1.6.1
+	go.elastic.co/apm/module/apmsql v1.9.0
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
 	golang.org/x/tools v0.0.0-20200914190812-8f9ed77dd8e5 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
