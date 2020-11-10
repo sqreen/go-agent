@@ -208,18 +208,22 @@ func Timestamp(err error) (t time.Time, ok bool) {
 	}
 }
 
-// Key returns the earliest key attached to the error if any.
-func Key(err error) (KeyType, bool) {
+// Key returns the deepest key attached to the error if any.
+// TODO: combine every key together instead as a coordinate
+func Key(err error) (k KeyType, exists bool) {
 	for {
+		if keyer, ok := err.(Keyer); ok {
+			k = keyer.Key()
+			exists = true
+		}
+
 		switch actual := err.(type) {
-		case Keyer:
-			return actual.Key(), true
 		case Causer:
 			err = actual.Cause()
 		case xerrors.Wrapper:
 			err = actual.Unwrap()
 		default:
-			return nil, false
+			return k, exists
 		}
 	}
 }
