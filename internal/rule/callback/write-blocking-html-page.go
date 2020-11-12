@@ -7,6 +7,8 @@
 package callback
 
 import (
+	"io"
+
 	"github.com/sqreen/go-agent/internal/backend/api"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
@@ -43,7 +45,7 @@ func newWriteBlockingHTMLPagePrologCallback(r RuleContext, statusCode int) httpp
 			// Write the blocking page. We ignore any return error as this is a best
 			// effort response attempt: we don't want to penalize the server any
 			// further with this request - so no logging, no counting, no retry.
-			_, _ = ctx.ResponseWriter.WriteString(blockedBySqreenPage)
+			_, _ = io.WriteString(ctx.ResponseWriter, blockedBySqreenPage)
 			return nil
 		})
 		return nil, nil
