@@ -15,6 +15,7 @@ import (
 	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
+	"github.com/sqreen/go-agent/internal/sqlib/sqsql"
 )
 
 func NewReflectedCallbackBindingAccessorContext(capabilities []string, p ProtectionContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
@@ -84,8 +85,14 @@ func NewSQLBindingAccessorContext() *SQLBindingAccessorContextType {
 }
 
 func (*SQLBindingAccessorContextType) Dialect(db *sql.DB, dialects map[string]interface{}) (string, error) {
+	drv := sqsql.Unwrap(db.Driver())
+	if drv == nil {
+		type errKey struct{}
+		return "", sqerrors.WithKey(sqerrors.New("unexpected nil SQL driver"), errKey{})
+	}
+
 	// Get the actual unreferenced type so that we can get its package path.
-	drvType := reflect.ValueOf(db.Driver()).Type()
+	drvType := reflect.ValueOf(drv).Type()
 loop:
 	for {
 		switch drvType.Kind() {
@@ -98,26 +105,31 @@ loop:
 
 	pkgPath := sqgo.Unvendor(drvType.PkgPath())
 	if pkgPath == "" {
-		return "", sqerrors.Errorf("could not get the package path of driver type `%T`", db.Driver())
+		type errKey struct{}
+		return "", sqerrors.WithKey(sqerrors.Errorf("could not get the package path of driver type `%T`", drv), errKey{})
 	}
 
 	for dialect, pkgList := range dialects {
 		pkgPaths, ok := pkgList.([]interface{})
 		if !ok {
-			return "", sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgList, pkgPaths)
+			type errKey struct{}
+			return "", sqerrors.WithKey(sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgList, pkgPaths), errKey{})
 		}
 
 		for i := range pkgPaths {
 			path, ok := pkgPaths[i].(string)
 			if !ok {
-				return "", sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgPaths[i], path)
+				type errKey struct{}
+				return "", sqerrors.WithKey(sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgPaths[i], path), errKey{})
 			}
 			if strings.HasPrefix(pkgPath, path) {
 				return dialect, nil
 			}
 		}
 	}
-	return "", sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath)
+
+	type errKey string
+	return "", sqerrors.WithKey(sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath), errKey(pkgPath))
 }
 
 // BindingAccessorContextType is the context passed to binding accessor calls of
