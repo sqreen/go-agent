@@ -6,7 +6,6 @@ package types
 
 import (
 	"context"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -82,7 +81,6 @@ func (m *RequestParamMap) Add(key string, value interface{}) {
 // ResponseWriter is the response writer interface.
 type ResponseWriter interface {
 	http.ResponseWriter
-	io.StringWriter
 }
 
 // ResponseFace is the interface to the response that was sent by the handler.
@@ -100,7 +98,3 @@ type ClosedProtectionContextFace interface {
 	Duration() time.Duration
 	SqreenTime() time.Duration
 }
-
-type WriteAfterCloseError struct{}
-
-func (WriteAfterCloseError) Error() string { return "response write after close" }

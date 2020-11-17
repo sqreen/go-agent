@@ -7,7 +7,6 @@
 package sqgin
 
 import (
-	"io"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -65,6 +64,7 @@ func Middleware() gin.HandlerFunc {
 		ctx, cancel := internal.NewRootHTTPProtectionContext(c.Request.Context())
 		if ctx == nil {
 			c.Next()
+			return
 		}
 		defer cancel()
 		middlewareHandlerFromRootProtectionContext(ctx, c)
@@ -72,16 +72,15 @@ func Middleware() gin.HandlerFunc {
 }
 
 func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, c *gin.Context) {
-	w := &responseWriterImpl{c: c}
 	r := &requestReaderImpl{c: c}
-	p := http_protection.NewProtectionContext(ctx, w, r)
+	p := http_protection.NewProtectionContext(ctx, c.Writer, r)
 	if p == nil {
 		c.Next()
 		return
 	}
 
 	defer func() {
-		p.Close(w.closeResponseWriter())
+		p.Close(newObservedResponse(c.Writer))
 	}()
 
 	middlewareHandlerFromProtectionContext(p, c)
@@ -202,50 +201,11 @@ func (r *requestReaderImpl) RemoteAddr() string {
 }
 
 type responseWriterImpl struct {
-	c      *gin.Context
-	closed bool
-	// Gin allows overwriting the status field even when it was already done and
-	// sent over the network. It can therefore lead to a status code distinct from
-	// what was actually sent. To avoid this problem, we record the status code
-	// we see going through this wrapper. Note that the absence of dynamic
-	// dispatch in Go can allow to avoid this wrapper.
-	writtenStatus int
+	gin.ResponseWriter
 }
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
-	if !w.closed {
-		w.closed = true
-	}
 	return newObservedResponse(w)
-}
-
-func (w *responseWriterImpl) Header() http.Header {
-	return w.c.Writer.Header()
-}
-
-func (w *responseWriterImpl) Write(b []byte) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return w.c.Writer.Write(b)
-}
-
-func (w *responseWriterImpl) WriteString(s string) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return io.WriteString(w.c.Writer, s)
-}
-
-// Static assert that the io.StringWriter is implemented
-var _ io.StringWriter = (*responseWriterImpl)(nil)
-
-func (w *responseWriterImpl) WriteHeader(statusCode int) {
-	if w.closed {
-		return
-	}
-	w.c.Writer.WriteHeader(statusCode)
-	w.writtenStatus = statusCode
 }
 
 // response observed by the response writer
@@ -255,8 +215,8 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(r *responseWriterImpl) *observedResponse {
-	headers := r.c.Writer.Header()
+func newObservedResponse(response gin.ResponseWriter) *observedResponse {
+	headers := response.Header()
 
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
@@ -264,7 +224,7 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 
 	// Content-Length is either explicitly set or the amount of written data. It's
 	// less than 0 when not set by default with Gin.
-	cl := int64(r.c.Writer.Size())
+	cl := int64(response.Size())
 	if cl < 0 {
 		cl = 0
 		if contentLength := headers.Get("Content-Length"); contentLength != "" {
@@ -274,13 +234,10 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 		}
 	}
 
-	// Take the status code we observed, and Gin's if none.
-	status := r.writtenStatus
-	if status == 0 {
-		// Use Gin's if any
-		if s := r.c.Writer.Status(); s > 0 {
-			status = s
-		}
+	// Use the status code saved by Gin
+	var status int
+	if s := response.Status(); s > 0 {
+		status = s
 	}
 
 	return &observedResponse{

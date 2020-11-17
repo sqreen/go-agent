@@ -6,7 +6,6 @@ package sqecho
 
 import (
 	"bytes"
-	"io"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -87,15 +86,14 @@ func Middleware() echo.MiddlewareFunc {
 }
 
 func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next echo.HandlerFunc, c echo.Context) (err error) {
-	w := &responseWriterImpl{c: c}
 	r := &requestReaderImpl{c: c}
-	p := http_protection.NewProtectionContext(ctx, w, r)
+	p := http_protection.NewProtectionContext(ctx, c.Response(), r)
 	if p == nil {
 		return next(c)
 	}
 
 	defer func() {
-		p.Close(w.closeResponseWriter(err))
+		p.Close(newObservedResponse(c.Response(), err))
 	}()
 
 	return middlewareHandlerFromProtectionContext(p, next, c)
@@ -210,46 +208,6 @@ func (r *requestReaderImpl) RemoteAddr() string {
 	return r.c.Request().RemoteAddr
 }
 
-type responseWriterImpl struct {
-	c      echo.Context
-	closed bool
-}
-
-func (w *responseWriterImpl) closeResponseWriter(err error) types.ResponseFace {
-	if !w.closed {
-		w.closed = true
-	}
-	return newObservedResponse(w, err)
-}
-
-func (w *responseWriterImpl) Header() http.Header {
-	return w.c.Response().Header()
-}
-
-func (w *responseWriterImpl) Write(b []byte) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return w.c.Response().Write(b)
-}
-
-func (w *responseWriterImpl) WriteString(s string) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return io.WriteString(w.c.Response(), s)
-}
-
-// Static assert that the io.StringWriter is implemented
-var _ io.StringWriter = (*responseWriterImpl)(nil)
-
-func (w *responseWriterImpl) WriteHeader(statusCode int) {
-	if w.closed {
-		return
-	}
-	w.c.Response().WriteHeader(statusCode)
-}
-
 // response observed by the response writer
 type observedResponse struct {
 	contentType   string
@@ -257,9 +215,7 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(r *responseWriterImpl, err error) *observedResponse {
-	response := r.c.Response()
-
+func newObservedResponse(response *echo.Response, err error) *observedResponse {
 	headers := response.Header()
 
 	// Content-Type will be not empty only when explicitly set.

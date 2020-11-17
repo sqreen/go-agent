@@ -426,7 +426,7 @@ func TestMiddleware(t *testing.T) {
 	})
 
 	t.Run("response observation", func(t *testing.T) {
-		t.Run("direct http header write", func(t *testing.T) {
+		t.Run("handler response", func(t *testing.T) {
 			var (
 				responseStatusCode    int
 				responseContentType   string
@@ -465,7 +465,129 @@ func TestMiddleware(t *testing.T) {
 			require.Equal(t, expectedStatusCode, rec.Code)
 			require.Equal(t, expectedStatusCode, responseStatusCode)
 			require.Equal(t, expectedContentLength, responseContentLength)
+			require.Equal(t, int64(rec.Body.Len()), responseContentLength)
 			require.Equal(t, expectedContentType, responseContentType)
+			require.Equal(t, rec.Header().Get("Content-Type"), responseContentType)
+		})
+
+		t.Run("several handler responses", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
+
+			// Both responses are taken into account for now
+			expectedStatusCode := 42
+			expectedContentLength := int64(len("\"hello\"\n") + len("bonjour"))
+			expectedContentType := echo.MIMEApplicationJSONCharsetUTF8
+
+			h := func(c echo.Context) error {
+				if err := c.JSON(expectedStatusCode, "hello"); err != nil {
+					return err
+				}
+				return c.String(42, "bonjour")
+			}
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+
+			m := middleware(root)
+			c := echo.New().NewContext(req, rec)
+
+			// Wrap and call the handler
+			err := m(h)(c)
+
+			// Check the result
+			require.NoError(t, err)
+			require.Equal(t, expectedStatusCode, responseStatusCode)
+			require.Equal(t, expectedContentLength, responseContentLength)
+			require.Equal(t, expectedContentType, responseContentType)
+		})
+
+		t.Run("default response", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
+
+			h := func(c echo.Context) error {
+				// Do nothing, so that Echo's response fields have their default values
+				return nil
+			}
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+
+			m := middleware(root)
+			c := echo.New().NewContext(req, rec)
+
+			// Wrap and call the handler
+			err := m(h)(c)
+
+			// Check the result
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, http.StatusOK, responseStatusCode)
+			require.Equal(t, int64(rec.Body.Len()), responseContentLength)
+			require.Equal(t, rec.Header().Get("Content-Type"), responseContentType)
+		})
+
+		t.Run("not found endpoint", func(t *testing.T) {
+			var (
+				responseStatusCode    int
+				responseContentType   string
+				responseContentLength int64
+			)
+			root := mockups.NewRootHTTPProtectionContextMockup(context.Background(), mock.Anything, mock.Anything)
+			root.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+				resp := closed.Response()
+				responseStatusCode = resp.Status()
+				responseContentLength = resp.ContentLength()
+				responseContentType = resp.ContentType()
+				return true
+			}))
+			defer root.AssertExpectations(t)
+
+			// Perform the request and record the output
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/", nil)
+
+			e := echo.New()
+			m := middleware(root)
+			e.Use(m)
+			e.ServeHTTP(rec, req)
+
+			// Check the result
+			require.Equal(t, http.StatusNotFound, rec.Code)
+			require.Equal(t, http.StatusNotFound, responseStatusCode)
+
+			// Echo bypasses the middleware when handling an error
+			require.Equal(t, int64(0), responseContentLength)
+			//require.Equal(t, int64(rec.Body.Len()), responseContentLength)
+			require.Equal(t, "", responseContentType)
+			//require.Equal(t, rec.Header().Get("Content-Type"), responseContentType)
 		})
 
 		t.Run("echo handler error", func(t *testing.T) {

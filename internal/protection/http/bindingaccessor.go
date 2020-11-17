@@ -56,8 +56,11 @@ func NewRequestBindingAccessorContext(r types.RequestReader) *RequestBindingAcce
 //}
 
 func (r *RequestBindingAccessorContext) FilteredParams() RequestParamMap {
-	queryForm := r.QueryForm()
-	postForm := r.PostForm()
+	// Careful: the types need to be changed to avoid types with aliases because
+	//  their conversion to JS will make the `url.Values` method names take
+	//  precedence over the field names
+	queryForm := map[string][]string(r.QueryForm())
+	postForm := map[string][]string(r.PostForm())
 	params := r.RequestReader.Params()
 
 	res := make(types.RequestParamMap, 2+len(params))
