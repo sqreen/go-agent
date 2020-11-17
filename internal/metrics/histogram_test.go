@@ -813,7 +813,7 @@ func TestPerfHistogram(t *testing.T) {
 				require.Truef(t, prevFinish.Equal(stopAdding) || prevFinish.Before(stopAdding), "expected at least=%s but got %s")
 			})
 
-			t.Run("", func(t *testing.T) {
+			t.Run("ongoing time bucket 0", func(t *testing.T) {
 				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := 2 * time.Second
@@ -860,6 +860,68 @@ func TestPerfHistogram(t *testing.T) {
 				require.True(t, stopAdding.Equal(finish) || stopAdding.After(finish))
 
 				metrics := ready[0].Metrics()
+				require.Len(t, metrics, 1)
+				require.Equal(t, int64(2*nbAdd), metrics[uint64(1)])
+			})
+
+			t.Run("ongoing time bucket is not 0", func(t *testing.T) {
+				t.Parallel()
+				// Use a large-enough period so that we can check the bucketing
+				period := 2 * time.Second
+
+				store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
+				require.NoError(t, err)
+
+				// Add one value per period to enforce the number of buckets
+				nbAdd := 10
+
+				startAdding := time.Now()
+				for i := 0; i < nbAdd; i++ {
+					require.NoError(t, store.Add(float64(i)))
+				}
+
+				// Wait for `period`, and add new values so that the ongoing time bucket
+				// is no longer 0
+				time.Sleep(period)
+				require.True(t, store.Ready())
+
+				// Add values to the current time bucket
+				for i := 0; i < nbAdd; i++ {
+					require.NoError(t, store.Add(float64(i)))
+				}
+
+				// Flush the store to test the flush behaviour with an ongoing
+				// time bucket that is not 0, ie. not the first time bucket
+				ready0 := store.Flush()
+				require.Len(t, ready0, 1)
+				require.False(t, store.Ready())
+
+				stopAdding := time.Now()
+
+				time.Sleep(period)
+				require.True(t, store.Ready())
+
+				ready1 := store.Flush()
+				require.Len(t, ready1, 1)
+
+				// Align the expected boundaries with the period
+				startAdding = startAdding.Truncate(period)
+				stopAdding = stopAdding.Truncate(period).Add(period)
+
+				// Check the first and last values' times:
+				// - Start should be <= startAdding
+				start := ready0[0].Start()
+				require.Truef(t, startAdding.Equal(start) || startAdding.Before(start), "expected at least=%s but got %s", startAdding, start)
+
+				// - Finish should be >= stopAdding
+				finish := ready1[0].Finish()
+				require.True(t, stopAdding.Equal(finish) || stopAdding.After(finish))
+
+				metrics := ready0[0].Metrics()
+				require.Len(t, metrics, 1)
+				require.Equal(t, int64(2*nbAdd), metrics[uint64(1)])
+
+				metrics = ready1[0].Metrics()
 				require.Len(t, metrics, 1)
 				require.Equal(t, int64(2*nbAdd), metrics[uint64(1)])
 			})
