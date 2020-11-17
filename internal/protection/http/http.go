@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/sqreen/go-agent/internal/actor"
@@ -253,7 +254,15 @@ func (p *ProtectionContext) wrapBody(body io.ReadCloser) io.ReadCloser {
 // specify where it was taken from.
 func (p *ProtectionContext) AddRequestParam(name string, param interface{}) {
 	params := p.requestReader.requestParams[name]
-	p.requestReader.requestParams[name] = append(params, param)
+	var v interface{}
+	switch actual := param.(type) {
+	default:
+		v = param
+	case url.Values:
+		// Bare Go type so that it doesn't have any method (for the JS conversion)
+		v = map[string][]string(actual)
+	}
+	p.requestReader.requestParams[name] = append(params, v)
 }
 
 func (p *ProtectionContext) ClientIP() net.IP {
