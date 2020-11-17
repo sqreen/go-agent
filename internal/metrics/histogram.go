@@ -93,6 +93,11 @@ func (s *TimeHistogram) add(key interface{}, delta uint64) (TimeHistogramBucketT
 	// This update operation can be therefore done concurrently.
 	actual, loaded := store.Load(key)
 	if !loaded {
+		// Avoid escaping-analysis issues by scoping delta with this condition.
+		// Otherwise, benchmarks revealed that the delta value is always allocated
+		// no matter the code path.
+		// Cf. https://groups.google.com/g/golang-nuts/c/GQjq09k5Ptw/m/yh_7_GQNBQAJ
+		delta := delta
 		actual, loaded = store.LoadOrStore(key, &delta)
 	}
 
