@@ -102,7 +102,7 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 
 type (
 	timeHistogram interface {
-		Add(key interface{}, delta int64) error
+		Add(key interface{}, delta uint64) error
 	}
 
 	performanceHistogram interface {
@@ -296,7 +296,7 @@ func (c callbackContext) Logger() callback.Logger {
 	return c.r.logger
 }
 
-func (c callbackContext) AddMetricsValue(key interface{}, value int64) error {
+func (c callbackContext) AddMetricsValue(key interface{}, value uint64) error {
 	if err := c.r.defaultMetricsStore.Add(key, value); err != nil {
 		sqErr := sqerrors.Wrapf(err, "rule `%s`: could not add a value to the default metrics store", c.r.name)
 		switch err.(type) {

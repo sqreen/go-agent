@@ -8,6 +8,7 @@ package internal
 
 import (
 	"encoding/json"
+	"math"
 	"net"
 	"strconv"
 	"time"
@@ -336,15 +337,21 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, readyMetrics map[string]metri
 			logger.Error(sqerrors.Errorf("unexpected metrics store type `%T`", store))
 
 		case *metrics.ReadyPerfHistogram:
-			metrics := store.Metrics()
-			obs := make(map[string]interface{}, len(metrics)+1)
-			for k, v := range metrics {
-				bucket, ok := k.(uint64)
+			values := store.Metrics()
+			obs := make(map[string]interface{}, len(values)+1)
+			for k, v := range values {
+				if v > math.MaxInt64 {
+					logger.Error(sqerrors.Errorf("could not marshal to json the uint64 value `%v`: signed int64 representation overflow", k))
+					continue
+				}
+				v := int64(v)
+
+				bucket, ok := k.(metrics.TimeHistogramBucketType)
 				if !ok {
 					logger.Error(sqerrors.Errorf("unexpected performance bucket value's type `%T`", bucket))
 					continue
 				}
-				key := strconv.FormatUint(bucket, 10)
+				key := strconv.FormatUint(uint64(bucket), 10)
 				obs[key] = v
 			}
 			obs["max"] = store.Max()
@@ -359,6 +366,12 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, readyMetrics map[string]metri
 			metrics := store.Metrics()
 			obs := make(api.SumMetricsData, len(metrics))
 			for k, v := range metrics {
+				if v > math.MaxInt64 {
+					logger.Error(sqerrors.Errorf("could not marshal to json the uint64 value `%v`: signed int64 representation overflow", k))
+					continue
+				}
+				v := int64(v)
+
 				// String keys are directly added
 				if s, ok := k.(string); ok {
 					obs[s] = v
@@ -368,7 +381,7 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, readyMetrics map[string]metri
 				// Non-string keys are serialized into json
 				jsonKey, err := json.Marshal(k)
 				if err != nil {
-					logger.Error(sqerrors.Wrapf(err, "could not marshal to json key the value `%v` of type `%T`", k, k))
+					logger.Error(sqerrors.Wrapf(err, "could not marshal to json the key the value `%[1]v` of type `%[1]T`", k))
 					continue
 				}
 

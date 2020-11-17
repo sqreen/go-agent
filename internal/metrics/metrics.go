@@ -163,8 +163,7 @@ func (s *ReadyPerfHistogram) Unit() float64 { return s.unit }
 func (s *ReadyPerfHistogram) Base() float64 { return s.base }
 func (s *ReadyPerfHistogram) Max() float64  { return s.max }
 
-type StoreMap map[interface{}]*int64
-type ReadyStoreMap map[interface{}]int64
+type ReadyStoreMap map[interface{}]uint64
 
 type MaxMetricsStoreLengthError struct {
 	MaxLen uint

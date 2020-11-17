@@ -703,9 +703,9 @@ func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, ba
 
 	// Send the batch.
 	if err := client.Batch(ctx, req); err != nil {
-		m.stats.Add("backend_dropped", int64(len(req.Batch)))
+		m.stats.Add("backend_dropped", uint64(len(req.Batch)))
 	} else {
-		m.stats.Add("backend_egress", int64(len(req.Batch)))
+		m.stats.Add("backend_egress", uint64(len(req.Batch)))
 	}
 }
 
