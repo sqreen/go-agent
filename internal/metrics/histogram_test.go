@@ -25,8 +25,11 @@ const (
 )
 
 func TestTimeHistogram(t *testing.T) {
+	t.Parallel()
 	t.Run("sum store usage", func(t *testing.T) {
+		t.Parallel()
 		t.Run("empty stores are never ready", func(t *testing.T) {
+			t.Parallel()
 			store := metrics.NewTimeHistogram(time.Microsecond, MaxStoreLen)
 			require.False(t, store.Ready())
 			time.Sleep(time.Microsecond)
@@ -34,6 +37,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("non-empty stores get ready starting as soon as a value was added", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -67,6 +71,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("Flush", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -122,6 +127,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -164,6 +170,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("key types", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -289,7 +296,9 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("time bucketing", func(t *testing.T) {
+			t.Parallel()
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := MinTestPeriod
 
@@ -347,6 +356,7 @@ func TestTimeHistogram(t *testing.T) {
 			})
 
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := 2 * time.Second
 
@@ -504,8 +514,9 @@ func TestTimeHistogram(t *testing.T) {
 }
 
 func TestPerfHistogram(t *testing.T) {
-	// TODO: test reset max alg
+	t.Parallel()
 	t.Run("bucket algorithm", func(t *testing.T) {
+		t.Parallel()
 		for _, tc := range []struct {
 			Base, Unit      float64
 			Values          []float64
@@ -558,6 +569,7 @@ func TestPerfHistogram(t *testing.T) {
 		} {
 			tc := tc
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				period := MinTestPeriod
 				store, err := metrics.NewPerfHistogram(period, tc.Unit, tc.Base, MaxStoreLen)
 				if tc.ExpectedError {
@@ -572,7 +584,9 @@ func TestPerfHistogram(t *testing.T) {
 
 				time.Sleep(period)
 
-				ready := store.Flush()[0].(*metrics.ReadyPerfHistogram)
+				buckets := store.Flush()
+				require.Len(t, buckets, 1)
+				ready := buckets[0].(*metrics.ReadyPerfHistogram)
 
 				require.Equal(t, tc.ExpectedMetrics, ready.Metrics())
 				require.Equal(t, tc.ExpectedMax, ready.Max())
@@ -583,7 +597,9 @@ func TestPerfHistogram(t *testing.T) {
 	})
 
 	t.Run("perf histogram usage", func(t *testing.T) {
+		t.Parallel()
 		t.Run("empty stores are never ready", func(t *testing.T) {
+			t.Parallel()
 			store, err := metrics.NewPerfHistogram(time.Microsecond, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
 			require.False(t, store.Ready())
@@ -592,6 +608,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("non-empty stores get ready starting as soon as a value was added", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
@@ -627,6 +644,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("Flush", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
@@ -689,6 +707,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
@@ -734,7 +753,9 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("time bucketing", func(t *testing.T) {
+			t.Parallel()
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := MinTestPeriod
 
@@ -793,6 +814,7 @@ func TestPerfHistogram(t *testing.T) {
 			})
 
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := 2 * time.Second
 
