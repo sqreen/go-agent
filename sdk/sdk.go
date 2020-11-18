@@ -107,6 +107,15 @@ func FromContext(ctx go_context.Context) Context {
 	return context{events: actual}
 }
 
+type Request interface {
+	Context() go_context.Context
+}
+
+// FromRequest is equivalent to `FromContext(r.Context())`
+func FromRequest(r Request) Context {
+	return FromContext(r.Context())
+}
+
 // TrackEvent allows to track a custom security events with the given event name.
 // It creates a new event whose additional options can be set using the
 // returned value's methods, such as `WithProperties()` or
