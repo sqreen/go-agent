@@ -410,7 +410,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 	})
 
-	t.Run("one reader - 8000 writers", func(t *testing.T) {
+	t.Run("one reader - 7000 writers", func(t *testing.T) {
 		// Create a store that will be checked more often than actually required by
 		// its period. So that we cover the case where the store is not always
 		// ready.
@@ -451,9 +451,9 @@ func TestTimeHistogram(t *testing.T) {
 			}
 		}()
 
-		// Start 8000 writers that will write 1000 times
-		nbWriters := 8000
-		nbWrites := 1000
+		// Start nbWriters writers that will write nbWrites times
+		nbWriters := 7000
+		nbWrites := 2000
 
 		// Create a stopBarrier to signal when all goroutines are done writing
 		// their values
@@ -928,7 +928,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 	})
 
-	t.Run("one reader - 8000 writers", func(t *testing.T) {
+	t.Run("one reader - 7000 writers", func(t *testing.T) {
 		// Create a store that will be checked more often than actually required by
 		// its period. So that we cover the case where the store is not always
 		// ready.
@@ -975,9 +975,9 @@ func TestPerfHistogram(t *testing.T) {
 			}
 		}()
 
-		// Start 8000 writers that will write 1000 times
-		nbWriters := 8000
-		nbWrites := 1000
+		// Start nbWriters writers that will write nbWrites times
+		nbWriters := 7000
+		nbWrites := 2000
 
 		// Create a stopBarrier to signal when all goroutines are done writing
 		// their values
