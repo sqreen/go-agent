@@ -20,7 +20,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-      - run: go test ${{ matrix.go-test-options }} ./...
+      - run: go test ./... # note: do not support large number of goroutines for -race
 
   # Same tests but on the official golang container for linux
   # Docker for Windows is not yet available on Github Actions.
