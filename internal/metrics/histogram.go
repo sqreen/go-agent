@@ -41,19 +41,26 @@ type TimeHistogram struct {
 	// start time, aligned on the period duration, from which the first value was
 	// added.
 	start time.Time
+
+	length, maxLength int64
 }
 
 type TimeHistogramBucketType uint64
 
-func NewTimeHistogram(period time.Duration, maxLen uint) *TimeHistogram {
+func NewTimeHistogram(period time.Duration, maxLength int) *TimeHistogram {
 	return &TimeHistogram{
-		period: period,
+		period:    period,
+		maxLength: int64(maxLength),
 	}
 }
 
 // Add delta to the given key, inserting it if it doesn't exist. This method
 // is thread-safe and optimized for updating existing keys.
 func (s *TimeHistogram) Add(key interface{}, delta uint64) error {
+	if atomic.LoadInt64(&s.length) >= s.maxLength {
+		return sqerrors.New("maximum length reached")
+	}
+
 	// Avoid panic-ing by checking the key type is not nil and comparable.
 	if key == nil {
 		return sqerrors.New("unexpected key value `nil`")
@@ -66,7 +73,6 @@ func (s *TimeHistogram) Add(key interface{}, delta uint64) error {
 	defer s.flushLock.RUnlock()
 
 	_, err := s.add(key, delta)
-
 	return err
 }
 
@@ -105,7 +111,10 @@ func (s *TimeHistogram) add(key interface{}, delta uint64) (TimeHistogramBucketT
 		// Atomically update the value.
 		sum := actual.(*uint64)
 		atomic.AddUint64(sum, delta)
-	} // else this was the first value added
+	} else {
+		// This key was added - increase the length
+		atomic.AddInt64(&s.length, 1)
+	}
 
 	return bucket, nil
 }
@@ -244,7 +253,7 @@ type PerfHistogram struct {
 
 type PerfHistogramBucketType uint64
 
-func NewPerfHistogram(period time.Duration, unit, base float64, maxStoreLen uint) (*PerfHistogram, error) {
+func NewPerfHistogram(period time.Duration, unit, base float64, maxLen int) (*PerfHistogram, error) {
 	if unit <= 0.0 {
 		return nil, sqerrors.Errorf("unexpected binning unit value `%f`", unit)
 	}
@@ -252,7 +261,7 @@ func NewPerfHistogram(period time.Duration, unit, base float64, maxStoreLen uint
 		return nil, sqerrors.Errorf("unexpected binning base value `%f`", base)
 	}
 
-	sumStore := NewTimeHistogram(period, maxStoreLen)
+	sumStore := NewTimeHistogram(period, maxLen)
 	logBase := math.Log(base)
 	logUnit := math.Log(unit)
 
