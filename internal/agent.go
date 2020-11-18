@@ -530,8 +530,7 @@ func (a *AgentType) ReloadRules() (string, error) {
 	}
 
 	// Insert local rules if any
-	localRulesJSON := a.config.LocalRulesFile()
-	if localRulesJSON != "" {
+	if localRulesJSON := a.config.LocalRulesFile(); localRulesJSON != "" {
 		buf, err := ioutil.ReadFile(localRulesJSON)
 		if err == nil {
 			var localRules []api.Rule
