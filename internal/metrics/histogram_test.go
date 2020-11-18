@@ -25,8 +25,11 @@ const (
 )
 
 func TestTimeHistogram(t *testing.T) {
+	t.Parallel()
 	t.Run("sum store usage", func(t *testing.T) {
+		t.Parallel()
 		t.Run("empty stores are never ready", func(t *testing.T) {
+			t.Parallel()
 			store := metrics.NewTimeHistogram(time.Microsecond, MaxStoreLen)
 			require.False(t, store.Ready())
 			time.Sleep(time.Microsecond)
@@ -34,6 +37,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("non-empty stores get ready starting as soon as a value was added", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -67,6 +71,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("Flush", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -122,6 +127,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -164,6 +170,7 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("key types", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store := metrics.NewTimeHistogram(period, MaxStoreLen)
 
@@ -289,7 +296,9 @@ func TestTimeHistogram(t *testing.T) {
 		})
 
 		t.Run("time bucketing", func(t *testing.T) {
+			t.Parallel()
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := MinTestPeriod
 
@@ -299,7 +308,7 @@ func TestTimeHistogram(t *testing.T) {
 				expectedBucketCount := 10
 				startAdding := time.Now()
 				for i := 0; i < expectedBucketCount; i++ {
-					require.NoError(t, store.Add(i, int64(i)))
+					require.NoError(t, store.Add(i, uint64(i)))
 					time.Sleep(period)
 				}
 				stopAdding := time.Now()
@@ -338,7 +347,7 @@ func TestTimeHistogram(t *testing.T) {
 					// One value per bucket expected
 					require.Len(t, metrics, 1)
 
-					require.Equal(t, int64(i), metrics[i])
+					require.Equal(t, uint64(i), metrics[i])
 
 					prevFinish = finish
 				}
@@ -347,6 +356,7 @@ func TestTimeHistogram(t *testing.T) {
 			})
 
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := 2 * time.Second
 
@@ -357,7 +367,7 @@ func TestTimeHistogram(t *testing.T) {
 
 				startAdding := time.Now()
 				for i := 0; i < expectedMetricsCount; i++ {
-					require.NoError(t, store.Add(i, int64(i)))
+					require.NoError(t, store.Add(i, uint64(i)))
 				}
 
 				require.False(t, store.Ready())
@@ -367,7 +377,7 @@ func TestTimeHistogram(t *testing.T) {
 				require.Len(t, ready, 0)
 
 				for i := 0; i < expectedMetricsCount; i++ {
-					require.NoError(t, store.Add(i, int64(i)))
+					require.NoError(t, store.Add(i, uint64(i)))
 				}
 				stopAdding := time.Now()
 
@@ -394,13 +404,13 @@ func TestTimeHistogram(t *testing.T) {
 				require.Len(t, metrics, expectedMetricsCount)
 
 				for i := 0; i < len(metrics); i++ {
-					require.Equal(t, int64(2*i), metrics[i])
+					require.Equal(t, uint64(2*i), metrics[i])
 				}
 			})
 		})
 	})
 
-	t.Run("one reader - 8000 writers", func(t *testing.T) {
+	t.Run("one reader - 7000 writers", func(t *testing.T) {
 		// Create a store that will be checked more often than actually required by
 		// its period. So that we cover the case where the store is not always
 		// ready.
@@ -441,9 +451,9 @@ func TestTimeHistogram(t *testing.T) {
 			}
 		}()
 
-		// Start 8000 writers that will write 1000 times
-		nbWriters := 8000
-		nbWrites := 1000
+		// Start nbWriters writers that will write nbWrites times
+		nbWriters := 6000
+		nbWrites := 6000
 
 		// Create a stopBarrier to signal when all goroutines are done writing
 		// their values
@@ -489,7 +499,7 @@ func TestTimeHistogram(t *testing.T) {
 
 		expectedMetrics := metrics.ReadyStoreMap{}
 		for n := 0; n < nbWrites; n++ {
-			expectedMetrics[n] = int64(nbWriters)
+			expectedMetrics[n] = uint64(nbWriters)
 		}
 
 		checkTimeHistogram(
@@ -504,8 +514,9 @@ func TestTimeHistogram(t *testing.T) {
 }
 
 func TestPerfHistogram(t *testing.T) {
-	// TODO: test reset max alg
+	t.Parallel()
 	t.Run("bucket algorithm", func(t *testing.T) {
+		t.Parallel()
 		for _, tc := range []struct {
 			Base, Unit      float64
 			Values          []float64
@@ -517,7 +528,7 @@ func TestPerfHistogram(t *testing.T) {
 				Base:            2,
 				Unit:            1,
 				Values:          []float64{1.0, 0.2, 2.2, 2.0, -0.0},
-				ExpectedMetrics: metrics.ReadyStoreMap{uint64(1): 2, uint64(2): 1, uint64(3): 2},
+				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 2, metrics.PerfHistogramBucketType(2): 1, metrics.PerfHistogramBucketType(3): 2},
 				ExpectedMax:     2.2,
 			},
 
@@ -525,7 +536,7 @@ func TestPerfHistogram(t *testing.T) {
 				Base:            2.0,
 				Unit:            0.1,
 				Values:          []float64{0.001, 0.1, 0.15, 7.0},
-				ExpectedMetrics: metrics.ReadyStoreMap{uint64(1): 1, uint64(2): 2, uint64(8): 1},
+				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 1, metrics.PerfHistogramBucketType(2): 2, metrics.PerfHistogramBucketType(8): 1},
 				ExpectedMax:     7,
 			},
 
@@ -533,7 +544,7 @@ func TestPerfHistogram(t *testing.T) {
 				Base:            2.0,
 				Unit:            0.1,
 				Values:          []float64{150, -10, 110.8946, 250, 192, 195, 154},
-				ExpectedMetrics: metrics.ReadyStoreMap{uint64(1): 1, uint64(12): 5, uint64(13): 1},
+				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 1, metrics.PerfHistogramBucketType(12): 5, metrics.PerfHistogramBucketType(13): 1},
 				ExpectedMax:     250,
 			},
 
@@ -558,6 +569,7 @@ func TestPerfHistogram(t *testing.T) {
 		} {
 			tc := tc
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				period := MinTestPeriod
 				store, err := metrics.NewPerfHistogram(period, tc.Unit, tc.Base, MaxStoreLen)
 				if tc.ExpectedError {
@@ -572,7 +584,9 @@ func TestPerfHistogram(t *testing.T) {
 
 				time.Sleep(period)
 
-				ready := store.Flush()[0].(*metrics.ReadyPerfHistogram)
+				buckets := store.Flush()
+				require.Len(t, buckets, 1)
+				ready := buckets[0].(*metrics.ReadyPerfHistogram)
 
 				require.Equal(t, tc.ExpectedMetrics, ready.Metrics())
 				require.Equal(t, tc.ExpectedMax, ready.Max())
@@ -583,7 +597,9 @@ func TestPerfHistogram(t *testing.T) {
 	})
 
 	t.Run("perf histogram usage", func(t *testing.T) {
+		t.Parallel()
 		t.Run("empty stores are never ready", func(t *testing.T) {
+			t.Parallel()
 			store, err := metrics.NewPerfHistogram(time.Microsecond, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
 			require.False(t, store.Ready())
@@ -592,6 +608,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("non-empty stores get ready starting as soon as a value was added", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
@@ -618,7 +635,7 @@ func TestPerfHistogram(t *testing.T) {
 			ready := store.Flush()
 
 			// The old store should have the stored values
-			checkPerfHistogram(t, period, testStartedAt, testFinishedAt, metrics.ReadyStoreMap{uint64(1): 1}, ready, 1, 10, 10)
+			checkPerfHistogram(t, period, testStartedAt, testFinishedAt, metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 1}, ready, 1, 10, 10)
 
 			// The store cannot be ready without new values
 			require.False(t, store.Ready())
@@ -627,6 +644,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("Flush", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
@@ -667,7 +685,7 @@ func TestPerfHistogram(t *testing.T) {
 				test1StartedAt,
 				test1FinishedAt,
 				metrics.ReadyStoreMap{
-					uint64(1): 1,
+					metrics.PerfHistogramBucketType(1): 1,
 				},
 				ready1,
 				1,
@@ -680,7 +698,7 @@ func TestPerfHistogram(t *testing.T) {
 				test1FinishedAt,
 				test2FinishedAt,
 				metrics.ReadyStoreMap{
-					uint64(1): 4,
+					metrics.PerfHistogramBucketType(1): 4,
 				},
 				ready2,
 				3,
@@ -689,6 +707,7 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("adding values to a store that is ready is possible", func(t *testing.T) {
+			t.Parallel()
 			period := MinTestPeriod
 			store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
 			require.NoError(t, err)
@@ -724,8 +743,8 @@ func TestPerfHistogram(t *testing.T) {
 				testStartedAt,
 				testFinishedAt,
 				metrics.ReadyStoreMap{
-					uint64(1): 3,
-					uint64(2): 2,
+					metrics.PerfHistogramBucketType(1): 3,
+					metrics.PerfHistogramBucketType(2): 2,
 				},
 				ready,
 				33,
@@ -734,7 +753,9 @@ func TestPerfHistogram(t *testing.T) {
 		})
 
 		t.Run("time bucketing", func(t *testing.T) {
+			t.Parallel()
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := MinTestPeriod
 
@@ -779,12 +800,12 @@ func TestPerfHistogram(t *testing.T) {
 					finish := ready.Finish()
 					require.True(t, finish.Sub(start) == period)
 
-					metrics := ready.Metrics()
+					ready := ready.Metrics()
 
 					// One value per bucket expected
-					require.Len(t, metrics, 1)
+					require.Len(t, ready, 1)
 
-					require.Equal(t, int64(1), metrics[uint64(1)])
+					require.Equal(t, uint64(1), ready[metrics.PerfHistogramBucketType(1)])
 
 					prevFinish = finish
 				}
@@ -792,7 +813,8 @@ func TestPerfHistogram(t *testing.T) {
 				require.Truef(t, prevFinish.Equal(stopAdding) || prevFinish.Before(stopAdding), "expected at least=%s but got %s")
 			})
 
-			t.Run("", func(t *testing.T) {
+			t.Run("ongoing time bucket 0", func(t *testing.T) {
+				t.Parallel()
 				// Use a large-enough period so that we can check the bucketing
 				period := 2 * time.Second
 
@@ -837,14 +859,76 @@ func TestPerfHistogram(t *testing.T) {
 				finish := ready[0].Finish()
 				require.True(t, stopAdding.Equal(finish) || stopAdding.After(finish))
 
-				metrics := ready[0].Metrics()
-				require.Len(t, metrics, 1)
-				require.Equal(t, int64(2*nbAdd), metrics[uint64(1)])
+				values := ready[0].Metrics()
+				require.Len(t, values, 1)
+				require.Equal(t, uint64(2*nbAdd), values[metrics.PerfHistogramBucketType(1)])
+			})
+
+			t.Run("ongoing time bucket is not 0", func(t *testing.T) {
+				t.Parallel()
+				// Use a large-enough period so that we can check the bucketing
+				period := 2 * time.Second
+
+				store, err := metrics.NewPerfHistogram(period, 10, 10, MaxStoreLen)
+				require.NoError(t, err)
+
+				// Add one value per period to enforce the number of buckets
+				nbAdd := 10
+
+				startAdding := time.Now()
+				for i := 0; i < nbAdd; i++ {
+					require.NoError(t, store.Add(float64(i)))
+				}
+
+				// Wait for `period`, and add new values so that the ongoing time bucket
+				// is no longer 0
+				time.Sleep(period)
+				require.True(t, store.Ready())
+
+				// Add values to the current time bucket
+				for i := 0; i < nbAdd; i++ {
+					require.NoError(t, store.Add(float64(i)))
+				}
+
+				// Flush the store to test the flush behaviour with an ongoing
+				// time bucket that is not 0, ie. not the first time bucket
+				ready0 := store.Flush()
+				require.Len(t, ready0, 1)
+				require.False(t, store.Ready())
+
+				stopAdding := time.Now()
+
+				time.Sleep(period)
+				require.True(t, store.Ready())
+
+				ready1 := store.Flush()
+				require.Len(t, ready1, 1)
+
+				// Align the expected boundaries with the period
+				startAdding = startAdding.Truncate(period)
+				stopAdding = stopAdding.Truncate(period).Add(period)
+
+				// Check the first and last values' times:
+				// - Start should be <= startAdding
+				start := ready0[0].Start()
+				require.Truef(t, startAdding.Equal(start) || startAdding.Before(start), "expected at least=%s but got %s", startAdding, start)
+
+				// - Finish should be >= stopAdding
+				finish := ready1[0].Finish()
+				require.True(t, stopAdding.Equal(finish) || stopAdding.After(finish))
+
+				counts := ready0[0].Metrics()
+				require.Len(t, counts, 1)
+				require.Equal(t, uint64(nbAdd), counts[metrics.PerfHistogramBucketType(1)])
+
+				counts = ready1[0].Metrics()
+				require.Len(t, counts, 1)
+				require.Equal(t, uint64(nbAdd), counts[metrics.PerfHistogramBucketType(1)])
 			})
 		})
 	})
 
-	t.Run("one reader - 8000 writers", func(t *testing.T) {
+	t.Run("one reader - 7000 writers", func(t *testing.T) {
 		// Create a store that will be checked more often than actually required by
 		// its period. So that we cover the case where the store is not always
 		// ready.
@@ -891,9 +975,9 @@ func TestPerfHistogram(t *testing.T) {
 			}
 		}()
 
-		// Start 8000 writers that will write 1000 times
-		nbWriters := 8000
-		nbWrites := 1000
+		// Start nbWriters writers that will write nbWrites times
+		nbWriters := 6000
+		nbWrites := 6000
 
 		// Create a stopBarrier to signal when all goroutines are done writing
 		// their values
@@ -954,11 +1038,12 @@ func TestPerfHistogram(t *testing.T) {
 
 		// Check each writer wrote the expected number of times.
 		require.Equal(t, metrics.ReadyStoreMap{
-			uint64(1): 8000,
-			uint64(2): 8000,
-			uint64(3): 72000,
-			uint64(4): 720000,
-			uint64(5): 7192000,
+			metrics.PerfHistogramBucketType(1): 6000,
+			metrics.PerfHistogramBucketType(2): 6000,
+			metrics.PerfHistogramBucketType(3): 54000,
+			metrics.PerfHistogramBucketType(4): 540000,
+			metrics.PerfHistogramBucketType(5): 5400000,
+			metrics.PerfHistogramBucketType(6): 29994000,
 		}, results)
 	})
 }

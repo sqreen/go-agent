@@ -42,7 +42,7 @@ type perfHistogramBench struct {
 }
 
 func benchPerfHistogram(b *testing.B, bench perfHistogramBench) {
-	store, err := metrics.NewPerfHistogram(time.Minute, 1, 1, 100000)
+	store, err := metrics.NewPerfHistogram(time.Minute, 1, 2, 100000)
 	require.NoError(b, err)
 
 	if bench.setup != nil {

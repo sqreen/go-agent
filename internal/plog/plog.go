@@ -233,16 +233,24 @@ func (l *logWriter) write(level LogLevel, message string) {
 	_, _ = io.WriteString(l.out, str.String())
 }
 
-type backoffLogger struct {
+type strictBackoffLogger struct {
 	DebugLevelLogger
 	// Map of sqtime.BackoffCounter counters
 	counters sqsync.UInt64Map
 	common   sqtime.BackoffCounter
 }
 
-func WithBackoff(logger DebugLevelLogger) DebugLevelLogger {
-	if actual, ok := logger.(*backoffLogger); ok {
+// WithStrictBackoff returns a logger whose error logger has a backoff counter
+// for errors indexed with a key using sqerrors.WithKey(), or otherwise uses
+// a common counter.
+func WithStrictBackoff(logger DebugLevelLogger) DebugLevelLogger {
+	if actual, ok := logger.(*strictBackoffLogger); ok {
 		return actual
+	}
+
+	if actual, ok := logger.(*optionalBackoffLogger); ok {
+		// Unwrap it
+		logger = actual.DebugLevelLogger
 	}
 
 	// Don't backoff when in debug level mode
@@ -250,12 +258,12 @@ func WithBackoff(logger DebugLevelLogger) DebugLevelLogger {
 		return logger
 	}
 
-	return &backoffLogger{
+	return &strictBackoffLogger{
 		DebugLevelLogger: logger,
 	}
 }
 
-func (l *backoffLogger) Error(err error) {
+func (l *strictBackoffLogger) Error(err error) {
 	// Wrap the following in a safe call to avoid sync.Map indexing panic (eg.
 	// non-comparable error key)
 	safeCallErr := sqsafe.Call(func() error {
@@ -280,5 +288,55 @@ func (l *backoffLogger) Error(err error) {
 		l.common.Do(func(_ uint64) {
 			l.DebugLevelLogger.Error(sqerrors.ErrorCollection{safeCallErr, err})
 		})
+	}
+}
+
+type optionalBackoffLogger struct {
+	DebugLevelLogger
+	// Map of sqtime.BackoffCounter counters
+	counters sqsync.UInt64Map
+}
+
+// WithOptionalBackoff returns a logger whose error logger has a backoff counter
+// for errors indexed with a key using sqerrors.WithKey(), or otherwise ignores
+// it and logs the error normally.
+func WithOptionalBackoff(logger DebugLevelLogger) DebugLevelLogger {
+	if actual, ok := logger.(*optionalBackoffLogger); ok {
+		return actual
+	}
+
+	if actual, ok := logger.(*strictBackoffLogger); ok {
+		// Unwrap it
+		logger = actual.DebugLevelLogger
+	}
+
+	// Don't backoff when in debug level mode
+	if _, isDebugLevel := logger.(*debugLevelLogger); isDebugLevel {
+		return logger
+	}
+
+	return &optionalBackoffLogger{
+		DebugLevelLogger: logger,
+	}
+}
+
+func (l *optionalBackoffLogger) Error(err error) {
+	// Wrap the following in a safe call to avoid sync.Map indexing panic (eg.
+	// non-comparable error key)
+	safeCallErr := sqsafe.Call(func() error {
+		if k, exists := sqerrors.Key(err); exists {
+			counter := (*sqtime.BackoffCounter)(l.counters.Get(k))
+			counter.Do(func(_ uint64) {
+				// TODO: use count in sqerrors.WithInfo()?
+				l.DebugLevelLogger.Error(err)
+			})
+		} else {
+			l.DebugLevelLogger.Error(err)
+		}
+		return nil
+	})
+
+	if safeCallErr != nil {
+		l.DebugLevelLogger.Error(sqerrors.ErrorCollection{safeCallErr, err})
 	}
 }

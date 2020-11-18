@@ -92,7 +92,7 @@ func TestWithBackoff(t *testing.T) {
 						if errChanLen > 0 {
 							errChan = make(chan error, errChanLen)
 						}
-						logger := plog.WithBackoff(plog.NewLogger(level, output, errChan))
+						logger := plog.WithStrictBackoff(plog.NewLogger(level, output, errChan))
 
 						// Perform log calls
 						logger.Debug("debug 1", " debug 2", " debug 3")
@@ -164,7 +164,7 @@ func TestWithBackoff(t *testing.T) {
 		output := gbytes.NewBuffer()
 		errChan := make(chan error, 1)
 		var logger plog.DebugLevelLogger = plog.NewLogger(plog.Debug, output, errChan)
-		logger = plog.WithBackoff(logger)
+		logger = plog.WithStrictBackoff(logger)
 
 		anError := errors.New("my error")
 

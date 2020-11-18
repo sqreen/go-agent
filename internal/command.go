@@ -11,7 +11,7 @@ import (
 )
 
 type CommandManager struct {
-	logger   *plog.Logger
+	logger   plog.DebugLevelLogger
 	agent    CommandManagerAgent
 	handlers map[string]CommandHandler
 }
@@ -33,7 +33,7 @@ type CommandManagerAgent interface {
 	SetPerformanceBudget(budget float64) error
 }
 
-func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
+func NewCommandManager(agent CommandManagerAgent, logger plog.DebugLevelLogger) *CommandManager {
 	mng := &CommandManager{
 		agent:  agent,
 		logger: logger,
@@ -150,7 +150,7 @@ func (m *CommandManager) GetBundle([]json.RawMessage) (string, error) {
 }
 
 // commandResult converts an error to a command result API object.
-func commandResult(logger *plog.Logger, output string, err error) api.CommandResult {
+func commandResult(logger plog.ErrorLogger, output string, err error) api.CommandResult {
 	if err != nil {
 		logger.Error(errors.Wrap(err, "command error"))
 		return api.CommandResult{

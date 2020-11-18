@@ -45,7 +45,7 @@ func TestMonitorHTTPStatusCodeCallback(t *testing.T) {
 		r.AssertCalled(t, "Pre", mock.MatchedBy(func(cb func(callback.CallbackContext) error) bool {
 			c := &mockups.CallbackContextMockup{}
 			defer c.AssertExpectations(t)
-			c.ExpectAddMetricsValue(expectedStatusCode, 1).Return(nil).Once()
+			c.ExpectAddMetricsValue(expectedStatusCode, 1).Return(true).Once()
 			require.NoError(t, cb(c))
 			return true
 		}))
@@ -76,7 +76,7 @@ func TestMonitorHTTPStatusCodeCallback(t *testing.T) {
 		r.AssertCalled(t, "Pre", mock.MatchedBy(func(cb func(callback.CallbackContext) error) bool {
 			c := &mockups.CallbackContextMockup{}
 			defer c.AssertExpectations(t)
-			c.ExpectAddMetricsValue(expectedStatusCode, 1).Return(nil).Once()
+			c.ExpectAddMetricsValue(expectedStatusCode, 1).Return(true).Once()
 			c.ExpectHandleAttack(false, mock.MatchedBy(func(opts []event.AttackEventOption) bool {
 				attack := &event.AttackEvent{}
 				for _, opt := range opts {

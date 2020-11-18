@@ -68,6 +68,6 @@ func VerifyRuleSignature(r *api.Rule, publicKey *ecdsa.PublicKey) error {
 	if err != nil {
 		return sqerrors.Wrap(err, "base64 decoding")
 	}
-	hash := sha512.Sum512([]byte(signature.Message))
+	hash := sha512.Sum512(signature.Message)
 	return Verify(publicKey, hash[:], der)
 }

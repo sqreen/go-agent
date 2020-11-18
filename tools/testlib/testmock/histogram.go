@@ -10,11 +10,11 @@ type TimeHistogramMockup struct {
 	mock.Mock
 }
 
-func (t *TimeHistogramMockup) Add(key interface{}, delta int64) error {
+func (t *TimeHistogramMockup) Add(key interface{}, delta uint64) error {
 	return t.Called(key, delta).Error(0)
 }
 
-func (t *TimeHistogramMockup) ExpectAdd(key interface{}, delta int64) *mock.Call {
+func (t *TimeHistogramMockup) ExpectAdd(key interface{}, delta uint64) *mock.Call {
 	return t.On("Add", key, delta)
 }
 

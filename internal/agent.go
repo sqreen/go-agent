@@ -168,7 +168,7 @@ func (instance *agentInstanceType) start() {
 }
 
 type AgentType struct {
-	logger            *plog.Logger
+	logger            plog.DebugLevelLogger
 	eventMng          *eventManager
 	metrics           *metrics.Engine
 	staticMetrics     staticMetrics
@@ -193,7 +193,6 @@ type staticMetrics struct {
 	sdkUserSignup,
 	allowedIP,
 	allowedPath,
-	errors,
 	callCounts *metrics.TimeHistogram
 	requestTime, sqreenTime, sqreenOverheadPercentage *metrics.PerfHistogram
 }
@@ -203,7 +202,7 @@ const errorChanBufferLength = 256
 
 func New(cfg *config.Config) *AgentType {
 	errLoggerChan := make(chan error, errorChanBufferLength)
-	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errLoggerChan)
+	logger := plog.WithOptionalBackoff(plog.NewLogger(cfg.LogLevel(), os.Stderr, errLoggerChan))
 
 	agentVersion := version.Version()
 	logger.Infof("go agent v%s", agentVersion)
@@ -214,8 +213,6 @@ func New(cfg *config.Config) *AgentType {
 	}
 
 	metrics := metrics.NewEngine()
-
-	errorMetrics := metrics.TimeHistogram("errors", config.ErrorMetricsPeriod)
 
 	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
 	if err != nil {
@@ -272,12 +269,11 @@ func New(cfg *config.Config) *AgentType {
 		isDone:        make(chan struct{}),
 		metrics:       metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess:      metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod),
-			sdkUserLoginFailure:      metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod),
-			sdkUserSignup:            metrics.TimeHistogram("sdk-signup", sdkMetricsPeriod),
-			allowedIP:                metrics.TimeHistogram("whitelisted", sdkMetricsPeriod),
-			allowedPath:              metrics.TimeHistogram("whitelisted_paths", sdkMetricsPeriod),
-			errors:                   errorMetrics,
+			sdkUserLoginSuccess:      metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod, 60000),
+			sdkUserLoginFailure:      metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod, 60000),
+			sdkUserSignup:            metrics.TimeHistogram("sdk-signup", sdkMetricsPeriod, 60000),
+			allowedIP:                metrics.TimeHistogram("whitelisted", sdkMetricsPeriod, 60000),
+			allowedPath:              metrics.TimeHistogram("whitelisted_paths", sdkMetricsPeriod, 60000),
 			requestTime:              req,
 			sqreenTime:               sq,
 			sqreenOverheadPercentage: sqOverheadPercentage,
@@ -530,8 +526,7 @@ func (a *AgentType) ReloadRules() (string, error) {
 	}
 
 	// Insert local rules if any
-	localRulesJSON := a.config.LocalRulesFile()
-	if localRulesJSON != "" {
+	if localRulesJSON := a.config.LocalRulesFile(); localRulesJSON != "" {
 		buf, err := ioutil.ReadFile(localRulesJSON)
 		if err == nil {
 			var localRules []api.Rule
@@ -571,7 +566,7 @@ type eventManager struct {
 }
 
 func newEventManager(agent *AgentType, queueLength uint, maxGoroutines uint32, maxBatchLength int, maxStaleness time.Duration) *eventManager {
-	stats := agent.metrics.TimeHistogram("event_management", time.Minute)
+	stats := agent.metrics.TimeHistogram("event_management", time.Minute, 10)
 	return &eventManager{
 		agent:          agent,
 		eventsChan:     make(chan Event, queueLength),
@@ -703,9 +698,9 @@ func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, ba
 
 	// Send the batch.
 	if err := client.Batch(ctx, req); err != nil {
-		m.stats.Add("backend_dropped", int64(len(req.Batch)))
+		m.stats.Add("backend_dropped", uint64(len(req.Batch)))
 	} else {
-		m.stats.Add("backend_egress", int64(len(req.Batch)))
+		m.stats.Add("backend_egress", uint64(len(req.Batch)))
 	}
 }
 

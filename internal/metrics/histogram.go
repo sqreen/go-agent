@@ -24,7 +24,7 @@ import (
 // has passed.
 type TimeHistogram struct {
 	// Map of time buckets to a pointer to a sync.Map of comparable types to
-	// int64 pointers.
+	// uint64 pointers.
 	buckets sync.Map
 
 	// Minimum time duration the data should be kept.
@@ -41,17 +41,28 @@ type TimeHistogram struct {
 	// start time, aligned on the period duration, from which the first value was
 	// added.
 	start time.Time
+
+	maxLength int64
 }
 
-func NewTimeHistogram(period time.Duration, maxLen uint) *TimeHistogram {
+type (
+	TimeHistogramBucketKeyType   uint64
+	TimeHistogramBucketValueType struct {
+		length int64
+		values sync.Map
+	}
+)
+
+func NewTimeHistogram(period time.Duration, maxLength int) *TimeHistogram {
 	return &TimeHistogram{
-		period: period,
+		period:    period,
+		maxLength: int64(maxLength),
 	}
 }
 
 // Add delta to the given key, inserting it if it doesn't exist. This method
 // is thread-safe and optimized for updating existing keys.
-func (s *TimeHistogram) Add(key interface{}, delta int64) error {
+func (s *TimeHistogram) Add(key interface{}, delta uint64) error {
 	// Avoid panic-ing by checking the key type is not nil and comparable.
 	if key == nil {
 		return sqerrors.New("unexpected key value `nil`")
@@ -64,11 +75,10 @@ func (s *TimeHistogram) Add(key interface{}, delta int64) error {
 	defer s.flushLock.RUnlock()
 
 	_, err := s.add(key, delta)
-
 	return err
 }
 
-func (s *TimeHistogram) add(key interface{}, delta int64) (uint64, error) {
+func (s *TimeHistogram) add(key interface{}, delta uint64) (TimeHistogramBucketKeyType, error) {
 	s.once.Do(func() {
 		now := time.Now().Truncate(s.period)
 		s.start = now
@@ -76,29 +86,41 @@ func (s *TimeHistogram) add(key interface{}, delta int64) (uint64, error) {
 
 	bucket := s.bucket()
 
-	var store *sync.Map
+	var store *TimeHistogramBucketValueType
 	if v, _ := s.buckets.Load(bucket); v != nil {
-		store = v.(*sync.Map)
+		store = v.(*TimeHistogramBucketValueType)
 	} else {
-		store = &sync.Map{}
+		store = &TimeHistogramBucketValueType{}
 		if actual, loaded := s.buckets.LoadOrStore(bucket, store); loaded {
-			store = actual.(*sync.Map)
+			store = actual.(*TimeHistogramBucketValueType)
 		}
 	}
 
 	// Fast hot path: concurrently updating the value of an existing key.
 	// Atomically update the value.
 	// This update operation can be therefore done concurrently.
-	actual, loaded := store.Load(key)
+	actual, loaded := store.values.Load(key)
 	if !loaded {
-		actual, loaded = store.LoadOrStore(key, &delta)
+		if atomic.LoadInt64(&store.length) >= s.maxLength {
+			return 0, MaxMetricsStoreLengthError{MaxLen: s.maxLength}
+		}
+
+		// Avoid escaping-analysis issues by scoping delta with this condition.
+		// Otherwise, benchmarks revealed that the delta value is always allocated
+		// no matter the code path.
+		// Cf. https://groups.google.com/g/golang-nuts/c/GQjq09k5Ptw/m/yh_7_GQNBQAJ
+		delta := delta
+		actual, loaded = store.values.LoadOrStore(key, &delta)
+		if !loaded {
+			// This key was added - increase the length
+			atomic.AddInt64(&store.length, 1)
+			return bucket, nil
+		}
 	}
 
-	if loaded {
-		// Atomically update the value.
-		sum := actual.(*int64)
-		atomic.AddInt64(sum, delta)
-	} // else this was the first value added
+	// The key value was loaded - atomically update the value.
+	sum := actual.(*uint64)
+	atomic.AddUint64(sum, delta)
 
 	return bucket, nil
 }
@@ -120,18 +142,18 @@ func (s *TimeHistogram) flush() (start time.Time, buckets sync.Map) {
 	return start, buckets
 }
 
-func (s *TimeHistogram) flushUnsafe() (ongoing uint64, start time.Time, buckets sync.Map) {
+func (s *TimeHistogram) flushUnsafe() (bucket TimeHistogramBucketKeyType, start time.Time, buckets sync.Map) {
 	// Save the ready histogram and its starting time
 	buckets = s.buckets
 	start = s.start
 
 	// Load the current time bucket values if any
-	var ongoingBucket *sync.Map
-	bucket := s.bucket()
+	var ongoingBucket *TimeHistogramBucketValueType
+	bucket = s.bucket()
 	if ongoing, loaded := buckets.Load(bucket); loaded {
 		// LoadAndDelete() is available from go1.15 - we can't use it for now
 		buckets.Delete(bucket)
-		ongoingBucket = ongoing.(*sync.Map)
+		ongoingBucket = ongoing.(*TimeHistogramBucketValueType)
 	}
 
 	// Reset the histogram
@@ -139,26 +161,24 @@ func (s *TimeHistogram) flushUnsafe() (ongoing uint64, start time.Time, buckets 
 	s.once = sync.Once{}
 	if ongoingBucket != nil {
 		// The current bucket is ongoing: set the start time and bucket list
-		// accordingly.
+		// accordingly in the new time bucket map.
 		s.start = start.Add(time.Duration(bucket) * s.period)
-		bucket = 0
-		s.buckets.Store(bucket, ongoingBucket)
-		ongoing = bucket
+		s.buckets.Store(TimeHistogramBucketKeyType(0), ongoingBucket)
 	} else {
 		s.start = time.Time{}
 	}
 
-	return ongoing, start, buckets
+	return bucket, start, buckets
 }
 
 func makeReadyTimeHistogram(start time.Time, period time.Duration, buckets sync.Map) (ready []ReadyStore) {
 	buckets.Range(func(k, v interface{}) bool {
-		bucket := k.(uint64)
+		bucket := k.(TimeHistogramBucketKeyType)
 		st := start.Add(time.Duration(bucket) * period)
 
 		readyMap := make(ReadyStoreMap)
-		v.(*sync.Map).Range(func(k, v interface{}) bool {
-			readyMap[k] = *v.(*int64)
+		v.(*TimeHistogramBucketValueType).values.Range(func(k, v interface{}) bool {
+			readyMap[k] = *v.(*uint64)
 			return true
 		})
 
@@ -190,15 +210,15 @@ func (s *TimeHistogram) Ready() bool {
 	return !s.start.IsZero() && time.Since(s.start) >= s.period
 }
 
-func (s *TimeHistogram) bucket() uint64 {
-	return uint64(time.Since(s.start) / s.period)
+func (s *TimeHistogram) bucket() TimeHistogramBucketKeyType {
+	return TimeHistogramBucketKeyType(time.Since(s.start) / s.period)
 }
 
 // ReadyTimeHistogram provides methods to get the values and the time window.
 type ReadyTimeHistogram struct {
 	set           ReadyStoreMap
 	start, finish time.Time
-	timeBucket    uint64
+	timeBucket    TimeHistogramBucketKeyType
 }
 
 func (s *ReadyTimeHistogram) Start() time.Time {
@@ -216,6 +236,14 @@ func (s *ReadyTimeHistogram) Metrics() ReadyStoreMap {
 // PerfHistogram is a performance monitoring histogram storing performance
 // metrics per time and per "performance bucket". It is based on a
 // TimeHistogram storing those performance buckets.
+// The performance buckets are logarithmic, with a cutoff for the smallest
+// possible upper bound. The bins are `bin(i) = factor * base^(i - 1)` with
+// factor > 0, base > 1:
+//  - 1: [0, factor)
+//  - 2: [factor, factor * base)
+//  - 3: [factor * base, factor * base^2)
+//  - ...
+// It also collects max values.
 type PerfHistogram struct {
 	unit, base float64
 	invLogBase float64
@@ -229,7 +257,9 @@ type PerfHistogram struct {
 	maxValues sync.Map
 }
 
-func NewPerfHistogram(period time.Duration, unit, base float64, maxStoreLen uint) (*PerfHistogram, error) {
+type PerfHistogramBucketType uint64
+
+func NewPerfHistogram(period time.Duration, unit, base float64, maxLen int) (*PerfHistogram, error) {
 	if unit <= 0.0 {
 		return nil, sqerrors.Errorf("unexpected binning unit value `%f`", unit)
 	}
@@ -237,7 +267,7 @@ func NewPerfHistogram(period time.Duration, unit, base float64, maxStoreLen uint
 		return nil, sqerrors.Errorf("unexpected binning base value `%f`", base)
 	}
 
-	sumStore := NewTimeHistogram(period, maxStoreLen)
+	sumStore := NewTimeHistogram(period, maxLen)
 	logBase := math.Log(base)
 	logUnit := math.Log(unit)
 
@@ -259,7 +289,6 @@ func (s *PerfHistogram) Add(v float64) error {
 	defer s.timeHistogram.flushLock.RUnlock()
 
 	perfBucket := s.bucket(v)
-	// TODO: pass the current time now to use
 	timeBucket, err := s.timeHistogram.add(perfBucket, 1)
 	if err != nil {
 		return err
@@ -269,17 +298,17 @@ func (s *PerfHistogram) Add(v float64) error {
 	return nil
 }
 
-func (s *PerfHistogram) bucket(v float64) (bin uint64) {
+func (s *PerfHistogram) bucket(v float64) (bucket PerfHistogramBucketType) {
 	if v < s.unit {
 		return 1
 	}
 	r := math.Floor(math.Log(v)*s.invLogBase - s.subParcel)
 	sqassert.True(r >= 0 && !math.IsNaN(r) && !math.IsInf(r, 0))
-	return 2 + uint64(r)
+	return 2 + PerfHistogramBucketType(r)
 }
 
 // Lock-less update of the max value using a compare-and-swap loop.
-func (s *PerfHistogram) updateMax(timeBucket uint64, v float64) {
+func (s *PerfHistogram) updateMax(timeBucket TimeHistogramBucketKeyType, v float64) {
 	// Fast path: try to load the max pointer first. This allows to only use
 	// LoadOrStore and its pointer allocation for every call to updateMax.
 	maxBitsPtrFace, loaded := s.maxValues.Load(timeBucket)
@@ -331,7 +360,7 @@ func (s *PerfHistogram) Flush() (ready []ReadyStore) {
 		timeHist := timeHist.(*ReadyTimeHistogram)
 		v, ok := maxValues.Load(timeHist.timeBucket)
 		sqassert.True(ok)
-		// TODO: write a helper func to access max values
+		sqassert.NotNil(v)
 		max := math.Float64frombits(*v.(*uint64))
 
 		ready = append(ready, &ReadyPerfHistogram{
@@ -349,19 +378,17 @@ func (s *PerfHistogram) flush() (start time.Time, timeBuckets, maxValuesTimeBuck
 	s.timeHistogram.flushLock.Lock()
 	defer s.timeHistogram.flushLock.Unlock()
 
-	ongoing, start, timeBuckets := s.timeHistogram.flushUnsafe()
+	ongoingTimeBucket, start, timeBuckets := s.timeHistogram.flushUnsafe()
 	maxValuesTimeBucket = s.maxValues
 
 	// Reset max values
 	s.maxValues = sync.Map{}
-	if ongoing > 0 {
-		// Remove the ongoing value from the returned map
-		v, ok := maxValuesTimeBucket.Load(ongoing)
-		sqassert.True(ok)
-		maxValuesTimeBucket.Delete(ongoing)
-
-		// Set the ongoing value in the new map
-		s.maxValues.Store(0, v)
+	// Put the ongoing max value in the new max value map if any
+	if v, ok := maxValuesTimeBucket.Load(ongoingTimeBucket); ok {
+		// Remove it from the map that will be returned
+		maxValuesTimeBucket.Delete(ongoingTimeBucket)
+		// But rather set it in the new map
+		s.maxValues.Store(TimeHistogramBucketKeyType(0), v)
 	}
 
 	return start, timeBuckets, maxValuesTimeBucket

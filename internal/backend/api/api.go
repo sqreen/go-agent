@@ -471,13 +471,13 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 	// from the request.
 	redactedString := scrubber.RedactedValueMask()
 	for sanitized := range info {
-		re, err := regexp.Compile(`(?i)`+regexp.QuoteMeta(sanitized))
+		re, err := regexp.Compile(`(?i)` + regexp.QuoteMeta(sanitized))
 		if err != nil {
 			return false, sqerrors.Wrapf(err, "could not ")
 		}
 
 		for e := range wafInfo {
-		for f := range wafInfo[e].Filter {
+			for f := range wafInfo[e].Filter {
 				resolvedValue := wafInfo[e].Filter[f].ResolvedValue
 
 				newStr := re.ReplaceAllString(resolvedValue, redactedString)
