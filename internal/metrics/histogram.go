@@ -105,16 +105,16 @@ func (s *TimeHistogram) add(key interface{}, delta uint64) (TimeHistogramBucketT
 		// Cf. https://groups.google.com/g/golang-nuts/c/GQjq09k5Ptw/m/yh_7_GQNBQAJ
 		delta := delta
 		actual, loaded = store.LoadOrStore(key, &delta)
+		if !loaded {
+			// This key was added - increase the length
+			atomic.AddInt64(&s.length, 1)
+			return bucket, nil
+		}
 	}
 
-	if loaded {
-		// Atomically update the value.
-		sum := actual.(*uint64)
-		atomic.AddUint64(sum, delta)
-	} else {
-		// This key was added - increase the length
-		atomic.AddInt64(&s.length, 1)
-	}
+	// The key value was loaded - atomically update the value.
+	sum := actual.(*uint64)
+	atomic.AddUint64(sum, delta)
 
 	return bucket, nil
 }
