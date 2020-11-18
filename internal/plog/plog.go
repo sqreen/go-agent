@@ -118,7 +118,7 @@ func NewLogger(level LogLevel, out io.Writer, errChan chan error) *Logger {
 		}
 	case Info:
 		levelLogger = infoLevelLogger{
-			errorLevelLogger: newErrorLevelLogger(out, errChan, true),
+			errorLevelLogger: newErrorLevelLogger(out, errChan, false),
 		}
 	case Error:
 		levelLogger = newErrorLevelLogger(out, errChan, false)
