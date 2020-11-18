@@ -75,7 +75,7 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 	if len(rule.Metrics) > 0 {
 		metricsStores = make(map[string]*metrics.TimeHistogram)
 		for _, m := range rule.Metrics {
-			metricsStores[m.Name] = metricsEngine.TimeHistogram(m.Name, time.Second*time.Duration(m.Period))
+			metricsStores[m.Name] = metricsEngine.TimeHistogram(m.Name, time.Second*time.Duration(m.Period), 10000)
 		}
 		defaultMetricsStore = metricsStores[rule.Metrics[0].Name]
 	}
@@ -86,7 +86,7 @@ func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metr
 		blockingMode:        rule.Block,
 		attackType:          rule.AttackType,
 		rulepackID:          rulepackID,
-		logger:              plog.WithBackoff(logger),
+		logger:              plog.WithStrictBackoff(logger),
 		metricsEngine:       metricsEngine,
 		metricsStores:       metricsStores,
 		defaultMetricsStore: defaultMetricsStore,
@@ -123,8 +123,10 @@ func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCa
 			// Check if the sqreen time deadline is exceeded before calling the
 			// callback
 			if p.DeadlineExceeded(0) {
-				// TODO: log error once
-				_ = overBudgetHistogram.Add(before, 1)
+				if err := overBudgetHistogram.Add(before, 1); err != nil {
+					type errKey struct{}
+					c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+				}
 				return nil
 			}
 
@@ -132,8 +134,10 @@ func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCa
 			// callback
 			defer func() {
 				if p.DeadlineExceeded(0) {
-					// TODO: log error once
-					_ = overBudgetHistogram.Add(after, 1)
+					if err := overBudgetHistogram.Add(after, 1); err != nil {
+						type errKey struct{}
+						c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+					}
 				}
 			}()
 
@@ -151,8 +155,10 @@ func withPerformanceMonitoring(perfHistogram performanceHistogram) NativeCallbac
 				duration := sw.Stop()
 				// Compute the milliseconds floating point value out of the nanoseconds
 				ms := float64(duration.Nanoseconds()) / float64(time.Millisecond)
-				// TODO: log the error once
-				_ = perfHistogram.Add(ms)
+				if err := perfHistogram.Add(ms); err != nil {
+					type errKey struct{}
+					c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+				}
 			}()
 
 			return cb(c)
@@ -174,8 +180,10 @@ func withCallCount(rulepackID, rule, cb string, store timeHistogram) NativeCallb
 	callCounterID := rulepackID + "/" + rule + "/" + cb
 	return func(cb NativeCallbackFunc) NativeCallbackFunc {
 		return func(c callback.CallbackContext) error {
-			// TODO: error type switch - log once non max store errors
-			_ = store.Add(callCounterID, 1)
+			if err := store.Add(callCounterID, 1); err != nil {
+				type errKey struct{}
+				c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+			}
 			return cb(c)
 		}
 	}
@@ -219,10 +227,10 @@ func (r *nativeRuleContext) buildPreMiddlewares() {
 
 	var overBudgetHist *metrics.TimeHistogram
 	if !r.critical {
-		overBudgetHist = r.metricsEngine.TimeHistogram("request_overbudget_cb", r.perfHistogramPeriod)
+		overBudgetHist = r.metricsEngine.TimeHistogram("request_overbudget_cb", r.perfHistogramPeriod, 1000)
 	}
 
-	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod)
+	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod, 1000)
 
 	r.pre = buildMiddlewares(r, "pre", overBudgetHist, perfHist, callCountHist)
 }
@@ -235,10 +243,10 @@ func (r *nativeRuleContext) buildPostMiddlewares() {
 
 	var overBudgetHist *metrics.TimeHistogram
 	if r.critical {
-		overBudgetHist = r.metricsEngine.TimeHistogram("request_overbudget_cb", r.perfHistogramPeriod)
+		overBudgetHist = r.metricsEngine.TimeHistogram("request_overbudget_cb", r.perfHistogramPeriod, 1000)
 	}
 
-	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod)
+	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod, 1000)
 
 	r.post = buildMiddlewares(r, "post", overBudgetHist, perfHist, callCountHist)
 }
@@ -296,19 +304,15 @@ func (c callbackContext) Logger() callback.Logger {
 	return c.r.logger
 }
 
-func (c callbackContext) AddMetricsValue(key interface{}, value uint64) error {
+func (c callbackContext) AddMetricsValue(key interface{}, value uint64) (added bool) {
 	if err := c.r.defaultMetricsStore.Add(key, value); err != nil {
-		sqErr := sqerrors.Wrapf(err, "rule `%s`: could not add a value to the default metrics store", c.r.name)
-		switch err.(type) {
-		case metrics.MaxMetricsStoreLengthError:
-			// TODO: log once
-			return nil
-		default:
-			// TODO: log once and rather return true/false imo to let the caller know
-			return sqErr
-		}
+		type errKey struct{}
+		err = sqerrors.WithKey(err, errKey{})
+		err = sqerrors.Wrapf(err, "rule `%s`: could not add a value to the default metrics store", c.r.name)
+		c.Logger().Error(err)
+		return false
 	}
-	return nil
+	return true
 }
 
 func (c callbackContext) HandleAttack(shouldBlock bool, opts ...event.AttackEventOption) (blocked bool) {

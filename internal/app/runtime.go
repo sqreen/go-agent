@@ -20,14 +20,14 @@ import (
 )
 
 type Info struct {
-	logger       *plog.Logger
+	logger       plog.DebugLevelLogger
 	hostname     string
 	processInfo  ProcessInfo
 	dependencies []*debug.Module
 	signature    string
 }
 
-func NewInfo(logger *plog.Logger) *Info {
+func NewInfo(logger plog.DebugLevelLogger) *Info {
 	return &Info{
 		logger: logger,
 		processInfo: ProcessInfo{
@@ -140,7 +140,7 @@ func bundleSignature(deps []*debug.Module) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func executable(logger *plog.Logger) string {
+func executable(logger plog.DebugLevelLogger) string {
 	name, err := os.Executable()
 	if err != nil {
 		// Log it and continue without it

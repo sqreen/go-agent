@@ -72,7 +72,7 @@ func NewEngine() *Engine {
 
 // TimeHistogram creates and registers a new metrics store when it does not exist. It
 // returns the existing one otherwise.
-func (e *Engine) TimeHistogram(id string, period time.Duration) *TimeHistogram {
+func (e *Engine) TimeHistogram(id string, period time.Duration, maxValues int) *TimeHistogram {
 	if store := e.getTimeHistogram(id); store != nil {
 		return store
 	}
@@ -84,7 +84,7 @@ func (e *Engine) TimeHistogram(id string, period time.Duration) *TimeHistogram {
 		return store
 	}
 
-	store := NewTimeHistogram(period, 0)
+	store := NewTimeHistogram(period, maxValues)
 	e.stores[id] = store
 	return store
 }
@@ -114,7 +114,7 @@ func (e *Engine) PerfHistogram(id string, unit, base float64, period time.Durati
 		return store, nil
 	}
 
-	store, err := NewPerfHistogram(period, unit, base, 0)
+	store, err := NewPerfHistogram(period, unit, base, 1000)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (s *ReadyPerfHistogram) Max() float64  { return s.max }
 type ReadyStoreMap map[interface{}]uint64
 
 type MaxMetricsStoreLengthError struct {
-	MaxLen uint
+	MaxLen int64
 }
 
 func (e MaxMetricsStoreLengthError) Error() string {

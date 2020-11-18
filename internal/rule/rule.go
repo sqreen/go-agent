@@ -146,7 +146,7 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
 			continue
 		}
-		//Find the symbol
+		// Find the symbol
 		hookpoint := r.Hookpoint
 		symbol := hookpoint.Method
 		hook, err := e.instrumentationEngine.Find(symbol)

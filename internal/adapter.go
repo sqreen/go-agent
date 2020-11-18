@@ -346,9 +346,9 @@ func newMetricsAPIAdapter(logger plog.ErrorLogger, readyMetrics map[string]metri
 				}
 				v := int64(v)
 
-				bucket, ok := k.(metrics.TimeHistogramBucketKeyType)
+				bucket, ok := k.(metrics.PerfHistogramBucketType)
 				if !ok {
-					logger.Error(sqerrors.Errorf("unexpected performance bucket value's type `%T`", bucket))
+					logger.Error(sqerrors.Errorf("unexpected performance bucket value's type `%T`", k))
 					continue
 				}
 				key := strconv.FormatUint(uint64(bucket), 10)

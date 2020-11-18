@@ -102,7 +102,7 @@ func (s *TimeHistogram) add(key interface{}, delta uint64) (TimeHistogramBucketK
 	actual, loaded := store.values.Load(key)
 	if !loaded {
 		if atomic.LoadInt64(&store.length) >= s.maxLength {
-			return 0, sqerrors.New("maximum length reached")
+			return 0, MaxMetricsStoreLengthError{MaxLen: s.maxLength}
 		}
 
 		// Avoid escaping-analysis issues by scoping delta with this condition.
@@ -361,7 +361,6 @@ func (s *PerfHistogram) Flush() (ready []ReadyStore) {
 		v, ok := maxValues.Load(timeHist.timeBucket)
 		sqassert.True(ok)
 		sqassert.NotNil(v)
-		// TODO: write a helper func to access max values
 		max := math.Float64frombits(*v.(*uint64))
 
 		ready = append(ready, &ReadyPerfHistogram{

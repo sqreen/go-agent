@@ -76,7 +76,7 @@ func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore)
 				return nil
 			}
 
-			c.HandleAttack(true, nil)
+			c.HandleAttack(true)
 
 			_ = c.AddMetricsValue(matched, 1)
 

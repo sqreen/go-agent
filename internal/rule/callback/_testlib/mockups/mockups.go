@@ -71,8 +71,8 @@ func (c *CallbackContextMockup) Logger() callback.Logger {
 	return c.Called().Get(0).(callback.Logger)
 }
 
-func (c *CallbackContextMockup) AddMetricsValue(key interface{}, value uint64) error {
-	return c.Called(key, value).Error(0)
+func (c *CallbackContextMockup) AddMetricsValue(key interface{}, value uint64) bool {
+	return c.Called(key, value).Bool(0)
 }
 
 func (c *CallbackContextMockup) ExpectAddMetricsValue(key interface{}, value uint64) *mock.Call {

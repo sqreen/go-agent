@@ -24,7 +24,7 @@ type (
 type CallbackContext interface {
 	HandleAttack(shouldBock bool, opt ...event.AttackEventOption) (blocked bool)
 	ProtectionContext() ProtectionContext
-	AddMetricsValue(key interface{}, value uint64) error
+	AddMetricsValue(key interface{}, value uint64) bool
 	Logger() Logger
 }
 
