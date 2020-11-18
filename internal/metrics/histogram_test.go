@@ -452,8 +452,8 @@ func TestTimeHistogram(t *testing.T) {
 		}()
 
 		// Start nbWriters writers that will write nbWrites times
-		nbWriters := 7000
-		nbWrites := 2000
+		nbWriters := 6000
+		nbWrites := 6000
 
 		// Create a stopBarrier to signal when all goroutines are done writing
 		// their values
@@ -976,8 +976,8 @@ func TestPerfHistogram(t *testing.T) {
 		}()
 
 		// Start nbWriters writers that will write nbWrites times
-		nbWriters := 7000
-		nbWrites := 2000
+		nbWriters := 6000
+		nbWrites := 6000
 
 		// Create a stopBarrier to signal when all goroutines are done writing
 		// their values
@@ -1038,11 +1038,12 @@ func TestPerfHistogram(t *testing.T) {
 
 		// Check each writer wrote the expected number of times.
 		require.Equal(t, metrics.ReadyStoreMap{
-			metrics.PerfHistogramBucketType(1): 8000,
-			metrics.PerfHistogramBucketType(2): 8000,
-			metrics.PerfHistogramBucketType(3): 72000,
-			metrics.PerfHistogramBucketType(4): 720000,
-			metrics.PerfHistogramBucketType(5): 7192000,
+			metrics.PerfHistogramBucketType(1): 6000,
+			metrics.PerfHistogramBucketType(2): 6000,
+			metrics.PerfHistogramBucketType(3): 54000,
+			metrics.PerfHistogramBucketType(4): 540000,
+			metrics.PerfHistogramBucketType(5): 5400000,
+			metrics.PerfHistogramBucketType(6): 29994000,
 		}, results)
 	})
 }
