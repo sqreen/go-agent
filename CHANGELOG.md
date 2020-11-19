@@ -1,3 +1,83 @@
+# v1.0.0 - 19 November 2020
+
+## New Features
+
+- **(#172) New SDK convenience function:**  
+  Add a new helper function `sdk.FromRequest()` allowing to retrieve Sqreen's
+  request context and perform SDK calls. It is equivalent to
+  `sdk.FromContext(r.Context())`.
+
+- **(#156) Performance monitoring:**  
+  Monitor the execution time of requests protected by Sqreen. Optionally, it is
+  possible to enforce the maximum amount of time Sqreen is allowed to run per
+  request: Sqreen's monitoring and protections will only run for the given
+  amount of time. This option is disabled by default and should be used with
+  caution as it can lead to partially protected requests.  
+  The resulting performance monitoring diagrams and setting are available at
+  <https://my.sqreen.com/application/goto/settings/performance>.  
+  Note that the execution time diagram cannot be used as a strict Application
+  Performance Monitoring diagram as it is based on a lossy representation. It
+  gives rough estimates of the actual execution time.
+
+- **(#170) Transparent response writer instrumentation:**  
+  Make the HTTP response writer instrumentation transparent by providing the
+  same set of interfaces as the instrumented HTTP response writer. The set of
+  interfaces is currently every optional `net/http` response writer interface,
+  along with some relevant `io` interfaces, among which:
+    - `http.Flusher`: for HTTP streaming support (multipart, chunked...).
+    - `http.Pusher`: for HTTP2 server push support.
+    - `http.Hijacker`: for websocket server support (experimental).
+    - `io.ReaderFrom`: for optimized copies (eg. file copies)
+    - `io.WriteString`: for optimized string copies.
+
+- **(#163) HTTP status code 404 (not found) monitoring:**  
+  Automatically log a security event when the response status code is 404. This
+  event is used by an internal Sqreen backend playbook to detect security scans.
+
+- **(#163) Scalable security event throughput:**  
+  To be able to handle a higher throughput of security events, the agent can now
+  scale its number of goroutines. An extra goroutine is created every time the
+  internal event queue is full, up to the number of available CPUs. Note that
+  the agent still drops security events when the event queue is full in order to
+  avoid slowing down the host application.
+
+- **(#165) Agent errors in the request hot-path:**  
+  To avoid slowing down request handlers, agent errors happening in the request
+  hot path are now logged based on an exponential backoff algorithm.  
+  This is disabled when the agent log level is `debug`.
+
+## Breaking Change
+
+- **(#168) SDK return values:**  
+  The SDK function and method return values are no longer pointer values but Go
+  interface values. This may break integrations using explicit SDK return types,
+  and we recommend to instead use type-inference when possible. This change will
+  allow us to transparently change the actual return values without involving
+  any further breaking change.  
+  As of today, the actual return value is a structure small enough to be
+  returned by value in order to save memory-allocation and garbage-collection
+  time. Returning an interface value allows to hide such implementation detail.
+
+# Fixes
+
+- **(#167) Playbook security response events:**  
+  Fix playbook security response events (blocking or redirecting a user or ip)
+  so that Sqreen's dashboard can properly display them and link them to their
+  source playbook.
+
+- **(#169) SQL-injection protection with Elastic APM:**  
+  Fix the detection of the SQL dialect when the SQL driver is instrumented by
+  Elastic's APM tracer. This requires Elastic's Go agent version greater than
+  `v1.9.0`.
+
+- **(#164) Echo middleware:**  
+  Fix the response status code monitoring when Echo's request handlers return an
+  error.
+
+- **(#166) Gin middleware:**  
+  Fix the response content-length monitoring of default responses
+  (ie. when the handler does nothing).
+
 # v0.16.1 - 30 September 2020
 
 ## Fixes
@@ -12,7 +92,6 @@
   agent can properly manage the request execution context, but also to correctly
   propagate values stored in the Go context before the middleware function.
 
-
 # v0.16.0 - 22 September 2020
 
 ## New Feature
@@ -22,15 +101,16 @@
   `Bind()` is now protected by the In-App WAF. The Go value it parses from the
   HTTP request is made available to the In-App WAF rules via the
   `GET/POST parameters` field.  
-  When blocked, `Bind()` returns a non-nil [`SqreenError` value](https://godoc.org/github.com/sqreen/go-agent/sdk/types#SqreenError)
+  When blocked, `Bind()` returns a
+  non-nil [`SqreenError` value](https://godoc.org/github.com/sqreen/go-agent/sdk/types#SqreenError)
   and its caller should immediately return.  
-  Read more about the blocking behavior of Sqreen for Go at <https://docs.sqreen.com/go/integration>.
+  Read more about the blocking behavior of Sqreen for Go
+  at <https://docs.sqreen.com/go/integration>.
 
 ## Fix
 
 - (#153) RASP shellshock: properly handle environment variables containing
   variable definitions (eg. `TERMCAP`).
-
 
 # v0.15.0 - 9 September 2020
 
@@ -44,22 +124,23 @@
 
 - (#148) Fix the usage of the Go agent in a reverse proxy server: avoid
   automatically reading a POST request's body because of the former usage of
-  `Request.ParseForm()` in Sqreen's middleware functions, and rather get
-  POST form values from `Request.PostForm`, and URL query values from
+  `Request.ParseForm()` in Sqreen's middleware functions, and rather get POST
+  form values from `Request.PostForm`, and URL query values from
   `Request.URL.Query()`.  
   Note that since `Request.PostForm`'s value is assigned by
   `Request.ParseForm()`, the In-WAF and RASP protections will now only consider
   POST form values when the request handler will have called
   `Request.ParseForm()` itself for its own needs.  
-  Therefore, the In-App WAF is now also attached to `ParseForm()` to monitor
-  the resulting POST form values, and returns a non-nil error when an attack is detected
-  (cf. <https://docs.sqreen.com/go/integration> for more Go integration details).
+  Therefore, the In-App WAF is now also attached to `ParseForm()` to monitor the
+  resulting POST form values, and returns a non-nil error when an attack is
+  detected
+  (cf. <https://docs.sqreen.com/go/integration> for more Go integration details)
+  .
 
 - (ef81fc2) Enforce a request body reader to ignore it when blocked by the
   In-App WAF by returning it 0 bytes read along with the current non-nil error.
   This allows for example `io.LimitReader` not to copy the body buffer despite
   the non-nil error returned by the In-App WAF protection.
-
 
 # v0.14.0 - 2 September 2020
 
@@ -78,7 +159,6 @@
 - (#144) Backend client: avoid dropping HTTP traces in case of `Host` header
   parsing errors.
 
-
 # v0.13.0 - 24 July 2020
 
 ## New Feature
@@ -93,14 +173,13 @@
   `ingestion.sqreen.com` before using it. Fallback to the usual
   `back.sqreen.com` in case of a connection issue. Therefore, the agent can take
   up to 30 seconds to connect to Sqreen if the health-check timeouts. Please
-  make sure to add this new  firewall and proxy configurations. 
+  make sure to add this new firewall and proxy configurations.
 
 - (#136) Add support to attach multiple security protections per hook point.
 
 ## Fixes
 
 - (#140) Fix the In-App WAF metadata PII scrubbing to also match substrings.
-
 
 # v0.12.1 - 13 July 2020
 
@@ -122,7 +201,6 @@
 
 - (eeb1dca) Avoid copying the metadata returned by the In-App WAF.
 
-
 # v0.12.0 - 6 July 2020
 
 ## New Features
@@ -139,60 +217,101 @@
 
     1. Parsers can be now protected by the In-App WAF once they have parsed a
        request input into a Go value. The parsed value is made available to the
-       In-App WAF rules via the `GET/POST parameters` field. Every
-       existing In-App WAF rule using this field therefore applies.  
-       This new feature is firstly deployed on Gin's [`ShouldBind()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.ShouldBind)
+       In-App WAF rules via the `GET/POST parameters` field. Every existing
+       In-App WAF rule using this field therefore applies.  
+       This new feature is firstly deployed on
+       Gin's [`ShouldBind()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.ShouldBind)
        method which is Gin's function to parse HTTP request values. It allows to
-       cover every parser Gin provides such as [`BindJSON()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.BindJSON),
-       [`BindXML()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.BindXML), etc.
+       cover every parser Gin provides such
+       as [`BindJSON()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.BindJSON)
+       ,
+       [`BindXML()`](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc#Context.BindXML)
+       , etc.
 
-       When blocked, the function returns a non-nil [`SqreenError` value](https://godoc.org/github.com/sqreen/go-agent/sdk/types#SqreenError)
+       When blocked, the function returns a
+       non-nil [`SqreenError` value](https://godoc.org/github.com/sqreen/go-agent/sdk/types#SqreenError)
        and the caller should immediately return.  
-       Read more about the blocking behavior of Sqreen for Go at <https://docs.sqreen.com/go/integration>.
+       Read more about the blocking behavior of Sqreen for Go
+       at <https://docs.sqreen.com/go/integration>.
 
-- (#129) Update Sqreen's blocking HTML page with a clearer description of what users getting it should do.
+- (#129) Update Sqreen's blocking HTML page with a clearer description of what
+  users getting it should do.
 
 ## Fix
 
 - (794d6e2) Allow port numbers in the `X-Forwarded-For` header.
 
-
 # v0.11.0 - 19 June 2020
 
 ## New Features
 
-- (#119) RASP: add Shell Injection protection support. This protection is currently dynamically applied to `os.StartProcess()` which is the only entry point of the Go standard library to execute a process.  This protection can be configured at <https://my.sqreen.com/application/goto/modules/rasp/details/shi>.
+- (#119) RASP: add Shell Injection protection support. This protection is
+  currently dynamically applied to `os.StartProcess()` which is the only entry
+  point of the Go standard library to execute a process. This protection can be
+  configured
+  at <https://my.sqreen.com/application/goto/modules/rasp/details/shi>.
 
-- (#119) RASP: add Local File Inclusion protection support. This protection is currently dynamically applied to `os.Open()` which is the only entry point of the Go standard library to open a file for reading. This protection can be configured at <https://my.sqreen.com/application/goto/modules/rasp/details/lfi>.
+- (#119) RASP: add Local File Inclusion protection support. This protection is
+  currently dynamically applied to `os.Open()` which is the only entry point of
+  the Go standard library to open a file for reading. This protection can be
+  configured
+  at <https://my.sqreen.com/application/goto/modules/rasp/details/lfi>.
 
-- (#120) RASP: add Server-Side Request Forgery protection support. This protection is currently dynamically applied to `net/http.(*Client).do()` which is the only entry point of the Go standard library to perform an HTTP request. This protection can be configured at <https://my.sqreen.com/application/goto/modules/rasp/details/ssrf>.
+- (#120) RASP: add Server-Side Request Forgery protection support. This
+  protection is currently dynamically applied to `net/http.(*Client).do()` which
+  is the only entry point of the Go standard library to perform an HTTP request.
+  This protection can be configured
+  at <https://my.sqreen.com/application/goto/modules/rasp/details/ssrf>.
 
-- (#125) RASP: enable SQL Injection protection for every MySQL, Oracle, SQLite and PostgreSQL drivers listed in the Go language wiki page <https://github.com/golang/go/wiki/SQLDrivers>.
+- (#125) RASP: enable SQL Injection protection for every MySQL, Oracle, SQLite
+  and PostgreSQL drivers listed in the Go language wiki
+  page <https://github.com/golang/go/wiki/SQLDrivers>.
 
-- (#115) RASP: store Sqreen's request protection context into the Goroutine Local Storage (GLS). Therefore, Sqreen can now protect every Go function without requiring the request Go context (eg. both `QueryContext()` and `Query()` can be now protected against SQL injections). For now, this protection context is only available in the goroutine handling the request, and sub-goroutines are not protected. Further support will be added very soon to remove this limitation.
+- (#115) RASP: store Sqreen's request protection context into the Goroutine
+  Local Storage (GLS). Therefore, Sqreen can now protect every Go function
+  without requiring the request Go context (eg. both `QueryContext()`
+  and `Query()` can be now protected against SQL injections). For now, this
+  protection context is only available in the goroutine handling the request,
+  and sub-goroutines are not protected. Further support will be added very soon
+  to remove this limitation.
 
-- (#121) Add IP denylist support: block every request performed by an IP address of the denylist. Every usage of whitelist and blacklist in the agent was also removed when possible. The IP denylist can be configured at <https://my.sqreen.com/application/goto/settings/denylist>.
+- (#121) Add IP denylist support: block every request performed by an IP address
+  of the denylist. Every usage of whitelist and blacklist in the agent was also
+  removed when possible. The IP denylist can be configured
+  at <https://my.sqreen.com/application/goto/settings/denylist>.
 
-- (#122) Add path passlist support: requests performed on those paths are not monitored nor protected by Sqreen. The Path passlist can be configured at <https://my.sqreen.com/application/goto/settings/passlist>.
+- (#122) Add path passlist support: requests performed on those paths are not
+  monitored nor protected by Sqreen. The Path passlist can be configured
+  at <https://my.sqreen.com/application/goto/settings/passlist>.
 
-- (#123) Export the error type returned by Sqreen protections when blocking in the new SDK package `github.com/sqreen/go-agent/sdk/types` in order to avoid retrying blocked function calls (eg. avoid retrying a blocked SQL query). It must be used along with `errors.As()` to detect such cases. Read more at <https://godoc.org/github.com/sqreen/go-agent/sdk/types>.
+- (#123) Export the error type returned by Sqreen protections when blocking in
+  the new SDK package `github.com/sqreen/go-agent/sdk/types` in order to avoid
+  retrying blocked function calls (eg. avoid retrying a blocked SQL query). It
+  must be used along with `errors.As()` to detect such cases. Read more
+  at <https://godoc.org/github.com/sqreen/go-agent/sdk/types>.
 
-- (#124) Allow to "quickly" remove the agent from a program by only removing it from the source code without disabling the program instrumentation. This is made possible by making the instrumentation fully autonomous to avoid compilation errors.
+- (#124) Allow to "quickly" remove the agent from a program by only removing it
+  from the source code without disabling the program instrumentation. This is
+  made possible by making the instrumentation fully autonomous to avoid
+  compilation errors.
 
 ## Fix
 
-- Gin Middleware: fix the HTTP status code monitoring that was possibly changed by Gin after having been already written.
+- Gin Middleware: fix the HTTP status code monitoring that was possibly changed
+  by Gin after having been already written.
 
 ## Internal Changes
 
-- (#126) Cache request value lookups, mainly to accelerate the In-App WAF when lots of rulesets are enabled.
+- (#126) Cache request value lookups, mainly to accelerate the In-App WAF when
+  lots of rulesets are enabled.
 
 - (#117) Simpler Go vendoring support implementation.
 
-- (#113) Significant JavaScript performance improvements by changing the virtual machine to `github.com/dop251/goja`.
+- (#113) Significant JavaScript performance improvements by changing the virtual
+  machine to `github.com/dop251/goja`.
 
-- (#114) Add Goroutine Local Storage (GLS) support through static instrumentation of the Go runtime.
-
+- (#114) Add Goroutine Local Storage (GLS) support through static
+  instrumentation of the Go runtime.
 
 # v0.10.1 - 5 June 2020
 
@@ -208,7 +327,9 @@
 - (#109) Make the PII sanitizer configurable with two new configuration entries
   allowing to control the regular expressions used to sanitize everything sent
   to Sqreen. The agent doesn't start in case of an invalid regular expression.
-  More details can be found on the [configuration's documentation page](https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing).
+  More details can be found on
+  the [configuration's documentation page](https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing)
+  .
 
 - (#110) The `net/http` middleware now includes URL segments in the request
   parameters to increase the coverage we have on frameworks compatible with it,
@@ -232,13 +353,18 @@
 - Add quick start examples for common build and deployment environments such as
   docker images, heroku and google app engine.
 
-- Document Heroku installation at <https://docs.sqreen.com/go/installation/heroku>.
+- Document Heroku installation
+  at <https://docs.sqreen.com/go/installation/heroku>.
 
-- Document Google App Engine installation at <https://docs.sqreen.com/go/installation/google-app-engine>.
+- Document Google App Engine installation
+  at <https://docs.sqreen.com/go/installation/google-app-engine>.
 
-- Document Docker image installation at <https://docs.sqreen.com/go/installation/docker>.
+- Document Docker image installation
+  at <https://docs.sqreen.com/go/installation/docker>.
 
-- Document PII scrubbing configuration at <https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing>.
+- Document PII scrubbing configuration
+  at <https://docs.sqreen.com/go/configuration/#personally-identifiable-information-scrubbing>
+  .
 
 # v0.9.1 - 31 March 2020
 
@@ -256,10 +382,10 @@
 
 # v0.9.0 - 19 February 2020
 
-This new major version says farewell to the `beta` and adds SQL-injection
-run time protection thanks the first building blocks of [RASP][RASP-Wikipedia]
-for the Go language! Thank you to everyone that helped us in this wonderful
-and amazing journey ;-)
+This new major version says farewell to the `beta` and adds SQL-injection run
+time protection thanks the first building blocks of [RASP][RASP-Wikipedia]
+for the Go language! Thank you to everyone that helped us in this wonderful and
+amazing journey ;-)
 
 The Go agent has been protecting production servers for more than a year now and
 we reached the point where we are confident enough about its deployment, setup,
@@ -275,17 +401,17 @@ Because we now want a stable public API, find below the breaking changes:
 
 - The former separate agent package `github.com/sqreen/go-agent/agent` that was
   asked to import in order to start the agent is no longer required nor
-  available. This is now performed by the middleware functions we
-  provide in order to avoid the most common setup mistake during the
-  beta where only the agent was setup and no middleware function was set to
-  protect the requests (and therefore nothing was happening).
+  available. This is now performed by the middleware functions we provide in
+  order to avoid the most common setup mistake during the beta where only the
+  agent was setup and no middleware function was set to protect the requests (
+  and therefore nothing was happening).
 
 - SDK: the user identification SDK method `Identify()` has been updated to be
   simpler to use and less error-prone by now making it return a non-nil error
   when the request handler shouldn't continue any further serving the request.
-  It happens when a user security response has matched the identified user.
-  This replaces the former separate SDK method `MatchSecurityResponse()`.
-  New usage example:
+  It happens when a user security response has matched the identified user. This
+  replaces the former separate SDK method `MatchSecurityResponse()`. New usage
+  example:
   ```go
   sqUser := sq.ForUser(sdk.EventUserIdentifiersMap{"uid": "unique user id"})
   if err := sqUser.Identify(); err != nil {
@@ -294,25 +420,26 @@ Because we now want a stable public API, find below the breaking changes:
   ```
 
 - The agent no longer starts if the program wasn't instrumented using the
-  instrumentation tool. See docs.sqreen.com/go/installation for details
-  on how to install and use the tool. Note that the program is not aborted -
-  only the agent is disabled.
+  instrumentation tool. See docs.sqreen.com/go/installation for details on how
+  to install and use the tool. Note that the program is not aborted - only the
+  agent is disabled.
 
 - Dropping gRPC support: the beta support for gRPC was experimental and was in
   the end too limited by Sqreen's focus on the HTTP protocol. Most of our
   protections are indeed designed for HTTP and couldn't be applied at the gRPC
   protocol level. We are therefore removing it until we can provide a correct
   experience for such HTTP-based protocol.  
-  Please contact us if you need any further information or if you are
-  interested in helping us building it (support@sqreen.com).
+  Please contact us if you need any further information or if you are interested
+  in helping us building it (support@sqreen.com).
 
 ## New Features
 
-- SQL-injection RASP protection: when enabled on [Sqreen's dashboard](https://my.sqreen.com/application/goto/modules/rasp),
+- SQL-injection RASP protection: when enabled
+  on [Sqreen's dashboard](https://my.sqreen.com/application/goto/modules/rasp),
   the `database/sql` Go package gets automatically protected against SQL
   injections. SQL queries go through our SQL-injection detection which will
-  abort the SQL function call and corresponding HTTP request when an attack
-  is detected.  
+  abort the SQL function call and corresponding HTTP request when an attack is
+  detected.  
   Note that special care was taken to properly intergrate with Go error-handling
   principles: when a SQL query gets blocked, the HTTP request context is
   canceled and a non-nil error is returned by the `database/sql` function call
@@ -325,26 +452,28 @@ Because we now want a stable public API, find below the breaking changes:
     return err
   }
   ```
-  Read more about Go integration details at http://docs.sqreen.com/go/integration.
+  Read more about Go integration details
+  at http://docs.sqreen.com/go/integration.
 
 - Dashboard diagnostic messages: major setup issues are now also reported
-  through Sqreen's dashboard page of [running hosts](https://my.sqreen.com/application/goto/settings/hosts)
+  through Sqreen's dashboard page
+  of [running hosts](https://my.sqreen.com/application/goto/settings/hosts)
   to get notified about some downgraded states of the agent, such as:
-  - The Go program is not instrumented so the agent didn't start.
-  - The In-App WAF wasn't compiled (eg. CGO disabled) so it is unavailable and
-    disabled.
-  - The program dependencies couldn't be retrieved because the program was not
-    compiled as a Go module. This is also shown by the dashboard when the list
-    of dependencies is empty.
+    - The Go program is not instrumented so the agent didn't start.
+    - The In-App WAF wasn't compiled (eg. CGO disabled) so it is unavailable and
+      disabled.
+    - The program dependencies couldn't be retrieved because the program was not
+      compiled as a Go module. This is also shown by the dashboard when the list
+      of dependencies is empty.
 
 # v0.1.0-beta.10 - 24 January 2020
 
 ## Breaking Change
 
 - (#89) Go instrumentation: Sqreen's dynamic configuration of the protection
-  your Go programs is made possible at run time thanks to Go instrumentation.
-  It is a building block of the upcoming run time self-protection (aka RASP) and
-  it is safely performed at compilation time by an instrumentation tool that
+  your Go programs is made possible at run time thanks to Go instrumentation. It
+  is a building block of the upcoming run time self-protection (aka RASP) and it
+  is safely performed at compilation time by an instrumentation tool that
   seamlessly integrates with the Go toolchain. To begin with, only a specific
   set of Go packages are instrumented: the agent and `database/sql` (to prepare
   the upcoming SQL injection protection).
@@ -354,7 +483,8 @@ Because we now want a stable public API, find below the breaking changes:
 
 ## New Features
 
-- (#90) The SDK now imports the agent package to no longer have to import it in the
+- (#90) The SDK now imports the agent package to no longer have to import it in
+  the
   `main` package. The SDK is indeed mandatory when setting up Sqreen for Go,
   making it the best place to import the agent.
 
@@ -372,29 +502,32 @@ Because we now want a stable public API, find below the breaking changes:
 
 ## New Features
 
-- Request parameters such as query or post parameters are now added in the attack
-  events and shown in the attack logs and in the event explorer pages of our dashboard. (#84)
+- Request parameters such as query or post parameters are now added in the
+  attack events and shown in the attack logs and in the event explorer pages of
+  our dashboard. (#84)
 
 - PII scrubbing is now performed on every event sent to Sqreen, as documented
   on https://docs.sqreen.com/guides/how-sqreen-works/#pii-scrubbing. (#86)
 
 ## Fixes
 
-- Add PII scrubbing to the WAF logs that may include data from the request. (#87)
+- Add PII scrubbing to the WAF logs that may include data from the request. (
+  # 87)
 
 ## Internal Changes
 
-- The In-App WAF has been intensively optimized so that large requests can no longer impact
-  its execution time. (#83)
+- The In-App WAF has been intensively optimized so that large requests can no
+  longer impact its execution time. (#83)
 
 # v0.1.0-beta.8 - 15 October 2019
 
 ## Internal Changes
 
 - In-App WAF:
-  - Dynamically set the WAF timeout (#79).
-  - Ignore WAF timeout errors and add more context when reporting an error (#80).
-  - Update the libsqreen to v0.4.0 to add support for the `@pm` operator.
+    - Dynamically set the WAF timeout (#79).
+    - Ignore WAF timeout errors and add more context when reporting an error (
+      # 80).
+    - Update the libsqreen to v0.4.0 to add support for the `@pm` operator.
 
 # v0.1.0-beta.7 - 26 September 2019
 
@@ -422,7 +555,6 @@ Because we now want a stable public API, find below the breaking changes:
 
 - Fix a compilation error on 32-bit target architectures.
 
-
 # v0.1.0-beta.6 - 25 July 2019
 
 ## New Features
@@ -433,30 +565,30 @@ Because we now want a stable public API, find below the breaking changes:
 - Configurable protection behaviour of the agent when blocking a request by
   either customizing the HTTP status code that is used for the blocking HTML
   page, or by redirecting to a given URL instead.  
-  Dashboard page: https://my.sqreen.com/application/goto/settings/global#protection-mode
+  Dashboard
+  page: https://my.sqreen.com/application/goto/settings/global#protection-mode
 
 - HTTP response status code monitoring. (#75)  
   Dashboard page: https://my.sqreen.com/application/goto/monitoring
-  
+
 - Support for browser security headers protection modules allowing to enable
   various browser security options allowing to restrict modern browsers from
   running into some preventable vulnerabilities:
 
-  - [Content Security Policy][csp] protection module allowing to prevent
-    cross-site scripting attacks. (#74)  
-    Dashboard page: https://my.sqreen.com/application/goto/modules/csp
+    - [Content Security Policy][csp] protection module allowing to prevent
+      cross-site scripting attacks. (#74)  
+      Dashboard page: https://my.sqreen.com/application/goto/modules/csp
 
-  - Security headers protection module allowing to protect against client-side
-    vulnerabilities in the browser. (#73)  
-    Dashboard page: https://my.sqreen.com/application/goto/modules/headers
+    - Security headers protection module allowing to protect against client-side
+      vulnerabilities in the browser. (#73)  
+      Dashboard page: https://my.sqreen.com/application/goto/modules/headers
 
 ## Minor Changes
 
 - Better agent configuration logs clearly stating where does the configuration
-  come from (file in search path, enforced file or environment variables),
-  along with the possibility to display the full settings using the `debug`
+  come from (file in search path, enforced file or environment variables), along
+  with the possibility to display the full settings using the `debug`
   log-level.
-
 
 # v0.1.0-beta.5 - 23 May 2019
 
@@ -471,18 +603,17 @@ Because we now want a stable public API, find below the breaking changes:
   whitelisted. Everything related to Sqreen, including events, will be ignored.
   (#69)
 
-- Agent fail-safe catching errors and panics in order to prevent the host Go
-  app to fail. The fail-safe mechanism either tries to restart the agent or
+- Agent fail-safe catching errors and panics in order to prevent the host Go app
+  to fail. The fail-safe mechanism either tries to restart the agent or
   ultimately stops it. (#67)
 
 ## Minor Change
 
 - Internal event batch improvements:
-  - Increased batch buffer capacity from 60 to 6000 entries in order to be able
-    to handle more events, sent by batches of 60 events per heartbeat.
-  - Remove a bookkeeping goroutine and include its logic into the main event
-    processing loop.
-
+    - Increased batch buffer capacity from 60 to 6000 entries in order to be
+      able to handle more events, sent by batches of 60 events per heartbeat.
+    - Remove a bookkeeping goroutine and include its logic into the main event
+      processing loop.
 
 # v0.1.0-beta.4 - 16 April 2019
 
@@ -496,53 +627,52 @@ Note that redirecting users or IP addresses is not supported yet.
 
 - [Security Automation]:  
   It is now possible to block IP addresses or users. When a [playbook]
-  triggers, the agent is notified and gets the batch of security responses.
-  They are asynchronously stored into data structures optimized for fast lookup
-  and low memory usage. Middleware functions can thus perform fast lookups to
-  block requests in a few microseconds in order to exit request handlers as
-  fast as possible.
+  triggers, the agent is notified and gets the batch of security responses. They
+  are asynchronously stored into data structures optimized for fast lookup and
+  low memory usage. Middleware functions can thus perform fast lookups to block
+  requests in a few microseconds in order to exit request handlers as fast as
+  possible.
 
-  - Blocking IP addresses:  
-    No changes are required to block IP addresses. Our middleware functions
-    have been updated to block requests whose IP addresses match a security
-    response. The request is aborted with HTTP status code `500` and Sqreen's
-    default HTML information page.
-  
-  - Blocking users:   
-    Blocking users is performed by combining SDK methods `Identify()` and
-    `MatchSecurityResponse()` in order to firstly associate a user to the
-    current request, and secondly to check if it matches a security response.
-    When a security response matches, the request handler and any related
-    goroutines should be stopped as soon as possible.
-    
-    Usage example:
-    ```go
-    uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
-    sqUser := sdk.FromContext(ctx).ForUser(uid)
-    sqUser.Identify()
-    if match, err := sqUser.MatchSecurityResponse(); match {
-      // Return now to stop further handling the request and let Sqreen's
-      // middleware apply the configured security response and abort the
-      // request. The returned error may help aborting from sub-functions by
-      // returning it to the callers when the Go error handling pattern is
-      // used.
-      return err
-    }
-    ```
-    
-    We strongly recommend to create a user-authentication middleware function
-    in order to seamlessly integrate user-blocking to all your
-    user-authenticated endpoints.
+    - Blocking IP addresses:  
+      No changes are required to block IP addresses. Our middleware functions
+      have been updated to block requests whose IP addresses match a security
+      response. The request is aborted with HTTP status code `500` and Sqreen's
+      default HTML information page.
+
+    - Blocking users:   
+      Blocking users is performed by combining SDK methods `Identify()` and
+      `MatchSecurityResponse()` in order to firstly associate a user to the
+      current request, and secondly to check if it matches a security response.
+      When a security response matches, the request handler and any related
+      goroutines should be stopped as soon as possible.
+
+      Usage example:
+      ```go
+      uid := sdk.EventUserIdentifiersMap{"uid": "my-uid"}
+      sqUser := sdk.FromContext(ctx).ForUser(uid)
+      sqUser.Identify()
+      if match, err := sqUser.MatchSecurityResponse(); match {
+        // Return now to stop further handling the request and let Sqreen's
+        // middleware apply the configured security response and abort the
+        // request. The returned error may help aborting from sub-functions by
+        // returning it to the callers when the Go error handling pattern is
+        // used.
+        return err
+      }
+      ```
+
+      We strongly recommend to create a user-authentication middleware function
+      in order to seamlessly integrate user-blocking to all your
+      user-authenticated endpoints.
 
 ## Fix
 
-- Escape the event type name to avoid JSON marshaling error. Note that this
-  case could not happen in previous agent versions. (#52)
+- Escape the event type name to avoid JSON marshaling error. Note that this case
+  could not happen in previous agent versions. (#52)
 
 ## Minor Change
 
 - Avoid performing multiple times commands within the same command batch. (51)
-
 
 # v0.1.0-beta.3 - 22 March 2019
 
@@ -555,9 +685,9 @@ Note that redirecting users or IP addresses is not supported yet.
   allowing to avoid sending the `Referer` HTTP header to the Sqreen backend when
   it contains sensitive data. (#36)
 
-- Ability to disable/enable the agent through the [dashboard
-  settings](https://my.sqreen.com/application/goto/settings/global) using the
-  Sqreen status button. (#29)
+- Ability to disable/enable the agent through
+  the [dashboard settings](https://my.sqreen.com/application/goto/settings/global)
+  using the Sqreen status button. (#29)
 
 ## Breaking Changes
 
@@ -571,8 +701,8 @@ Note that redirecting users or IP addresses is not supported yet.
 
 - Fix IPv4 and IPv6 matching against private network definitions. (#38)
 
-- Remove useless empty request records mistakenly created while not carrying
-  any SDK observation. (#38)
+- Remove useless empty request records mistakenly created while not carrying any
+  SDK observation. (#38)
 
 ## Minor Changes
 
@@ -580,14 +710,13 @@ Note that redirecting users or IP addresses is not supported yet.
   globals. This will be also required to be able to cleanly restart the agent by
   self-managing the initializations. (#28)
 
-
 # v0.1.0-beta.2 - 14 February 2019
 
 ## New feature
 
 - Add a new `Identify()` method allowing to explicitly associate a user to the
-current request. As soon as we add the support for the security reponses, it
-will allow to block users (#26).
+  current request. As soon as we add the support for the security reponses, it
+  will allow to block users (#26).
 
 # v0.1.0-beta.1 - 7 February 2019
 
@@ -598,8 +727,8 @@ share your impressions with us.
 ## New Features
 
 - New web framework middleware support:
-  - Standard Go's `net/http` package (#21).
-  - Echo (#19).
+    - Standard Go's `net/http` package (#21).
+    - Echo (#19).
 
 - Multiple custom events can now be easily associated to a user using the
   user-scoped methods under `ForUser()`. For example, to send two custom events
@@ -624,45 +753,46 @@ share your impressions with us.
 
 - Stable SDK API of "Sqreen for Go":
 
-  - Avoid name conflicts with framework packages by prefixing Sqreen's
-    middleware packages with `sq`. For example, `gin` becomes `sqgin` (#17).
+    - Avoid name conflicts with framework packages by prefixing Sqreen's
+      middleware packages with `sq`. For example, `gin` becomes `sqgin` (#17).
 
-  - Cleaner Go documentation now entirely included in the SDK and middleware
-    packages Go documentations. So no more need to go inside the agent
-    documentation to know more on some SDK methods, it is now all documented
-    in the same place, with lot of examples.
+    - Cleaner Go documentation now entirely included in the SDK and middleware
+      packages Go documentations. So no more need to go inside the agent
+      documentation to know more on some SDK methods, it is now all documented
+      in the same place, with lot of examples.
 
-  - Clearer SDK API: The flow of security events that can send to Sqreen is
-    now well-defined by a tree of SDK methods that can only be used the right
-    way. (#18, #24)
+    - Clearer SDK API: The flow of security events that can send to Sqreen is
+      now well-defined by a tree of SDK methods that can only be used the right
+      way. (#18, #24)
 
-     - The SDK handle getter function name is renamed from
-       `GetHTTPRequestContext()` into a simpler `FromContext()`.
+        - The SDK handle getter function name is renamed from
+          `GetHTTPRequestContext()` into a simpler `FromContext()`.
 
-     - User-related SDK methods are now provided by `ForUser()`, for example:
+        - User-related SDK methods are now provided by `ForUser()`, for example:
 
-         ```go
-         sqreen.TrackAuth(true, uid)
-         ```
+            ```go
+            sqreen.TrackAuth(true, uid)
+            ```
 
-       becomes
+          becomes
 
-         ```go
-         sqreen.ForUser(uid).TrackAuthSuccess()
-         ```
-
+            ```go
+            sqreen.ForUser(uid).TrackAuthSuccess()
+            ```
 
 # v0.1.0-alpha.5
 
 ## New features
 
 - sdk: user-related security events:
-      - ability to associate a user to an event using `WithUserIdentifier()` (#13).
-      - track user creation using `TrackSignup()` (#15).
-      - track user authentication using `TrackAuth()` (#15).
-    
-- agent/backend: take into account `{HTTPS,HTTP,NO}_PROXY` environment variables (and their lowercase alternatives) (#14).
-    
+    - ability to associate a user to an event using `WithUserIdentifier()` (#13)
+      .
+    - track user creation using `TrackSignup()` (#15). - track user
+      authentication using `TrackAuth()` (#15).
+
+- agent/backend: take into account `{HTTPS,HTTP,NO}_PROXY` environment
+  variables (and their lowercase alternatives) (#14).
+
 - agent/backend: share the organization token for all your apps (#12).
 
 ## Fixes
@@ -671,7 +801,11 @@ share your impressions with us.
 - sdk: better documentation with examples.
 
 [Security Automation]: https://docs.sqreen.com/security-automation/introduction/
+
 [playbook]: https://docs.sqreen.com/security-automation/introduction-playbooks/
+
 [playbooks]: https://docs.sqreen.com/security-automation/introduction-playbooks/
+
 [csp]: https://docs.sqreen.com/using-sqreen/automatically-set-content-security-policy/
+
 [RASP-Wikipedia]: https://en.wikipedia.org/wiki/Runtime_application_self-protection
