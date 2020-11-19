@@ -11,9 +11,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -24,8 +25,7 @@ import (
 	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
-	protectionContext "github.com/sqreen/go-agent/internal/protection/context"
-	"github.com/sqreen/go-agent/internal/protection/http/types"
+	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/rule"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
@@ -38,13 +38,6 @@ import (
 
 func Start() {
 	agentInstance.start()
-}
-
-func Agent() protectionContext.AgentFace {
-	if agent := agentInstance.get(); agent != nil && agent.isRunning() {
-		return agent
-	}
-	return nil
 }
 
 var agentInstance agentInstanceType
@@ -95,7 +88,7 @@ func (instance *agentInstanceType) set(agent *AgentType) {
 //   it and silently return.
 func (instance *agentInstanceType) start() {
 	instance.startOnce.Do(func() {
-		_ = sqsafe.Go(func() error {
+		sqsafe.Go(func() error {
 			// Level 1
 			// Backoff-sleep loop to retry starting the agent
 			// To properly work, this level relies on:
@@ -104,7 +97,7 @@ func (instance *agentInstanceType) start() {
 			//   - the correctness of sub-level error handling (ie. they don't panic).
 			// Any panics from these would stop the execution of this level.
 			backoff := sqtime.NewBackoff(time.Second, time.Hour, 2)
-			logger := plog.NewLogger(plog.Info, os.Stderr, 0)
+			logger := plog.NewLogger(plog.Info, os.Stderr, nil)
 			for {
 				err := sqsafe.Call(func() error {
 					// Level 2
@@ -170,12 +163,12 @@ func (instance *agentInstanceType) start() {
 				time.Sleep(d)
 			}
 			return nil
-		})
+		}, nil)
 	})
 }
 
 type AgentType struct {
-	logger            *plog.Logger
+	logger            plog.DebugLevelLogger
 	eventMng          *eventManager
 	metrics           *metrics.Engine
 	staticMetrics     staticMetrics
@@ -190,6 +183,8 @@ type AgentType struct {
 	piiScrubber       *sqsanitize.Scrubber
 	runningAccessLock sync.RWMutex
 	running           bool
+	performanceBudget time.Duration
+	errLoggerChan     chan error
 }
 
 type staticMetrics struct {
@@ -198,15 +193,16 @@ type staticMetrics struct {
 	sdkUserSignup,
 	allowedIP,
 	allowedPath,
-	errors,
-	callCounts *metrics.Store
+	callCounts *metrics.TimeHistogram
+	requestTime, sqreenTime, sqreenOverheadPercentage *metrics.PerfHistogram
 }
 
 // Error channel buffer length.
 const errorChanBufferLength = 256
 
 func New(cfg *config.Config) *AgentType {
-	logger := plog.NewLogger(cfg.LogLevel(), os.Stderr, errorChanBufferLength)
+	errLoggerChan := make(chan error, errorChanBufferLength)
+	logger := plog.WithOptionalBackoff(plog.NewLogger(cfg.LogLevel(), os.Stderr, errLoggerChan))
 
 	agentVersion := version.Version()
 	logger.Infof("go agent v%s", agentVersion)
@@ -216,16 +212,14 @@ func New(cfg *config.Config) *AgentType {
 		return nil
 	}
 
-	metrics := metrics.NewEngine(logger, cfg.MaxMetricsStoreLength())
-
-	errorMetrics := metrics.GetStore("errors", config.ErrorMetricsPeriod)
+	metrics := metrics.NewEngine()
 
 	publicKey, err := rule.NewECDSAPublicKey(config.PublicKey)
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
 		return nil
 	}
-	rulesEngine := rule.NewEngine(logger, nil, metrics, errorMetrics, publicKey)
+	rulesEngine := rule.NewEngine(logger, nil, metrics, publicKey, perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
 
 	// Early health checking
 	if err := rulesEngine.Health(agentVersion); err != nil {
@@ -254,19 +248,35 @@ func New(cfg *config.Config) *AgentType {
 		return nil
 	}
 
+	sq, err := metrics.PerfHistogram("sq", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "`sq` performance histogram constructor error"))
+	}
+	req, err := metrics.PerfHistogram("req", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "`req` performance histogram constructor error"))
+	}
+	sqOverheadPercentage, err := metrics.PerfHistogram("pct", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+	if err != nil {
+		logger.Error(sqerrors.Wrap(err, "`pct` performance histogram constructor error"))
+	}
+
 	// AgentType graceful stopping using context cancellation.
 	ctx, cancel := context.WithCancel(context.Background())
 	return &AgentType{
-		logger:  logger,
-		isDone:  make(chan struct{}),
-		metrics: metrics,
+		logger:        logger,
+		errLoggerChan: errLoggerChan,
+		isDone:        make(chan struct{}),
+		metrics:       metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess: metrics.GetStore("sdk-login-success", sdkMetricsPeriod),
-			sdkUserLoginFailure: metrics.GetStore("sdk-login-fail", sdkMetricsPeriod),
-			sdkUserSignup:       metrics.GetStore("sdk-signup", sdkMetricsPeriod),
-			allowedIP:           metrics.GetStore("whitelisted", sdkMetricsPeriod),
-			allowedPath:         metrics.GetStore("whitelisted_paths", sdkMetricsPeriod),
-			errors:              errorMetrics,
+			sdkUserLoginSuccess:      metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod, 60000),
+			sdkUserLoginFailure:      metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod, 60000),
+			sdkUserSignup:            metrics.TimeHistogram("sdk-signup", sdkMetricsPeriod, 60000),
+			allowedIP:                metrics.TimeHistogram("whitelisted", sdkMetricsPeriod, 60000),
+			allowedPath:              metrics.TimeHistogram("whitelisted_paths", sdkMetricsPeriod, 60000),
+			requestTime:              req,
+			sqreenTime:               sq,
+			sqreenOverheadPercentage: sqOverheadPercentage,
 		},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -279,45 +289,16 @@ func New(cfg *config.Config) *AgentType {
 	}
 }
 
-func (a *AgentType) FindActionByIP(ip net.IP) (action actor.Action, exists bool, err error) {
-	return a.actors.FindIP(ip)
-}
-
-func (a *AgentType) FindActionByUserID(userID map[string]string) (action actor.Action, exists bool) {
-	return a.actors.FindUser(userID)
-}
-
-func (a *AgentType) Logger() *plog.Logger {
-	return a.logger
-}
-
-type publicConfig config.Config
-
-func (p *publicConfig) unwrap() *config.Config           { return (*config.Config)(p) }
-func (p publicConfig) PrioritizedIPHeader() string       { return p.unwrap().HTTPClientIPHeader() }
-func (p publicConfig) PrioritizedIPHeaderFormat() string { return p.unwrap().HTTPClientIPHeaderFormat() }
-
-func (a *AgentType) Config() protectionContext.ConfigReader {
-	return (*publicConfig)(a.config)
-}
-
-func (a *AgentType) SendClosedRequestContext(ctx protectionContext.ClosedRequestContextFace) error {
-	actual, ok := ctx.(types.ClosedRequestContextFace)
-	if !ok {
-		return sqerrors.Errorf("unexpected context type `%T`", ctx)
-	}
-	return a.sendClosedHTTPRequestContext(actual)
-}
-
 type AgentNotRunningError struct{}
 
 func (AgentNotRunningError) Error() string {
 	return "agent not running"
 }
 
-func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextFace) error {
+func (a *AgentType) sendClosedHTTPProtectionContext(ctx http_protection_types.ClosedProtectionContextFace) {
 	if !a.isRunning() {
-		return AgentNotRunningError{}
+		a.logger.Debug("agent not running: ignoring the closed http protection context")
+		return
 	}
 
 	// User events are not part of the request record
@@ -326,12 +307,31 @@ func (a *AgentType) sendClosedHTTPRequestContext(ctx types.ClosedRequestContextF
 		a.addUserEvent(event)
 	}
 
-	event := newClosedHTTPRequestContextEvent(a.RulespackID(), ctx.Response(), ctx.Request(), events)
-	if event.shouldSend() {
-		return a.eventMng.send(event)
+	start := ctx.Start()
+	duration := ctx.Duration()
+	finish := start.Add(duration)
+
+	// TODO: enforce start as the current time for the performance metrics?
+	req := float64(duration.Nanoseconds()) / float64(time.Millisecond)
+	if err := a.staticMetrics.requestTime.Add(req); err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "could not add the request execution time"))
 	}
 
-	return nil
+	sq := float64(ctx.SqreenTime().Nanoseconds()) / float64(time.Millisecond)
+	if err := a.staticMetrics.sqreenTime.Add(sq); err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
+	}
+
+	sqOverhead := 100 * sq / (req - sq)
+	if err := a.staticMetrics.sqreenOverheadPercentage.Add(sqOverhead); err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
+	}
+
+	event := newClosedHTTPRequestContextEvent(a.RulespackID(), start, finish, ctx.Response(), ctx.Request(), events)
+	if !event.shouldSend() {
+		return
+	}
+	a.eventMng.send(event)
 }
 
 type withNotificationError struct {
@@ -362,6 +362,13 @@ func (a *AgentType) Serve() error {
 		return err
 	}
 
+	// Load the rulepack side car
+	a.rules.SetRules(appLoginRes.PackID, appLoginRes.Rules)
+	// Load the actionpack side car
+	if err := a.actors.SetActions(appLoginRes.Actions); err != nil {
+		a.logger.Error(sqerrors.Wrap(err, "could not load the list of actions taken from the login response"))
+	}
+
 	// Create the command manager to process backend commands
 	commandMng := NewCommandManager(a, a.logger)
 	// Process commands that may have been received at login.
@@ -382,11 +389,12 @@ func (a *AgentType) Serve() error {
 	}
 
 	// start the event manager's loop
-	a.eventMng = newEventManager(a, batchSize, maxStaleness)
-	eventMngErrChan := sqsafe.Go(func() error {
-		a.eventMng.Loop(a.ctx, a.client)
-		return nil
-	})
+	queueLength := appLoginRes.Features.EventQueueLength
+	if queueLength == 0 {
+		queueLength = config.EventQueueDefaultLength
+	}
+	a.eventMng = newEventManager(a, queueLength, uint32(runtime.NumCPU()), batchSize, maxStaleness)
+	a.eventMng.Start()
 
 	a.setRunning(true)
 	defer a.setRunning(false)
@@ -426,12 +434,15 @@ func (a *AgentType) Serve() error {
 			a.logger.Debug("successfully logged out")
 			return nil
 
-		case err := <-eventMngErrChan:
+		case err := <-a.eventMng.errChan:
+			if err == nil {
+				continue
+			}
 			// Unexpected error from the event manager's loop as it should stop
 			// when the agent stops.
 			return err
 
-		case err := <-a.logger.ErrChan():
+		case err := <-a.errLoggerChan:
 			// Logged errors.
 			if xerrors.As(err, &withNotificationError{}) {
 				t, ok := sqerrors.Timestamp(err)
@@ -502,30 +513,9 @@ func (a *AgentType) SetCIDRIPPasslist(cidrs []string) error {
 	return a.actors.SetCIDRIPPasslist(cidrs)
 }
 
-func (a *AgentType) IsIPAllowed(ip net.IP) (allowed bool) {
-	allowed, matched, err := a.actors.IsIPAllowed(ip)
-	if err != nil {
-		a.logger.Error(sqerrors.Wrapf(err, "agent: unexpected error while searching `%s` into the ip passlist", ip))
-	}
-	if allowed {
-		a.addIPPasslistEvent(matched)
-		a.logger.Debugf("ip address `%s` matched the passlist entry `%s` and is allowed to pass through Sqreen monitoring and protections", ip, matched)
-	}
-	return allowed
-}
-
 func (a *AgentType) SetPathPasslist(paths []string) error {
 	a.actors.SetPathPasslist(paths)
 	return nil
-}
-
-func (a *AgentType) IsPathAllowed(path string) (allowed bool) {
-	allowed = a.actors.IsPathAllowed(path)
-	if allowed {
-		a.addPathPasslistEvent(path)
-		a.logger.Debugf("request path `%s` found in the passlist and is allowed to pass through Sqreen monitoring and protections", path)
-	}
-	return allowed
 }
 
 func (a *AgentType) ReloadRules() (string, error) {
@@ -536,8 +526,7 @@ func (a *AgentType) ReloadRules() (string, error) {
 	}
 
 	// Insert local rules if any
-	localRulesJSON := a.config.LocalRulesFile()
-	if localRulesJSON != "" {
+	if localRulesJSON := a.config.LocalRulesFile(); localRulesJSON != "" {
 		buf, err := ioutil.ReadFile(localRulesJSON)
 		if err == nil {
 			var localRules []api.Rule
@@ -555,34 +544,48 @@ func (a *AgentType) ReloadRules() (string, error) {
 	return rulespack.PackID, nil
 }
 
+func (a *AgentType) SetPerformanceBudget(budget float64) error {
+	a.performanceBudget = time.Duration(budget * float64(time.Millisecond))
+	return nil
+}
+
 func (a *AgentType) gracefulStop() {
 	a.cancel()
 	<-a.isDone
 }
 
 type eventManager struct {
-	agent        *AgentType
-	count        int
-	eventsChan   chan Event
-	maxStaleness time.Duration
+	agent          *AgentType
+	maxBatchLength int
+	eventsChan     chan Event
+	maxStaleness   time.Duration
+	stats          *metrics.TimeHistogram
+	maxGoroutines  uint32
+	nbGoroutines   uint32
+	errChan        chan error
 }
 
-func newEventManager(agent *AgentType, count int, maxStaleness time.Duration) *eventManager {
+func newEventManager(agent *AgentType, queueLength uint, maxGoroutines uint32, maxBatchLength int, maxStaleness time.Duration) *eventManager {
+	stats := agent.metrics.TimeHistogram("event_management", time.Minute, 10)
 	return &eventManager{
-		agent:        agent,
-		eventsChan:   make(chan Event, count*100),
-		count:        count,
-		maxStaleness: maxStaleness,
+		agent:          agent,
+		eventsChan:     make(chan Event, queueLength),
+		maxBatchLength: maxBatchLength,
+		maxStaleness:   maxStaleness,
+		stats:          stats,
+		maxGoroutines:  maxGoroutines,
+		errChan:        make(chan error, maxGoroutines),
 	}
 }
 
-func (m *eventManager) send(r Event) error {
+func (m *eventManager) send(e Event) {
 	select {
-	case m.eventsChan <- r:
-		return nil
+	case m.eventsChan <- e:
+		m.stats.Add("queue_ingress", 1)
 	default:
-		// The channel buffer is full - drop this new event
-		return sqerrors.New("event dropped: the event channel is full")
+		// The channel buffer is full - drop this event
+		m.scaleUp()
+		m.stats.Add("queue_dropped", 1)
 	}
 }
 
@@ -592,9 +595,34 @@ func stopTimer(t *time.Timer) {
 	}
 }
 
-func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
+func (m *eventManager) ErrChan() <-chan error {
+	return m.errChan
+}
+
+func (m *eventManager) Start() {
+	atomic.StoreUint32(&m.nbGoroutines, 1)
+	m.start()
+}
+
+func (m *eventManager) start() {
+	sqsafe.Go(func() error {
+		m.loop()
+		return nil
+	}, m.errChan)
+}
+
+func (m *eventManager) scaleUp() {
+	if n := atomic.LoadUint32(&m.nbGoroutines); n == 0 || n == m.maxGoroutines {
+		return
+	}
+	atomic.AddUint32(&m.nbGoroutines, 1)
+	m.start()
+	m.stats.Add("scale", 1)
+}
+
+func (m *eventManager) loop() {
 	var (
-		// We can't create a stopped timer so we initializae it with a large value
+		// We can't create a stopped timer so we initialize it with a large value
 		// of 24 hours and stop it immediately. Calls to Reset() will correctly
 		// set the configured timer value.
 		stalenessTimer = time.NewTimer(24 * time.Hour)
@@ -603,7 +631,12 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	stopTimer(stalenessTimer)
 	defer stopTimer(stalenessTimer)
 
-	batch := make([]Event, 0, m.count)
+	ctx := m.agent.ctx
+	client := m.agent.client
+	batch := make([]Event, 0, m.maxBatchLength)
+	req := &api.BatchRequest{
+		Batch: make([]api.BatchRequest_Event, 0, cap(batch)),
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -611,13 +644,14 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 
 		case <-stalenessChan:
 			m.agent.logger.Debug("event batch data staleness reached")
-			m.sendBatch(ctx, client, batch)
+			m.sendBatch(ctx, client, batch, req)
 			batch = batch[0:0]
 			stalenessChan = nil
 
 		case event := <-m.eventsChan:
 			batch = append(batch, event)
-			m.agent.logger.Debugf("new event `%T` added to the event batch", event)
+			m.stats.Add("queue_egress", 1)
+			m.agent.logger.Debugf("event `%T` added to the event batch", event)
 
 			batchLen := len(batch)
 			switch {
@@ -626,10 +660,10 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 				stalenessChan = stalenessTimer.C
 				m.agent.logger.Debug("batching events for ", m.maxStaleness)
 
-			case batchLen >= m.count:
+			case batchLen >= m.maxBatchLength:
 				// No more room in the batch
 				m.agent.logger.Debugf("sending the batch of %d events", batchLen)
-				m.sendBatch(ctx, client, batch)
+				m.sendBatch(ctx, client, batch, req)
 				batch = batch[0:0]
 				stalenessChan = nil
 				stopTimer(stalenessTimer)
@@ -638,11 +672,10 @@ func (m *eventManager) Loop(ctx context.Context, client *backend.Client) {
 	}
 }
 
-func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, batch []Event) {
-	req := api.BatchRequest{
-		Batch: make([]api.BatchRequest_Event, 0, len(batch)),
-	}
-
+func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, batch []Event, req *api.BatchRequest) {
+	defer func() {
+		req.Batch = req.Batch[0:0]
+	}()
 	for _, e := range batch {
 		var event api.BatchRequest_EventFace
 		switch actual := e.(type) {
@@ -664,9 +697,10 @@ func (m *eventManager) sendBatch(ctx context.Context, client *backend.Client, ba
 	}
 
 	// Send the batch.
-	if err := client.Batch(ctx, &req); err != nil {
-		// Log the error and drop the batch
-		m.agent.logger.Error(errors.Wrap(err, "could not send the event batch"))
+	if err := client.Batch(ctx, req); err != nil {
+		m.stats.Add("backend_dropped", uint64(len(req.Batch)))
+	} else {
+		m.stats.Add("backend_egress", uint64(len(req.Batch)))
 	}
 }
 

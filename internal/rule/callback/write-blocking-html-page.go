@@ -7,17 +7,20 @@
 package callback
 
 import (
+	"io"
+
 	"github.com/sqreen/go-agent/internal/backend/api"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-// NewWriteCustomErrorPageCallback returns the native prolog and epilog
+// NewWriteBlockingHTMLPageCallback returns the native prolog and epilog
 // callbacks modifying the arguments of `httphandler.WriteResponse` in order to
 // modify the http status code and error page that are provided by the rule's
 // data.
-func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWriteBlockingHTMLPageCallback(r RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var statusCode = 500 // default status code
 	if data := cfg.Data(); data != nil {
 		cfg, ok := data.(*api.CustomErrorPageRuleDataEntry)
@@ -26,18 +29,25 @@ func NewWriteCustomErrorPageCallback(_ RuleFace, cfg NativeCallbackConfig) (sqho
 		}
 		statusCode = cfg.StatusCode
 	}
-	return newWriteCustomErrorPagePrologCallback(statusCode), nil
+	return newWriteBlockingHTMLPagePrologCallback(r, statusCode), nil
 }
 
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
-func newWriteCustomErrorPagePrologCallback(statusCode int) httpprotection.NonBlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
-		ctx := *m
-		// Note that the header must be written first since writing the body first
-		// leads to the default OK status.
-		ctx.ResponseWriter.WriteHeader(statusCode)
-		ctx.ResponseWriter.WriteString(blockedBySqreenPage)
+func newWriteBlockingHTMLPagePrologCallback(r RuleContext, statusCode int) httpprotection.NonBlockingPrologCallbackType {
+	return func(ctx **httpprotection.ProtectionContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+		r.Pre(func(c CallbackContext) error {
+			sqassert.NotNil(ctx)
+			ctx := *ctx
+			// Note that the header must be written first since writing the body first
+			// leads to the default OK status.
+			ctx.ResponseWriter.WriteHeader(statusCode)
+			// Write the blocking page. We ignore any return error as this is a best
+			// effort response attempt: we don't want to penalize the server any
+			// further with this request - so no logging, no counting, no retry.
+			_, _ = io.WriteString(ctx.ResponseWriter, blockedBySqreenPage)
+			return nil
+		})
 		return nil, nil
 	}
 }

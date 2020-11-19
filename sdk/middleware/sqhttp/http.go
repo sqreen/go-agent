@@ -5,7 +5,6 @@
 package sqhttp
 
 import (
-	"io"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -14,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/sqreen/go-agent/internal"
-	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 )
@@ -52,37 +50,47 @@ import (
 func Middleware(next http.Handler) http.Handler {
 	internal.Start()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		middlewareHandler(internal.Agent(), next, w, r)
+		ctx, cancel := internal.NewRootHTTPProtectionContext(r.Context())
+		if ctx == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		defer cancel()
+		middlewareHandlerFromRootProtectionContext(ctx, next, w, r)
 	})
 }
-func middlewareHandler(agent protection_context.AgentFace, next http.Handler, w http.ResponseWriter, r *http.Request) {
-	if agent == nil {
-		next.ServeHTTP(w, r)
-		return
-	}
-
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next http.Handler, w http.ResponseWriter, r *http.Request) {
 	// requestReader is a pointer value in order to change the inner request
 	// pointer with the new one created by http.(*Request).WithContext below
 	requestReader := &requestReaderImpl{Request: r}
-	responseWriter := &responseWriterImpl{ResponseWriter: w}
-
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(r.Context(), agent, responseWriter, requestReader)
-	if ctx == nil {
+	responseWriter, responseWriterObserver := wrapResponseWriter(w)
+	p := http_protection.NewProtectionContext(ctx, responseWriter, requestReader)
+	if p == nil {
 		next.ServeHTTP(w, r)
 		return
 	}
+
 	defer func() {
-		cancelHandlerContext()
-		ctx.Close(responseWriter.closeResponseWriter())
+		p.Close(newObservedResponse(responseWriterObserver))
 	}()
 
-	requestReader.Request = ctx.WrapRequest(reqCtx, requestReader.Request)
+	middlewareHandlerFromProtectionContext(p, next, responseWriter, requestReader)
+}
 
-	if err := ctx.Before(); err != nil {
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, next http.Handler, w http.ResponseWriter, r *requestReaderImpl) {
+	r.Request = p.WrapRequest(r.Request)
+
+	if err := p.Before(); err != nil {
 		return
 	}
-	next.ServeHTTP(responseWriter, requestReader.Request)
-	if err := ctx.After(); err != nil {
+	next.ServeHTTP(w, r.Request)
+	if err := p.After(); err != nil {
 		return
 	}
 }
@@ -172,11 +180,10 @@ func (r *requestReaderImpl) RemoteAddr() string {
 	return r.Request.RemoteAddr
 }
 
-type responseWriterImpl struct {
+type responseWriterObserver struct {
 	http.ResponseWriter
 	status  int
 	written int
-	closed  bool
 }
 
 // response observed by the response writer
@@ -186,7 +193,7 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(r *responseWriterImpl) *observedResponse {
+func newObservedResponse(r *responseWriterObserver) *observedResponse {
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
 	ct := r.Header().Get("Content-Type")
@@ -221,21 +228,11 @@ func (r *observedResponse) ContentLength() int64 {
 	return int64(r.contentLength)
 }
 
-func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
-	if !w.closed {
-		w.closed = true
-	}
-	return newObservedResponse(w)
-}
-
-func (w *responseWriterImpl) Header() http.Header {
+func (w *responseWriterObserver) Header() http.Header {
 	return w.ResponseWriter.Header()
 }
 
-func (w *responseWriterImpl) Write(b []byte) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
+func (w *responseWriterObserver) Write(b []byte) (int, error) {
 	written, err := w.ResponseWriter.Write(b)
 	if err == nil {
 		w.written += written
@@ -243,24 +240,7 @@ func (w *responseWriterImpl) Write(b []byte) (int, error) {
 	return written, err
 }
 
-func (w *responseWriterImpl) WriteString(s string) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	written, err := io.WriteString(w.ResponseWriter, s)
-	if err == nil {
-		w.written += written
-	}
-	return written, err
-}
-
-// Static assert that the io.StringWriter is implemented
-var _ io.StringWriter = &responseWriterImpl{}
-
-func (w *responseWriterImpl) WriteHeader(statusCode int) {
-	if w.closed {
-		return
-	}
+func (w *responseWriterObserver) WriteHeader(statusCode int) {
 	w.status = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
 }

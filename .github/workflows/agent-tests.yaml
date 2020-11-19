@@ -9,6 +9,9 @@ jobs:
       matrix:
         runs-on: [ macos-latest, ubuntu-latest, windows-latest ]
         go-version: [ 1, 1.15, 1.14, 1.13, 1.12 ]
+        go-test-options:
+          - ""
+          - "-tags sqassert -race"
       fail-fast: false
     runs-on: ${{ matrix.runs-on }}
     steps:
@@ -17,7 +20,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-      - run: go test ./...
+      - run: go test ./... # note: do not support large number of goroutines for -race
 
   # Same tests but on the official golang container for linux
   # Docker for Windows is not yet available on Github Actions.
@@ -35,7 +38,7 @@ jobs:
       # Install gcc and the libc headers on alpine images
       - if: ${{ matrix.distribution == 'alpine' }}
         run: apk add gcc musl-dev libc6-compat git
-      - run: go test ./...
+      - run: go test ${{ matrix.go-test-options }} ./...
 
   # debian stretch doesn't have the latest go versions
   golang-debian-stretch-container:
@@ -48,4 +51,4 @@ jobs:
       image: golang:${{ matrix.go-version }}-stretch
     steps:
       - uses: actions/checkout@v2
-      - run: go test ./...
+      - run: go test ${{ matrix.go-test-options }} ./...

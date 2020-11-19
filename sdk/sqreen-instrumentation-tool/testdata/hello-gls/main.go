@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
-	_ "github.com/sqreen/go-agent/internal/sqlib/sqhook" // for the instrumentation symbols TODO: remove once provided by the instrumentation tool
 	"github.com/sqreen/go-agent/tools/testlib"
 )
 

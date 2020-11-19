@@ -31,11 +31,6 @@ type RedirectAction interface {
 	RedirectionURL() string
 }
 
-type UserRedirectAction interface {
-	RedirectAction
-	UserID() map[string]string
-}
-
 // Timed is an interface implemented by actions having an expiration time.
 type Timed interface {
 	Expired() bool
@@ -91,8 +86,9 @@ func withDuration(action Action, duration time.Duration) *timedAction {
 
 // Expired is true when the deadline has expired, false otherwise.
 func (a *timedAction) Expired() bool {
-	// Is the current time after the deadline?
-	return time.Now().After(a.deadline)
+	// Check if we passed the deadline. We use the relative operation
+	// time.Since() to make use monotonic clock only if possible.
+	return time.Since(a.deadline) >= 0
 }
 
 type ipListAction struct {

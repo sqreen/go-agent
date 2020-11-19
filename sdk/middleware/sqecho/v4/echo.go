@@ -6,7 +6,6 @@ package sqecho
 
 import (
 	"bytes"
-	"io"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -29,7 +28,7 @@ import (
 // so `sdk.FromContext()` cannot be used with it, hence another `FromContext()`
 // in this package to access the SDK context value from Echo's context.
 // `sdk.FromContext()` can still be used on the request context.
-func FromContext(c echo.Context) *sdk.Context {
+func FromContext(c echo.Context) sdk.Context {
 	return sdk.FromContext(c.Request().Context())
 }
 
@@ -76,36 +75,41 @@ func Middleware() echo.MiddlewareFunc {
 	internal.Start()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			return middlewareHandler(internal.Agent(), next, c)
+			ctx, cancel := internal.NewRootHTTPProtectionContext(c.Request().Context())
+			if ctx == nil {
+				return next(c)
+			}
+			defer cancel()
+			return middlewareHandlerFromRootProtectionContext(ctx, next, c)
 		}
 	}
 }
 
-func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc, c echo.Context) error {
-	if agent == nil {
-		return next(c)
-	}
-
-	requestReader := &requestReaderImpl{c: c}
-	responseWriter := &responseWriterImpl{c: c}
-
-	req := c.Request()
-
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(req.Context(), agent, responseWriter, requestReader)
-	if ctx == nil {
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next echo.HandlerFunc, c echo.Context) (err error) {
+	r := &requestReaderImpl{c: c}
+	p := http_protection.NewProtectionContext(ctx, c.Response(), r)
+	if p == nil {
 		return next(c)
 	}
 
 	defer func() {
-		cancelHandlerContext()
-		_ = ctx.Close(responseWriter.closeResponseWriter())
+		p.Close(newObservedResponse(c.Response(), err))
 	}()
 
-	req = ctx.WrapRequest(reqCtx, req)
-	c.SetRequest(req)
-	c.Set(protectioncontext.ContextKey.String, ctx)
+	return middlewareHandlerFromProtectionContext(p, next, c)
+}
 
-	if err := ctx.Before(); err != nil {
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, next echo.HandlerFunc, c echo.Context) error {
+	c.SetRequest(p.WrapRequest(c.Request()))
+	c.Set(protectioncontext.ContextKey.String, p)
+
+	if err := p.Before(); err != nil {
 		return err
 	}
 	if err := next(c); err != nil {
@@ -114,10 +118,7 @@ func middlewareHandler(agent protectioncontext.AgentFace, next echo.HandlerFunc,
 		// was returned.
 		return err
 	}
-	if err := ctx.After(); err != nil {
-		return err
-	}
-	return nil
+	return p.After()
 }
 
 type requestReaderImpl struct {
@@ -139,7 +140,7 @@ func (r *requestReaderImpl) Referer() string {
 }
 
 func (r *requestReaderImpl) ClientIP() net.IP {
-	return nil // Delegated to the middleware according the agent configuration
+	return nil // Delegated to the middleware according the rootProtectectionContext configuration
 }
 
 func (r *requestReaderImpl) Method() string {
@@ -207,46 +208,6 @@ func (r *requestReaderImpl) RemoteAddr() string {
 	return r.c.Request().RemoteAddr
 }
 
-type responseWriterImpl struct {
-	c      echo.Context
-	closed bool
-}
-
-func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
-	if !w.closed {
-		w.closed = true
-	}
-	return newObservedResponse(w)
-}
-
-func (w *responseWriterImpl) Header() http.Header {
-	return w.c.Response().Header()
-}
-
-func (w *responseWriterImpl) Write(b []byte) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return w.c.Response().Write(b)
-}
-
-func (w *responseWriterImpl) WriteString(s string) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return io.WriteString(w.c.Response(), s)
-}
-
-// Static assert that the io.StringWriter is implemented
-var _ io.StringWriter = (*responseWriterImpl)(nil)
-
-func (w *responseWriterImpl) WriteHeader(statusCode int) {
-	if w.closed {
-		return
-	}
-	w.c.Response().WriteHeader(statusCode)
-}
-
 // response observed by the response writer
 type observedResponse struct {
 	contentType   string
@@ -254,22 +215,36 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(r *responseWriterImpl) *observedResponse {
+func newObservedResponse(response *echo.Response, err error) *observedResponse {
+	headers := response.Header()
+
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
-	ct := r.Header().Get("Content-Type")
+	ct := headers.Get("Content-Type")
 
-	response := r.c.Response()
-
-	// Content-Length is either explicitly set or the amount of written data.
+	// Content-Length is either explicitly set or the amount of written data. It's
+	// 0 by default with Echo.
 	cl := response.Size
-	if contentLength := r.Header().Get("Content-Length"); contentLength != "" {
-		if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
-			cl = l
+	if cl == 0 {
+		if contentLength := headers.Get("Content-Length"); contentLength != "" {
+			if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
+				cl = l
+			}
 		}
 	}
 
-	status := response.Status
+	// Echo's status code is not necessarily in the response's Status field.
+	// For example, it can be based on the handler's returned error.
+	// Echo's status code field is 200 by default...
+	var status int
+	switch actual := err.(type) {
+	case *echo.HTTPError:
+		// Take the returned error status code
+		status = actual.Code
+	default:
+		// Take the response status code
+		status = response.Status
+	}
 
 	return &observedResponse{
 		contentType:   ct,

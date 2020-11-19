@@ -12,6 +12,7 @@ import (
 
 	"github.com/sqreen/go-agent/internal/backend/api"
 	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
@@ -19,7 +20,7 @@ import (
 // NewWriteHTTPRedirectionCallbacks returns the native callback applying the
 // the rule-configured HTTP redirection to the HTTP protection response writer
 // using the URL provided by the rule's data.
-func NewWriteHTTPRedirectionCallbacks(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+func NewWriteHTTPRedirectionCallbacks(r RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	var redirectionURL string
 	if cfg := cfg.Data(); cfg != nil {
 		cfg, ok := cfg.(*api.RedirectionRuleDataEntry)
@@ -35,16 +36,20 @@ func NewWriteHTTPRedirectionCallbacks(rule RuleFace, cfg NativeCallbackConfig) (
 		return nil, sqerrors.Wrap(err, "validation error of the redirection url")
 	}
 
-	return newWriteHTTPRedirectionPrologCallback(redirectionURL), nil
+	return newWriteHTTPRedirectionPrologCallback(r, redirectionURL), nil
 }
 
 // The prolog callback modifies the function arguments in order to perform an
 // HTTP redirection.
-func newWriteHTTPRedirectionPrologCallback(url string) httpprotection.NonBlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
-		ctx := *m
-		ctx.ResponseWriter.Header().Set("Location", url)
-		ctx.ResponseWriter.WriteHeader(http.StatusSeeOther)
+func newWriteHTTPRedirectionPrologCallback(r RuleContext, url string) httpprotection.NonBlockingPrologCallbackType {
+	return func(ctx **httpprotection.ProtectionContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+		r.Pre(func(c CallbackContext) error {
+			sqassert.NotNil(ctx)
+			ctx := *ctx
+			ctx.ResponseWriter.Header().Set("Location", url)
+			ctx.ResponseWriter.WriteHeader(http.StatusSeeOther)
+			return nil
+		})
 		return nil, nil
 	}
 }

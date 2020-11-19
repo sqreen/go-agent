@@ -60,14 +60,17 @@ type AppLoginResponse struct {
 	Status    bool                     `json:"status"`
 	Commands  []CommandRequest         `json:"commands"`
 	Features  AppLoginResponse_Feature `json:"features"`
-	PackId    string                   `json:"pack_id"`
+	RulesPackResponse
+	ActionsPackResponse
 }
 
 type AppLoginResponse_Feature struct {
-	BatchSize      uint32 `json:"batch_size"`
-	MaxStaleness   uint32 `json:"max_staleness"`
-	HeartbeatDelay uint32 `json:"heartbeat_delay"`
-	UseSignals     bool   `json:"use_signals"`
+	BatchSize        uint32 `json:"batch_size"`
+	MaxStaleness     uint32 `json:"max_staleness"`
+	HeartbeatDelay   uint32 `json:"heartbeat_delay"`
+	UseSignals       bool   `json:"use_signals"`
+	PerfLevel        int    `json:"perf_level"`
+	EventQueueLength uint   `json:"event_queue_length"`
 }
 
 type CommandRequest struct {
@@ -82,16 +85,30 @@ type CommandResult struct {
 	Status bool   `json:"status"`
 }
 
-type MetricResponse struct {
-	Name        string    `json:"name"`
-	Start       time.Time `json:"start"`
-	Finish      time.Time `json:"finish"`
-	Observation Struct    `json:"observation"`
-}
+type (
+	MetricsTimeBucket struct {
+		Name        string      `json:"name"`
+		Start       time.Time   `json:"start"`
+		Finish      time.Time   `json:"finish"`
+		Observation MetricsData `json:"observation"`
+	}
+
+	MetricsData interface{ isMetricsData() }
+
+	SumMetricsData  map[string]int64
+	PerfMetricsData struct {
+		Unit   float64                `json:"u"`
+		Base   float64                `json:"b"`
+		Values map[string]interface{} `json:"v"`
+	}
+)
+
+func (SumMetricsData) isMetricsData()  {}
+func (PerfMetricsData) isMetricsData() {}
 
 type AppBeatRequest struct {
 	CommandResults map[string]CommandResult `json:"command_results,omitempty"`
-	Metrics        []MetricResponse         `json:"metrics,omitempty"`
+	Metrics        []MetricsTimeBucket      `json:"metrics,omitempty"`
 }
 
 type AppBeatResponse struct {
@@ -339,6 +356,7 @@ type RequestRecord struct {
 	Request     RequestRecord_Request  `json:"request"`
 	Response    RequestRecord_Response `json:"response"`
 	Observed    RequestRecord_Observed `json:"observed"`
+	Start, End  time.Time
 }
 
 func (rr *RequestRecord) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Info) (scrubbed bool, err error) {
@@ -453,13 +471,13 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 	// from the request.
 	redactedString := scrubber.RedactedValueMask()
 	for sanitized := range info {
-		re, err := regexp.Compile(`(?i)`+regexp.QuoteMeta(sanitized))
+		re, err := regexp.Compile(`(?i)` + regexp.QuoteMeta(sanitized))
 		if err != nil {
 			return false, sqerrors.Wrapf(err, "could not ")
 		}
 
 		for e := range wafInfo {
-		for f := range wafInfo[e].Filter {
+			for f := range wafInfo[e].Filter {
 				resolvedValue := wafInfo[e].Filter[f].ResolvedValue
 
 				newStr := re.ReplaceAllString(resolvedValue, redactedString)
@@ -641,7 +659,7 @@ type MetricResponseFace interface {
 
 type AppBeatRequestFace interface {
 	GetCommandResults() map[string]CommandResult
-	GetMetrics() []MetricResponse
+	GetMetrics() []MetricsTimeBucket
 }
 
 type AppBeatResponseFace interface {
@@ -684,17 +702,21 @@ type RequestRecordFace interface {
 	GetRequest() RequestRecord_Request
 	GetResponse() RequestRecord_Response
 	GetObserved() RequestRecord_Observed
+	GetStart() time.Time
+	GetEnd() time.Time
 }
 
 func NewRequestRecordFromFace(that RequestRecordFace) *RequestRecord {
-	this := &RequestRecord{}
-	this.Version = that.GetVersion()
-	this.RulespackId = that.GetRulespackId()
-	this.ClientIp = that.GetClientIp()
-	this.Request = that.GetRequest()
-	this.Response = that.GetResponse()
-	this.Observed = that.GetObserved()
-	return this
+	return &RequestRecord{
+		Start:       that.GetStart(),
+		End:         that.GetEnd(),
+		Version:     that.GetVersion(),
+		RulespackId: that.GetRulespackId(),
+		ClientIp:    that.GetClientIp(),
+		Request:     that.GetRequest(),
+		Response:    that.GetResponse(),
+		Observed:    that.GetObserved(),
+	}
 }
 
 type RequestRecord_RequestFace interface {

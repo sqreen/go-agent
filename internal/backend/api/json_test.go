@@ -61,7 +61,7 @@ func TestJSON(t *testing.T) {
 		},
 		// TODO: Write fuzzer
 		//{
-		//	Object:     &MetricResponse{},
+		//	Object:     &MetricsTimeBucket{},
 		//	NewMessage: api.NewMetricResponseFromFace,
 		//},
 		// TODO: Write fuzzer
@@ -356,7 +356,7 @@ func (this *AppLoginResponse) GetFeatures() api.AppLoginResponse_Feature {
 }
 
 func (this *AppLoginResponse) GetPackId() string {
-	return this.PackId
+	return this.PackID
 }
 
 type AppLoginResponse_Feature api.AppLoginResponse_Feature
@@ -383,7 +383,7 @@ func (this *CommandResult) GetStatus() bool {
 	return this.Status
 }
 
-type MetricResponse api.MetricResponse
+type MetricResponse api.MetricsTimeBucket
 
 func (this *MetricResponse) GetName() string {
 	return this.Name
@@ -397,7 +397,7 @@ func (this *MetricResponse) GetFinish() time.Time {
 	return this.Finish
 }
 
-func (this *MetricResponse) GetObservation() api.Struct {
+func (this *MetricResponse) GetObservation() api.MetricsData {
 	return this.Observation
 }
 
@@ -407,7 +407,7 @@ func (this *AppBeatRequest) GetCommandResults() map[string]api.CommandResult {
 	return this.CommandResults
 }
 
-func (this *AppBeatRequest) GetMetrics() []api.MetricResponse {
+func (this *AppBeatRequest) GetMetrics() []api.MetricsTimeBucket {
 	return this.Metrics
 }
 

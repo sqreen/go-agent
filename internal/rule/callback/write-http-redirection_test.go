@@ -20,10 +20,10 @@ package callback_test
 //		},
 //		ValidTestCases: []ValidTestCase{
 //			{
-//				Rule: &RuleContextMockup{
+//				Rule: &NativeRuleContextMockup{
 //					config: &api.RedirectionRuleDataEntry{"http://sqreen.com"},
 //				},
-//				TestCallback: func(t *testing.T, rule *RuleContextMockup, prolog sqhook.PrologCallback) {
+//				TestCallback: func(t *testing.T, rule *NativeRuleContextMockup, prolog sqhook.PrologCallback) {
 //					// Call it and check the behaviour follows the rule's data
 //					actualProlog, ok := prolog.(callback.WriteHTTPRedirectionPrologCallbackType)
 //					require.True(t, ok)

@@ -25,20 +25,6 @@ func FormatAgentSource(agentVersion string) string {
 	return source.String()
 }
 
-type AgentMessagePayload struct {
-	Hash    string                 `json:"hash"`
-	Message string                 `json:"message"`
-	Infos   map[string]interface{} `json:"infos,omitempty"`
-}
-
-func newAgentMessagePayload(hash string, message string, infos map[string]interface{}) *api.SignalPayload {
-	return api.NewPayload("agent_message/2020-01-01T00:00:00.000Z", AgentMessagePayload{
-		Hash:    hash,
-		Message: message,
-		Infos:   infos,
-	})
-}
-
 type AgentInfra struct {
 	AgentType      string `json:"agent_type"`
 	AgentVersion   string `json:"agent_version"`
@@ -58,6 +44,8 @@ func NewAgentInfra(agentVersion, osType, hostname, runtimeVersion string) *Agent
 }
 
 func fromLegacyRequestRecord(record *legacy_api.RequestRecord, infra *AgentInfra) (*http_trace.Trace, error) {
+	t := time.Now()
+
 	// Parse the port numbers by ignoring parsing errors and keeping the default
 	// zero value otherwise anyway to avoid dropping the the trace for that error.
 	// For example, the port number can be possibly empty.
@@ -69,9 +57,7 @@ func fromLegacyRequestRecord(record *legacy_api.RequestRecord, infra *AgentInfra
 		headers[i] = []string{e.Key, e.Value}
 	}
 
-	// TODO: get the request timestamp?
-	t := time.Now()
-	req := http_trace.NewRequestContext(record.Request.Rid, headers, record.Request.UserAgent, record.Request.Scheme, record.Request.Verb, record.Request.Host, record.Request.RemoteIp, record.Request.Path, record.Request.Referer, port, remotePort, record.Request.Parameters)
+	req := http_trace.NewRequestContext(record.Start, record.End, record.Request.Rid, headers, record.Request.UserAgent, record.Request.Scheme, record.Request.Verb, record.Request.Host, record.Request.RemoteIp, record.Request.Path, record.Request.Referer, port, remotePort, record.Request.Parameters)
 	resp := http_trace.NewResponseContext(record.Response.Status, record.Response.ContentType, record.Response.ContentLength)
 	traceCtx := http_trace.NewContext(req, resp)
 
@@ -151,7 +137,9 @@ func newAttackPayload(test, block bool, infos interface{}) *api.SignalPayload {
 
 func fromLegacyTrackEvent(track *legacy_api.RequestRecord_Observed_SDKEvent_Args_Track, t time.Time) *api.Point {
 	var name strings.Builder
-	name.WriteString("sq.sdk.")
+	if !strings.HasPrefix(track.Event, "sq.") {
+		name.WriteString("sq.sdk.")
+	}
 	name.WriteString(track.Event)
 	return api.NewPoint(name.String(), "sqreen:sdk:track", t, nil, nil, nil, nil, nil, newTrackEventPayload(track.Options.Properties, track.Options.UserIdentifiers))
 }
@@ -250,7 +238,7 @@ func newAgentExceptionPayload(klass, message string, infos interface{}) *api.Sig
 	})
 }
 
-func FromLegacyMetrics(metrics []legacy_api.MetricResponse, agentVersion string, logger plog.ErrorLogger) api.Batch {
+func FromLegacyMetrics(metrics []legacy_api.MetricsTimeBucket, agentVersion string, logger plog.ErrorLogger) api.Batch {
 	batch := make(api.Batch, len(metrics))
 	for i, metric := range metrics {
 		metric, err := convertLegacyMetrics(&metric, agentVersion)
@@ -263,17 +251,31 @@ func FromLegacyMetrics(metrics []legacy_api.MetricResponse, agentVersion string,
 	return batch
 }
 
-func convertLegacyMetrics(metric *legacy_api.MetricResponse, agentVersion string) (*api.Metric, error) {
+func convertLegacyMetrics(metric *legacy_api.MetricsTimeBucket, agentVersion string) (*api.Metric, error) {
 	var name strings.Builder
 	name.WriteString("sq.agent.metric.")
 	name.WriteString(metric.Name)
 
 	source := FormatAgentSource(agentVersion)
 
-	values, ok := metric.Observation.Value.(map[string]int64)
-	if !ok {
-		return nil, sqerrors.Errorf("unexpected type of metric values `%T` instead of `%T`", metric.Observation.Value, values)
-	}
+	switch o := metric.Observation.(type) {
+	case legacy_api.SumMetricsData:
+		return api.NewSumMetric(name.String(), source, metric.Start, metric.Finish, metric.Finish.Sub(metric.Start), o), nil
 
-	return api.NewSumMetric(name.String(), source, metric.Start, metric.Finish, metric.Finish.Sub(metric.Start), values), nil
+	case legacy_api.PerfMetricsData:
+		maxFace, ok := o.Values["max"]
+		if !ok {
+			return nil, sqerrors.New("missing max value")
+		}
+		max := maxFace.(float64)
+		delete(o.Values, "max")
+		bins := make(map[string]int64, len(o.Values))
+		for k, v := range o.Values {
+			bins[k] = v.(int64)
+		}
+		return api.NewBinningMetric(name.String(), source, metric.Start, metric.Finish, metric.Finish.Sub(metric.Start), o.Base, o.Unit, bins, max), nil
+
+	default:
+		return nil, sqerrors.Errorf("unexpected metrics observation type `%T`", o)
+	}
 }

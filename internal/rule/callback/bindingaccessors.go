@@ -11,33 +11,38 @@ import (
 	"reflect"
 	"strings"
 
-	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
-	"github.com/sqreen/go-agent/internal/protection/http/types"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
+	"github.com/sqreen/go-agent/internal/sqlib/sqsql"
 )
 
-func NewReflectedCallbackBindingAccessorContext(capabilities []string, args, res []reflect.Value, req types.RequestReader, ruleValues interface{}) (*BindingAccessorContextType, error) {
-	var c = &BindingAccessorContextType{}
+func NewReflectedCallbackBindingAccessorContext(capabilities []string, p ProtectionContext, args, res []reflect.Value, ruleValues interface{}) (*BindingAccessorContextType, error) {
+	var ctx = &BindingAccessorContextType{}
 	for _, cap := range capabilities {
 		switch cap {
 		case "rule":
-			c.Rule = NewRuleBindingAccessorContext(ruleValues)
+			ctx.Rule = NewRuleBindingAccessorContext(ruleValues)
 		case "sql":
-			c.SQL = NewSQLBindingAccessorContext()
+			ctx.SQL = NewSQLBindingAccessorContext()
 		case "func":
-			c.Func = NewFunctionBindingAccessorContext(args, res)
+			ctx.Func = NewFunctionBindingAccessorContext(args, res)
 		case "request":
-			c.RequestBindingAccessorContext = NewRequestBindingAccessorContext(req)
+			baCtx, err := NewRequestBindingAccessorContext(p)
+			if err != nil {
+				return nil, sqerrors.Wrapf(err, "could not create the request binding accessor context")
+			}
+			ctx.HTTPRequestBindingAccessorContext = baCtx
 		case "lib":
-			c.Lib = NewLibraryBindingAccessorContext()
+			ctx.Lib = NewLibraryBindingAccessorContext()
 		case "cache":
-			c.BindingAccessorResultCache = MakeBindingAccessorResultCache()
+			ctx.BindingAccessorResultCache = MakeBindingAccessorResultCache()
 		default:
 			return nil, sqerrors.Errorf("unknown binding accessor capability `%s`", cap)
 		}
 	}
-	return c, nil
+	return ctx, nil
 }
 
 type RuleBindingAccessorContextType struct {
@@ -80,8 +85,14 @@ func NewSQLBindingAccessorContext() *SQLBindingAccessorContextType {
 }
 
 func (*SQLBindingAccessorContextType) Dialect(db *sql.DB, dialects map[string]interface{}) (string, error) {
+	drv := sqsql.Unwrap(db.Driver())
+	if drv == nil {
+		type errKey struct{}
+		return "", sqerrors.WithKey(sqerrors.New("unexpected nil SQL driver"), errKey{})
+	}
+
 	// Get the actual unreferenced type so that we can get its package path.
-	drvType := reflect.ValueOf(db.Driver()).Type()
+	drvType := reflect.ValueOf(drv).Type()
 loop:
 	for {
 		switch drvType.Kind() {
@@ -94,26 +105,31 @@ loop:
 
 	pkgPath := sqgo.Unvendor(drvType.PkgPath())
 	if pkgPath == "" {
-		return "", sqerrors.Errorf("could not get the package path of driver type `%T`", db.Driver())
+		type errKey struct{}
+		return "", sqerrors.WithKey(sqerrors.Errorf("could not get the package path of driver type `%T`", drv), errKey{})
 	}
 
 	for dialect, pkgList := range dialects {
 		pkgPaths, ok := pkgList.([]interface{})
 		if !ok {
-			return "", sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgList, pkgPaths)
+			type errKey struct{}
+			return "", sqerrors.WithKey(sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgList, pkgPaths), errKey{})
 		}
 
 		for i := range pkgPaths {
 			path, ok := pkgPaths[i].(string)
 			if !ok {
-				return "", sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgPaths[i], path)
+				type errKey struct{}
+				return "", sqerrors.WithKey(sqerrors.Errorf("unexpected type `%T` while expecting `%T`", pkgPaths[i], path), errKey{})
 			}
 			if strings.HasPrefix(pkgPath, path) {
 				return dialect, nil
 			}
 		}
 	}
-	return "", sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath)
+
+	type errKey string
+	return "", sqerrors.WithKey(sqerrors.Errorf("could not detect the sql dialect of package `%s`", pkgPath), errKey(pkgPath))
 }
 
 // BindingAccessorContextType is the context passed to binding accessor calls of
@@ -125,19 +141,28 @@ type BindingAccessorContextType struct {
 	Func *FuncCallBindingAccessorContextType
 	SQL  *SQLBindingAccessorContextType
 	Rule *RuleBindingAccessorContextType
-	*RequestBindingAccessorContext
+	*HTTPRequestBindingAccessorContext
 	BindingAccessorResultCache
 }
 
 type WAFBindingAccessorContextType struct {
-	RequestBindingAccessorContext
+	HTTPRequestBindingAccessorContext
 	BindingAccessorResultCache
 }
 
-func MakeWAFCallbackBindingAccessorContext(request types.RequestReader) WAFBindingAccessorContextType {
+func MakeWAFCallbackBindingAccessorContext(c CallbackContext) (WAFBindingAccessorContextType, error) {
+	switch protCtx := c.ProtectionContext().(type) {
+	case *http_protection.ProtectionContext:
+		return makeHTTPWAFCallbackBindingAccessorContext(protCtx.RequestReader), nil
+	default:
+		return WAFBindingAccessorContextType{}, sqerrors.Errorf("unexpected protection context type `%T`", protCtx)
+	}
+}
+
+func makeHTTPWAFCallbackBindingAccessorContext(request http_protection_types.RequestReader) WAFBindingAccessorContextType {
 	return WAFBindingAccessorContextType{
-		RequestBindingAccessorContext: MakeRequestBindingAccessorContext(request),
-		BindingAccessorResultCache:    MakeBindingAccessorResultCache(),
+		HTTPRequestBindingAccessorContext: MakeHTTPRequestBindingAccessorContext(request),
+		BindingAccessorResultCache:        MakeBindingAccessorResultCache(),
 	}
 }
 
@@ -148,8 +173,8 @@ type FuncCallBindingAccessorContextType struct {
 
 type SQLBindingAccessorContextType struct{}
 
-type RequestBindingAccessorContext struct {
-	Request *httpprotection.RequestBindingAccessorContext
+type HTTPRequestBindingAccessorContext struct {
+	Request *http_protection.RequestBindingAccessorContext
 }
 
 // BindingAccessorResultCache is a simple result cache. There is no result
@@ -179,14 +204,24 @@ func (b BindingAccessorResultCache) Get(expr string) (value interface{}, exists 
 	return
 }
 
-func NewRequestBindingAccessorContext(request types.RequestReader) *RequestBindingAccessorContext {
-	ctx := MakeRequestBindingAccessorContext(request)
+func NewRequestBindingAccessorContext(p ProtectionContext) (*HTTPRequestBindingAccessorContext, error) {
+	switch actual := p.(type) {
+	default:
+		return nil, sqerrors.Errorf("unexpected request type `%T`", actual)
+
+	case *http_protection.ProtectionContext:
+		return NewHTTPRequestBindingAccessorContext(actual.RequestReader), nil
+	}
+}
+
+func NewHTTPRequestBindingAccessorContext(req http_protection_types.RequestReader) *HTTPRequestBindingAccessorContext {
+	ctx := MakeHTTPRequestBindingAccessorContext(req)
 	return &ctx
 }
 
-func MakeRequestBindingAccessorContext(request types.RequestReader) RequestBindingAccessorContext {
-	return RequestBindingAccessorContext{
-		Request: httpprotection.NewRequestBindingAccessorContext(request),
+func MakeHTTPRequestBindingAccessorContext(request http_protection_types.RequestReader) HTTPRequestBindingAccessorContext {
+	return HTTPRequestBindingAccessorContext{
+		Request: http_protection.NewRequestBindingAccessorContext(request),
 	}
 }
 

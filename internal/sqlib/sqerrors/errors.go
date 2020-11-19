@@ -33,25 +33,25 @@ type withTimestamp struct {
 // WithTimestamp annotates the given error `err` with a timestamp. The returned
 // error value implements interface Timestamper.
 func WithTimestamp(err error) error {
-	return &withTimestamp{
+	return withTimestamp{
 		error:     err,
 		timestamp: time.Now(),
 	}
 }
 
-func (e *withTimestamp) Timestamp() time.Time {
+func (e withTimestamp) Timestamp() time.Time {
 	return e.timestamp
 }
 
-func (e *withTimestamp) Unwrap() error {
+func (e withTimestamp) Unwrap() error {
 	return e.error
 }
 
-func (e *withTimestamp) Cause() error {
+func (e withTimestamp) Cause() error {
 	return e.Unwrap()
 }
 
-func (e *withTimestamp) Format(f fmt.State, c rune) {
+func (e withTimestamp) Format(f fmt.State, c rune) {
 	if formatter, ok := e.error.(fmt.Formatter); ok {
 		formatter.Format(f, c)
 	} else {
@@ -72,21 +72,53 @@ type withInfo struct {
 // extra context to the error. The returned error value implements interface
 // Info.
 func WithInfo(err error, info interface{}) error {
-	return &withInfo{
+	return withInfo{
 		error: err,
 		info:  info,
 	}
 }
 
-func (e *withInfo) Info() interface{} {
+func (e withInfo) Info() interface{} {
 	return e.info
 }
 
-func (e *withInfo) Unwrap() error {
+func (e withInfo) Unwrap() error {
 	return e.error
 }
 
-func (e *withInfo) Cause() error {
+func (e withInfo) Cause() error {
+	return e.Unwrap()
+}
+
+type KeyType interface{}
+
+type Keyer interface {
+	Key() KeyType
+}
+
+type withKey struct {
+	error
+	key KeyType
+}
+
+// WithKey associates the given key with the error. This key can be used for
+// error indexing in advanced error management cases such as error sampling.
+func WithKey(err error, key KeyType) error {
+	return withKey{
+		error: err,
+		key:   key,
+	}
+}
+
+func (e withKey) Key() KeyType {
+	return e.key
+}
+
+func (e withKey) Unwrap() error {
+	return e.error
+}
+
+func (e withKey) Cause() error {
 	return e.Unwrap()
 }
 
@@ -114,7 +146,7 @@ func Wrapf(err error, format string, args ...interface{}) error {
 	return Wrap(err, fmt.Sprintf(format, args...))
 }
 
-// StackTrace returns the earliest/deepest StackTrace attached to any of
+// StackTrace returns the deepest StackTrace attached to any of
 // the errors in the chain of Causes. If the error does not implement
 // Cause, the original error will be returned. If the error is nil,
 // nil will be returned without further investigation.
@@ -138,28 +170,23 @@ loop:
 	return topStackInfo
 }
 
-// Info returns the earliest/deepest information attached to any of the errors
+// Info returns the earliest information attached to any of the errors
 // in the chain of Causes. If the error does not implement Cause, the original
 // error will be returned. If the error is nil, nil will be returned without
 // further investigation.
 func Info(err error) interface{} {
-	var info interface{}
-loop:
 	for {
-		infoErr, ok := err.(Informer)
-		if ok {
-			info = infoErr.Info()
-		}
 		switch actual := err.(type) {
+		case Informer:
+			return actual.Info()
 		case Causer:
 			err = actual.Cause()
 		case xerrors.Wrapper:
 			err = actual.Unwrap()
 		default:
-			break loop
+			return nil
 		}
 	}
-	return info
 }
 
 // Timestamp returns the error timestamp created with the function
@@ -167,10 +194,38 @@ loop:
 // default time's zero value is returned and `ok` is false.
 // false and the
 func Timestamp(err error) (t time.Time, ok bool) {
-	if t, ok := err.(Timestamper); ok {
-		return t.Timestamp(), true
+	for {
+		switch actual := err.(type) {
+		case Timestamper:
+			return actual.Timestamp(), true
+		case Causer:
+			err = actual.Cause()
+		case xerrors.Wrapper:
+			err = actual.Unwrap()
+		default:
+			return time.Time{}, false
+		}
 	}
-	return time.Time{}, false
+}
+
+// Key returns the deepest key attached to the error if any.
+// TODO: combine every key together instead as a coordinate
+func Key(err error) (k KeyType, exists bool) {
+	for {
+		if keyer, ok := err.(Keyer); ok {
+			k = keyer.Key()
+			exists = true
+		}
+
+		switch actual := err.(type) {
+		case Causer:
+			err = actual.Cause()
+		case xerrors.Wrapper:
+			err = actual.Unwrap()
+		default:
+			return k, exists
+		}
+	}
 }
 
 type ErrorCollection []error

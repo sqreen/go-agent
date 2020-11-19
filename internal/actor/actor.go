@@ -38,10 +38,10 @@ type Store struct {
 	// The store of the path passlist.
 	pathPasslistStore *PathListStore
 
-	logger *plog.Logger
+	logger plog.DebugLevelLogger
 }
 
-func NewStore(logger *plog.Logger) *Store {
+func NewStore(logger plog.DebugLevelLogger) *Store {
 	return &Store{
 		logger: logger,
 	}

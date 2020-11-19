@@ -188,9 +188,9 @@ func TestRequestBindingAccessors(t *testing.T) {
 				`#.URL.RequestURI`: "/admin?user=uid&password=pwd",
 				`#.FilteredParams`: http_protection.RequestParamMap{
 					"QueryForm": []interface{}{
-						url.Values{
-							"user":     []string{"uid"},
-							"password": []string{"pwd"},
+						map[string][]string{
+							"user":     {"uid"},
+							"password": {"pwd"},
 						},
 					},
 					"json": types.RequestParamValueSlice{

@@ -7,14 +7,13 @@
 package sqgin
 
 import (
-	"io"
 	"net"
 	"net/http"
 	"net/textproto"
 	"net/url"
 	"strconv"
 
-	gingonic "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 	"github.com/sqreen/go-agent/internal"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
@@ -59,37 +58,45 @@ import (
 //		// ... not blocked ...
 //	}
 //
-func Middleware() gingonic.HandlerFunc {
+func Middleware() gin.HandlerFunc {
 	internal.Start()
-	return func(c *gingonic.Context) {
-		middlewareHandler(internal.Agent(), c)
+	return func(c *gin.Context) {
+		ctx, cancel := internal.NewRootHTTPProtectionContext(c.Request.Context())
+		if ctx == nil {
+			c.Next()
+			return
+		}
+		defer cancel()
+		middlewareHandlerFromRootProtectionContext(ctx, c)
 	}
 }
 
-func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) {
-	if agent == nil {
-		// The agent is disabled or not yet started.
+func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, c *gin.Context) {
+	r := &requestReaderImpl{c: c}
+	p := http_protection.NewProtectionContext(ctx, c.Writer, r)
+	if p == nil {
 		c.Next()
 		return
 	}
 
-	requestReader := &requestReaderImpl{c: c}
-	responseWriter := &responseWriterImpl{c: c}
-
-	ctx, reqCtx, cancelHandlerContext := http_protection.NewRequestContext(c.Request.Context(), agent, responseWriter, requestReader)
-	if ctx == nil {
-		c.Next()
-		return
-	}
 	defer func() {
-		cancelHandlerContext()
-		_ = ctx.Close(responseWriter.closeResponseWriter())
+		p.Close(newObservedResponse(c.Writer))
 	}()
 
-	c.Request = ctx.WrapRequest(reqCtx, c.Request)
-	c.Set(protection_context.ContextKey.String, ctx)
+	middlewareHandlerFromProtectionContext(p, c)
+}
 
-	if err := ctx.Before(); err != nil {
+type protectionContext interface {
+	WrapRequest(*http.Request) *http.Request
+	Before() error
+	After() error
+}
+
+func middlewareHandlerFromProtectionContext(p protectionContext, c *gin.Context) {
+	c.Request = p.WrapRequest(c.Request)
+	c.Set(protection_context.ContextKey.String, p)
+
+	if err := p.Before(); err != nil {
 		c.Abort()
 		return
 	}
@@ -99,14 +106,14 @@ func middlewareHandler(agent protection_context.AgentFace, c *gingonic.Context) 
 	if c.IsAborted() {
 		return
 	}
-	if err := ctx.After(); err != nil {
+	if err := p.After(); err != nil {
 		c.Abort()
 		return
 	}
 }
 
 type requestReaderImpl struct {
-	c         *gingonic.Context
+	c         *gin.Context
 	queryForm url.Values
 }
 
@@ -194,50 +201,11 @@ func (r *requestReaderImpl) RemoteAddr() string {
 }
 
 type responseWriterImpl struct {
-	c      *gingonic.Context
-	closed bool
-	// Gin allows overwriting the status field even when it was already done and
-	// sent over the network. It can therefore lead to a status code distinct from
-	// what was actually sent. To avoid this problem, we record the status code
-	// we see going through this wrapper. Note that the absence of dynamic
-	// dispatch in Go can allow to avoid this wrapper.
-	writtenStatus int
+	gin.ResponseWriter
 }
 
 func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
-	if !w.closed {
-		w.closed = true
-	}
 	return newObservedResponse(w)
-}
-
-func (w *responseWriterImpl) Header() http.Header {
-	return w.c.Writer.Header()
-}
-
-func (w *responseWriterImpl) Write(b []byte) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return w.c.Writer.Write(b)
-}
-
-func (w *responseWriterImpl) WriteString(s string) (int, error) {
-	if w.closed {
-		return 0, types.WriteAfterCloseError{}
-	}
-	return io.WriteString(w.c.Writer, s)
-}
-
-// Static assert that the io.StringWriter is implemented
-var _ io.StringWriter = (*responseWriterImpl)(nil)
-
-func (w *responseWriterImpl) WriteHeader(statusCode int) {
-	if w.closed {
-		return
-	}
-	w.c.Writer.WriteHeader(statusCode)
-	w.writtenStatus = statusCode
 }
 
 // response observed by the response writer
@@ -247,8 +215,8 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(r *responseWriterImpl) *observedResponse {
-	headers := r.c.Writer.Header()
+func newObservedResponse(response gin.ResponseWriter) *observedResponse {
+	headers := response.Header()
 
 	// Content-Type will be not empty only when explicitly set.
 	// It could be guessed as net/http does. Not implemented for now.
@@ -256,21 +224,20 @@ func newObservedResponse(r *responseWriterImpl) *observedResponse {
 
 	// Content-Length is either explicitly set or the amount of written data. It's
 	// less than 0 when not set by default with Gin.
-	cl := int64(r.c.Writer.Size())
+	cl := int64(response.Size())
 	if cl < 0 {
+		cl = 0
 		if contentLength := headers.Get("Content-Length"); contentLength != "" {
 			if l, err := strconv.ParseInt(contentLength, 10, 0); err == nil {
 				cl = l
-			} else {
-				cl = 0
 			}
 		}
 	}
 
-	// Take the status code we observed, and Gin's if none.
-	status := r.writtenStatus
-	if status == 0 {
-		status = r.c.Writer.Status()
+	// Use the status code saved by Gin
+	var status int
+	if s := response.Status(); s > 0 {
+		status = s
 	}
 
 	return &observedResponse{

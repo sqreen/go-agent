@@ -15,6 +15,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/config"
@@ -64,7 +65,7 @@ func (r *requestReader) Params() types.RequestParamMap {
 
 type rawBodyWAF struct {
 	io.ReadCloser
-	c *RequestContext
+	c *ProtectionContext
 }
 
 // Read buffers what has been read and ultimately calls the WAF on EOF.
@@ -281,14 +282,20 @@ func copyRequest(reader types.RequestReader) types.RequestReader {
 	}
 }
 
-type closedRequestContext struct {
-	response types.ResponseFace
-	request  types.RequestReader
-	events   event.Recorded
+type closedProtectionContext struct {
+	response   types.ResponseFace
+	request    types.RequestReader
+	events     event.Recorded
+	start      time.Time
+	duration   time.Duration
+	sqreenTime time.Duration
 }
 
-var _ types.ClosedRequestContextFace = (*closedRequestContext)(nil)
+var _ types.ClosedProtectionContextFace = (*closedProtectionContext)(nil)
 
-func (c *closedRequestContext) Events() event.Recorded       { return c.events }
-func (c *closedRequestContext) Request() types.RequestReader { return c.request }
-func (c *closedRequestContext) Response() types.ResponseFace { return c.response }
+func (c *closedProtectionContext) Events() event.Recorded       { return c.events }
+func (c *closedProtectionContext) Request() types.RequestReader { return c.request }
+func (c *closedProtectionContext) Response() types.ResponseFace { return c.response }
+func (c *closedProtectionContext) Start() time.Time             { return c.start }
+func (c *closedProtectionContext) Duration() time.Duration      { return c.duration }
+func (c *closedProtectionContext) SqreenTime() time.Duration    { return c.sqreenTime }

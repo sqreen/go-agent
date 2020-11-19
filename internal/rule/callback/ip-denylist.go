@@ -11,15 +11,15 @@ import (
 	"net"
 
 	"github.com/sqreen/go-agent/internal/actor"
-	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
-	sdktypes "github.com/sqreen/go-agent/sdk/types"
+	sdk_types "github.com/sqreen/go-agent/sdk/types"
 )
 
-func NewIPDenyListCallback(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
-	sqassert.NotNil(rule)
+func NewIPDenyListCallback(r RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+	sqassert.NotNil(r)
 	sqassert.NotNil(cfg)
 
 	data, ok := cfg.Data().([]interface{})
@@ -47,11 +47,11 @@ func NewIPDenyListCallback(rule RuleFace, cfg NativeCallbackConfig) (sqhook.Prol
 	if err != nil {
 		return nil, sqerrors.Wrapf(err, "unexpected error while creating the IP denylist")
 	}
-	return newIPDenyListPrologCallback(rule, denylist), nil
+	return newIPDenyListPrologCallback(r, denylist), nil
 }
 
-type IPDenyListPrologCallbackType = httpprotection.BlockingPrologCallbackType
-type IPDenyListEpilogCallbackType = httpprotection.BlockingEpilogCallbackType
+type IPDenyListPrologCallbackType = http_protection.BlockingPrologCallbackType
+type IPDenyListEpilogCallbackType = http_protection.BlockingEpilogCallbackType
 
 type IPDenyListError struct {
 	DeniedIP      net.IP
@@ -62,38 +62,38 @@ func (e IPDenyListError) Error() string {
 	return fmt.Sprintf("ip address `%s` matched the denylist entry `%s` and was blocked", e.DeniedIP.String(), e.DenyListEntry)
 }
 
-func newIPDenyListPrologCallback(rule RuleFace, denylist *actor.CIDRIPListStore) IPDenyListPrologCallbackType {
-	return func(p **httpprotection.RequestContext) (IPDenyListEpilogCallbackType, error) {
-		ctx := *p
-		ip := ctx.RequestReader.ClientIP()
-		exists, matched, err := denylist.Find(ip)
-
-		if err != nil {
-			ctx.Logger().Error(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP denylist", ip))
-			return nil, nil
-		}
-
-		if !exists {
-			return nil, nil
-		}
-
-		ctx.WriteDefaultBlockingResponse()
-
-		if err := rule.PushMetricsValue(matched, 1); err != nil {
-			ctx.Logger().Error(sqerrors.Wrapf(err, "could not update the metrics"))
-		}
-
-		return func(e *error) {
-			sqassert.NotNil(e)
-			err := sdktypes.SqreenError{
-				Err: IPDenyListError{
-					DeniedIP:      ip,
-					DenyListEntry: matched,
-				},
+func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore) IPDenyListPrologCallbackType {
+	return func(**http_protection.ProtectionContext) (epilog IPDenyListEpilogCallbackType, prologErr error) {
+		r.Pre(func(c CallbackContext) error {
+			ip := c.ProtectionContext().ClientIP()
+			exists, matched, err := denylist.Find(ip)
+			if err != nil {
+				type errKey struct{}
+				return sqerrors.WithKey(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP denylist", ip), errKey{})
 			}
-			// Display the error message explaining why the request is denied.
-			ctx.Logger().Debug(err.Error())
-			*e = err
-		}, nil
+
+			if !exists {
+				return nil
+			}
+
+			c.HandleAttack(true)
+
+			_ = c.AddMetricsValue(matched, 1)
+
+			epilog = func(e *error) {
+				sqassert.NotNil(e)
+				err := sdk_types.SqreenError{
+					Err: IPDenyListError{
+						DeniedIP:      ip,
+						DenyListEntry: matched,
+					},
+				}
+				// Display the error message explaining why the request is denied.
+				c.Logger().Debug(err.Error())
+				*e = err
+			}
+			return nil
+		})
+		return
 	}
 }

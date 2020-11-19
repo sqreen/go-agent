@@ -18,8 +18,8 @@ import (
 // NewAddSecurityHeadersCallback returns the native prolog and epilog callbacks
 // to be attached to compatible HTTP protection middlewares such as
 // `protection/http`. It adds HTTP headers provided by the rule's configuration.
-func NewAddSecurityHeadersCallback(rule RuleFace, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
-	sqassert.NotNil(rule, cfg)
+func NewAddSecurityHeadersCallback(_ RuleContext, cfg NativeCallbackConfig) (sqhook.PrologCallback, error) {
+	sqassert.NotNil(cfg)
 	var headers http.Header
 	data, ok := cfg.Data().([]interface{})
 	if !ok {
@@ -50,7 +50,7 @@ type AddSecurityHeadersEpilogCallbackType = httpprotection.NonBlockingEpilogCall
 // The prolog callback modifies the function arguments in order to replace the
 // written status code and body.
 func newAddHeadersPrologCallback(headers http.Header) AddSecurityHeadersPrologCallbackType {
-	return func(p **httpprotection.RequestContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
+	return func(p **httpprotection.ProtectionContext) (httpprotection.NonBlockingEpilogCallbackType, error) {
 		ctx := *p
 		responseHeaders := ctx.ResponseWriter.Header()
 		for k, v := range headers {

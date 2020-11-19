@@ -7,109 +7,331 @@
 package rule
 
 import (
-	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/dop251/goja"
-	"github.com/pkg/errors"
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
+	"github.com/sqreen/go-agent/internal/plog"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/rule/callback"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
+	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
 
-// CallbackObject can be used by callbacks needing to return an object instead
-// of a function that will be closed when removed from its hookpoint.
-// For example, it allows to release memory out of the garbage collector' scope.
-//type CallbackObject interface {
-//	Prolog() sqhook.PrologCallback
-//	io.Closer
-//}
-
-type CallbackContext struct {
-	metricsStores          map[string]*metrics.Store
-	defaultMetricsStore    *metrics.Store
-	errorMetricsStore      *metrics.Store
-	callCountsMetricsStore *metrics.Store
-	preCallCounter         string
-	name                   string
-	testMode               bool
-	config                 callback.NativeCallbackConfig
-	attackType             string
+type ProtectionContext interface {
+	callback.ProtectionContext
+	HandleAttack(block bool, attack *event.AttackEvent) (blocked bool)
 }
 
-func NewCallbackContext(r *api.Rule, rulepackID string, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store) (*CallbackContext, error) {
+func FromGLS() ProtectionContext {
+	v := sqgls.Get()
+	actual, _ := v.(ProtectionContext)
+	return actual
+}
+
+// Static assert that protection contexts correctly implement the
+// ProtectionContext interface
+var _ ProtectionContext = (*http_protection.ProtectionContext)(nil)
+
+type nativeRuleContext struct {
+	name         string
+	config       callback.NativeCallbackConfig
+	testMode     bool
+	blockingMode bool
+	critical     bool
+	attackType   string
+	rulepackID   string
+	logger       plog.DebugLevelLogger
+
+	pre  []NativeCallbackMiddlewareFunc
+	post []NativeCallbackMiddlewareFunc
+
+	metricsEngine       *metrics.Engine
+	metricsStores       map[string]*metrics.TimeHistogram
+	defaultMetricsStore *metrics.TimeHistogram
+
+	perfHistogramUnit   float64
+	perfHistogramBase   float64
+	perfHistogramPeriod time.Duration
+}
+
+var _ callback.RuleContext = &nativeRuleContext{}
+
+type (
+	NativeCallbackFunc           = func(c callback.CallbackContext) error
+	NativeCallbackMiddlewareFunc = func(cb NativeCallbackFunc) NativeCallbackFunc
+)
+
+func newNativeRuleContext(rule *api.Rule, rulepackID string, metricsEngine *metrics.Engine, logger plog.DebugLevelLogger, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) (*nativeRuleContext, error) {
 	var (
-		metricsStores       map[string]*metrics.Store
-		defaultMetricsStore *metrics.Store
+		metricsStores       map[string]*metrics.TimeHistogram
+		defaultMetricsStore *metrics.TimeHistogram
 	)
-	if len(r.Metrics) > 0 {
-		metricsStores = make(map[string]*metrics.Store)
-		for _, m := range r.Metrics {
-			metricsStores[m.Name] = metricsEngine.GetStore(m.Name, time.Second*time.Duration(m.Period))
+	if len(rule.Metrics) > 0 {
+		metricsStores = make(map[string]*metrics.TimeHistogram)
+		for _, m := range rule.Metrics {
+			metricsStores[m.Name] = metricsEngine.TimeHistogram(m.Name, time.Second*time.Duration(m.Period), 10000)
 		}
-		defaultMetricsStore = metricsStores[r.Metrics[0].Name]
+		defaultMetricsStore = metricsStores[rule.Metrics[0].Name]
 	}
 
-	var (
-		callCountsMetricsStore *metrics.Store
-		preCallCounter         string
-	)
-	if r.CallCountInterval != 0 {
-		callCountsMetricsStore = metricsEngine.GetStore("sqreen_call_counts", 60*time.Second)
-		preCallCounter = fmt.Sprintf("%s/%s/pre", rulepackID, r.Name)
+	r := &nativeRuleContext{
+		name:                rule.Name,
+		testMode:            rule.Test,
+		blockingMode:        rule.Block,
+		attackType:          rule.AttackType,
+		rulepackID:          rulepackID,
+		logger:              plog.WithStrictBackoff(logger),
+		metricsEngine:       metricsEngine,
+		metricsStores:       metricsStores,
+		defaultMetricsStore: defaultMetricsStore,
+		perfHistogramPeriod: perfHistogramPeriod,
+		perfHistogramUnit:   perfHistogramUnit,
+		perfHistogramBase:   perfHistogramBase,
 	}
 
-	return &CallbackContext{
-		metricsStores:          metricsStores,
-		defaultMetricsStore:    defaultMetricsStore,
-		errorMetricsStore:      errorMetricsStore,
-		name:                   r.Name,
-		testMode:               r.Test,
-		attackType:             r.AttackType,
-		preCallCounter:         preCallCounter,
-		callCountsMetricsStore: callCountsMetricsStore,
-	}, nil
+	r.buildMiddlewares()
+
+	return r, nil
 }
 
-func (d *CallbackContext) PushMetricsValue(key interface{}, value int64) error {
-	err := d.defaultMetricsStore.Add(key, value)
-	if err != nil {
-		sqErr := sqerrors.Wrapf(err, "rule `%s`: could not add a value to the default metrics store", d.name)
-		switch actualErr := err.(type) {
-		case metrics.MaxMetricsStoreLengthError:
-			if err := d.errorMetricsStore.Add(actualErr, 1); err != nil {
-				return sqerrors.Wrap(err, "could not update the error metrics store")
+type (
+	timeHistogram interface {
+		Add(key interface{}, delta uint64) error
+	}
+
+	performanceHistogram interface {
+		Add(v float64) error
+	}
+)
+
+func withPerformanceCap(rule string, overBudgetHistogram timeHistogram) NativeCallbackMiddlewareFunc {
+	var (
+		before = rule + "/before"
+		after  = rule + "/after"
+	)
+
+	return func(cb NativeCallbackFunc) NativeCallbackFunc {
+		return func(c callback.CallbackContext) error {
+			p := c.ProtectionContext()
+
+			// Check if the sqreen time deadline is exceeded before calling the
+			// callback
+			if p.DeadlineExceeded(0) {
+				if err := overBudgetHistogram.Add(before, 1); err != nil {
+					type errKey struct{}
+					c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+				}
+				return nil
 			}
-		default:
-			return sqErr
+
+			// Check if the sqreen time deadline is exceeded after calling the
+			// callback
+			defer func() {
+				if p.DeadlineExceeded(0) {
+					if err := overBudgetHistogram.Add(after, 1); err != nil {
+						type errKey struct{}
+						c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+					}
+				}
+			}()
+
+			return cb(c)
 		}
 	}
-	return nil
 }
 
-func (d *CallbackContext) NewAttackEvent(blocked bool, info interface{}, st errors.StackTrace) *event.AttackEvent {
-	return &event.AttackEvent{
-		Rule:       d.name,
-		Test:       d.testMode,
-		AttackType: d.attackType,
-		Blocked:    blocked,
+func withPerformanceMonitoring(perfHistogram performanceHistogram) NativeCallbackMiddlewareFunc {
+	return func(cb NativeCallbackFunc) NativeCallbackFunc {
+		return func(c callback.CallbackContext) error {
+			sq := c.ProtectionContext().SqreenTime()
+			sw := sq.Start()
+			defer func() {
+				duration := sw.Stop()
+				// Compute the milliseconds floating point value out of the nanoseconds
+				ms := float64(duration.Nanoseconds()) / float64(time.Millisecond)
+				if err := perfHistogram.Add(ms); err != nil {
+					type errKey struct{}
+					c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+				}
+			}()
+
+			return cb(c)
+		}
+	}
+}
+
+func withSafeCall() NativeCallbackMiddlewareFunc {
+	return func(cb NativeCallbackFunc) NativeCallbackFunc {
+		return func(c callback.CallbackContext) error {
+			return sqsafe.Call(func() error {
+				return cb(c)
+			})
+		}
+	}
+}
+
+func withCallCount(rulepackID, rule, cb string, store timeHistogram) NativeCallbackMiddlewareFunc {
+	callCounterID := rulepackID + "/" + rule + "/" + cb
+	return func(cb NativeCallbackFunc) NativeCallbackFunc {
+		return func(c callback.CallbackContext) error {
+			if err := store.Add(callCounterID, 1); err != nil {
+				type errKey struct{}
+				c.Logger().Error(sqerrors.WithKey(err, errKey{}))
+			}
+			return cb(c)
+		}
+	}
+}
+
+func (r *nativeRuleContext) Pre(pre NativeCallbackFunc) {
+	r.call(pre, r.pre)
+}
+
+func (r *nativeRuleContext) Post(post func(c callback.CallbackContext) error) {
+	r.call(post, r.post)
+}
+
+func (r *nativeRuleContext) call(cb NativeCallbackFunc, m []NativeCallbackMiddlewareFunc) {
+	c, ok := makeCallbackContext(r)
+	if !ok {
+		return
+	}
+	cb = wrapCallback(cb, m)
+	if err := cb(c); err != nil {
+		// TODO: add rule info
+		r.logger.Error(err)
+	}
+}
+
+func (r *nativeRuleContext) SetCritical(critical bool) {
+	r.critical = critical
+	r.buildMiddlewares()
+}
+
+func (r *nativeRuleContext) buildMiddlewares() {
+	r.buildPreMiddlewares()
+	r.buildPostMiddlewares()
+}
+
+func (r *nativeRuleContext) buildPreMiddlewares() {
+	perfHist, err := r.metricsEngine.PerfHistogram("sq."+r.name+".pre", r.perfHistogramUnit, r.perfHistogramBase, r.perfHistogramPeriod)
+	if err != nil {
+		r.logger.Error(sqerrors.Wrap(err, "could not create the performance metrics for the pre callback"))
+	}
+
+	var overBudgetHist *metrics.TimeHistogram
+	if !r.critical {
+		overBudgetHist = r.metricsEngine.TimeHistogram("request_overbudget_cb", r.perfHistogramPeriod, 1000)
+	}
+
+	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod, 1000)
+
+	r.pre = buildMiddlewares(r, "pre", overBudgetHist, perfHist, callCountHist)
+}
+
+func (r *nativeRuleContext) buildPostMiddlewares() {
+	perfHist, err := r.metricsEngine.PerfHistogram("sq."+r.name+".post", r.perfHistogramUnit, r.perfHistogramBase, r.perfHistogramPeriod)
+	if err != nil {
+		r.logger.Error(sqerrors.Wrap(err, "could not create the performance metrics for the pre callback"))
+	}
+
+	var overBudgetHist *metrics.TimeHistogram
+	if r.critical {
+		overBudgetHist = r.metricsEngine.TimeHistogram("request_overbudget_cb", r.perfHistogramPeriod, 1000)
+	}
+
+	callCountHist := r.metricsEngine.TimeHistogram("sqreen_call_counts", r.perfHistogramPeriod, 1000)
+
+	r.post = buildMiddlewares(r, "post", overBudgetHist, perfHist, callCountHist)
+}
+
+func buildMiddlewares(r *nativeRuleContext, cb string, overBudgetHist *metrics.TimeHistogram, perfHist *metrics.PerfHistogram, callCountHist *metrics.TimeHistogram) (m []NativeCallbackMiddlewareFunc) {
+	m = append(m, withSafeCall())
+
+	if overBudgetHist != nil {
+		m = append(m, withPerformanceCap(r.name, overBudgetHist))
+	}
+
+	if perfHist != nil {
+		m = append(m, withPerformanceMonitoring(perfHist))
+	}
+
+	if callCountHist != nil {
+		m = append(m, withCallCount(r.rulepackID, r.name, cb, callCountHist))
+	}
+
+	return m
+}
+
+func wrapCallback(cb NativeCallbackFunc, middlewares []NativeCallbackMiddlewareFunc) NativeCallbackFunc {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		cb = middlewares[i](cb)
+	}
+	return cb
+}
+
+type (
+	callbackContext struct {
+		r *nativeRuleContext
+		p ProtectionContext
+	}
+)
+
+func makeCallbackContext(r *nativeRuleContext) (c callbackContext, ok bool) {
+	p := FromGLS()
+	if p == nil {
+		ok = false
+		return
+	}
+
+	return callbackContext{
+		r: r,
+		p: p,
+	}, true
+}
+
+func (c callbackContext) ProtectionContext() callback.ProtectionContext {
+	return c.p
+}
+
+func (c callbackContext) Logger() callback.Logger {
+	return c.r.logger
+}
+
+func (c callbackContext) AddMetricsValue(key interface{}, value uint64) (added bool) {
+	if err := c.r.defaultMetricsStore.Add(key, value); err != nil {
+		type errKey struct{}
+		err = sqerrors.WithKey(err, errKey{})
+		err = sqerrors.Wrapf(err, "rule `%s`: could not add a value to the default metrics store", c.r.name)
+		c.Logger().Error(err)
+		return false
+	}
+	return true
+}
+
+func (c callbackContext) HandleAttack(shouldBlock bool, opts ...event.AttackEventOption) (blocked bool) {
+	block := !c.r.testMode && c.r.blockingMode && shouldBlock
+
+	attack := &event.AttackEvent{
+		Rule:       c.r.name,
+		Test:       c.r.testMode,
+		Blocked:    block,
+		AttackType: c.r.attackType,
 		Timestamp:  time.Now(),
-		Info:       info,
-		StackTrace: st,
 	}
-}
 
-func (d *CallbackContext) MonitorPre() {
-	// TODO: execution time monitoring and cap
-	if d.callCountsMetricsStore != nil {
-		if err := d.callCountsMetricsStore.Add(d.preCallCounter, 1); err != nil {
-			// TODO: log the error
-		}
+	// Apply the attack options
+	for _, opt := range opts {
+		opt(attack)
 	}
+
+	return c.p.HandleAttack(block, attack)
 }
 
 type (

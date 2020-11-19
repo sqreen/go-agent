@@ -7,5 +7,6 @@
 package sqassert
 
 func True(bool)             {}
+func False(bool)            {}
 func NoError(error)         {}
 func NotNil(...interface{}) {}

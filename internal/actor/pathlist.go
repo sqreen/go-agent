@@ -26,6 +26,6 @@ func NewPathListStore(paths []string) *PathListStore {
 func (s *PathListStore) unwrap() *iradix.Tree { return (*iradix.Tree)(s) }
 
 func (s *PathListStore) Find(path string) (exists bool) {
-	_, exists = s.unwrap().Get([]byte(path))
+	_, _, exists = s.unwrap().Root().LongestPrefix([]byte(path))
 	return
 }

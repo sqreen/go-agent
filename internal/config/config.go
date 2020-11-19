@@ -102,6 +102,11 @@ var (
 	BackendHTTPAPIDefaultHeartbeatDelay = time.Minute
 )
 
+// Event queue configuration.
+const (
+	EventQueueDefaultLength = 10000
+)
+
 // Event batch configuration.
 const (
 	// EventBatchMaxStaleness is the time when the data in the event manager's

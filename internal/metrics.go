@@ -10,14 +10,14 @@ import (
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
-	errors "golang.org/x/xerrors"
 )
 
 func (a *AgentType) addUserEvent(e event.UserEventFace) {
 	var (
-		store  *metrics.Store
+		store  *metrics.TimeHistogram
 		logFmt string
 	)
+
 	var uevent *event.UserEvent
 	switch actual := e.(type) {
 	case *event.AuthUserEvent:
@@ -37,51 +37,41 @@ func (a *AgentType) addUserEvent(e event.UserEventFace) {
 		a.logger.Error(sqerrors.Errorf("user event: unexpected user event type `%T`", actual))
 		return
 	}
+
 	key, err := UserEventMetricsStoreKey(uevent)
 	if err != nil {
 		a.logger.Error(sqerrors.Wrap(err, "user event: could not create a metrics store key"))
 		return
 	}
+
 	a.logger.Debugf(logFmt, key)
 
 	if err := store.Add(key, 1); err != nil {
-		sqErr := sqerrors.Wrap(err, "user event: could not update the user metrics store")
-		switch actualErr := err.(type) {
-		case metrics.MaxMetricsStoreLengthError:
-			a.logger.Debug(sqErr)
-			if err := a.staticMetrics.errors.Add(actualErr, 1); err != nil {
-				a.logger.Debugf("could not update the metrics store: %v", err)
-			}
-		default:
-			a.logger.Error(sqErr)
-		}
+		type errKey struct{}
+		err = sqerrors.WithKey(err, errKey{})
+		err = sqerrors.Wrap(err, "user event: could not update the user metrics store")
+		a.logger.Error(err)
 	}
 }
 
 func (a *AgentType) addIPPasslistEvent(matchedPasslistEntry string) {
-	err := a.addPasslistEvent(a.staticMetrics.allowedIP, matchedPasslistEntry)
-	if err != nil {
-		a.Logger().Error(sqerrors.Wrap(err, "passlist event: could not update the ip passlist metrics store"))
+	if !a.addPasslistEvent(a.staticMetrics.allowedIP, matchedPasslistEntry) {
+		a.logger.Debug("passlist event: could not add the ip passlist event")
 	}
 }
 func (a *AgentType) addPathPasslistEvent(matchedPasslistEntry string) {
-	err := a.addPasslistEvent(a.staticMetrics.allowedPath, matchedPasslistEntry)
-	if err != nil {
-		a.Logger().Error(sqerrors.Wrap(err, "passlist event: could not update the path passlist metrics store"))
+	if !a.addPasslistEvent(a.staticMetrics.allowedPath, matchedPasslistEntry) {
+		a.logger.Debug("passlist event: could not add the path passlist event")
 	}
 }
 
-func (a *AgentType) addPasslistEvent(store *metrics.Store, matchedPasslistEntry string) error {
-	err := store.Add(matchedPasslistEntry, 1)
-
-	var maxStoreLenErr metrics.MaxMetricsStoreLengthError
-	if errors.As(err, &maxStoreLenErr) {
-		if err := a.staticMetrics.errors.Add(maxStoreLenErr, 1); err != nil {
-			a.logger.Debugf("could not update the error metrics store: %v", err)
-		}
+func (a *AgentType) addPasslistEvent(store *metrics.TimeHistogram, matchedPasslistEntry string) bool {
+	if err := store.Add(matchedPasslistEntry, 1); err != nil {
+		type errKey struct{}
+		a.logger.Error(sqerrors.WithKey(err, errKey{}))
+		return false
 	}
-
-	return err
+	return true
 }
 
 func UserEventMetricsStoreKey(e *event.UserEvent) (json.Marshaler, error) {

@@ -21,7 +21,7 @@ import (
 
 func TestCommandManager(t *testing.T) {
 	var agent agentMockup
-	logger := plog.NewLogger(plog.Debug, os.Stderr, 0)
+	logger := plog.NewLogger(plog.Debug, os.Stderr, nil)
 	mng := internal.NewCommandManager(&agent, logger)
 	require.NotNil(t, mng)
 
@@ -106,6 +106,18 @@ func TestCommandManager(t *testing.T) {
 		{
 			Command:           "get_bundle",
 			ExpectedAgentCall: agent.ExpectSendAppBundle,
+		},
+		{
+			Command:           "performance_budget",
+			ExpectedAgentCall: agent.ExpectSetPerformanceBudget,
+			Args: []json.RawMessage{
+				json.RawMessage(`33.1234`),
+			},
+			ExpectedArgs: []interface{}{33.1234},
+			BadArgs: [][]json.RawMessage{
+				{json.RawMessage(`1.234`), json.RawMessage(`2`)},
+				{json.RawMessage(`{}}`)},
+			},
 		},
 	}
 
@@ -346,6 +358,14 @@ func (a *agentMockup) ReloadRules() (string, error) {
 func (a *agentMockup) SendAppBundle() error {
 	ret := a.Called()
 	return ret.Error(0)
+}
+
+func (a *agentMockup) SetPerformanceBudget(budget float64) error {
+	return a.Called(budget).Error(0)
+}
+
+func (a *agentMockup) ExpectSetPerformanceBudget(args ...interface{}) *mock.Call {
+	return a.On("SetPerformanceBudget", args...)
 }
 
 func (a *agentMockup) ExpectSendAppBundle(...interface{}) *mock.Call {

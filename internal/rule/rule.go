@@ -22,6 +22,7 @@ import (
 	"crypto/ecdsa"
 	"io"
 	"sort"
+	"time"
 
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/metrics"
@@ -31,28 +32,23 @@ import (
 )
 
 type Engine struct {
-	logger Logger
+	logger plog.DebugLevelLogger
 	// Map rules to their corresponding symbol in order to be able to modify them
 	// at run time by atomically replacing a running rule.
 	// TODO: write a test to check two HookFaces are correctly comparable
 	//   to find back a hook
-	hooks                 hookDescriptorMap
-	packID                string
-	enabled               bool
-	metricsEngine         *metrics.Engine
-	publicKey             *ecdsa.PublicKey
-	instrumentationEngine InstrumentationFace
-	errorMetricsStore     *metrics.Store
-}
-
-// Logger interface required by this package.
-type Logger interface {
-	plog.DebugLogger
-	plog.ErrorLogger
+	hooks                                hookDescriptorMap
+	packID                               string
+	enabled                              bool
+	metricsEngine                        *metrics.Engine
+	publicKey                            *ecdsa.PublicKey
+	instrumentationEngine                InstrumentationFace
+	perfHistogramUnit, perfHistogramBase float64
+	perfHistogramPeriod                  time.Duration
 }
 
 // NewEngine returns a new rule engine.
-func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, errorMetricsStore *metrics.Store, publicKey *ecdsa.PublicKey) *Engine {
+func NewEngine(logger plog.DebugLevelLogger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) *Engine {
 	if instrumentationEngine == nil {
 		instrumentationEngine = defaultInstrumentationEngine
 	}
@@ -62,7 +58,9 @@ func NewEngine(logger Logger, instrumentationEngine InstrumentationFace, metrics
 		metricsEngine:         metricsEngine,
 		publicKey:             publicKey,
 		instrumentationEngine: instrumentationEngine,
-		errorMetricsStore:     errorMetricsStore,
+		perfHistogramBase:     perfHistogramBase,
+		perfHistogramUnit:     perfHistogramUnit,
+		perfHistogramPeriod:   perfHistogramPeriod,
 	}
 }
 
@@ -148,7 +146,7 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
 			continue
 		}
-		//Find the symbol
+		// Find the symbol
 		hookpoint := r.Hookpoint
 		symbol := hookpoint.Method
 		hook, err := e.instrumentationEngine.Find(symbol)
@@ -163,7 +161,8 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 			logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
 		}
 
-		callbackContext, err := NewCallbackContext(&r, rulepackID, e.metricsEngine, e.errorMetricsStore)
+		// Create the rule context
+		ruleCtx, err := newNativeRuleContext(&r, rulepackID, e.metricsEngine, logger, e.perfHistogramUnit, e.perfHistogramBase, e.perfHistogramPeriod)
 		if err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
 			continue
@@ -179,14 +178,14 @@ func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDesc
 				continue
 			}
 
-			prolog, err = NewNativeCallback(hookpoint.Callback, callbackContext, cfg)
+			prolog, err = NewNativeCallback(hookpoint.Callback, ruleCtx, cfg)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue
 			}
 
 		case "reflected":
-			prolog, err = NewReflectedCallback(hookpoint.Callback, callbackContext, &r)
+			prolog, err = NewReflectedCallback(hookpoint.Callback, ruleCtx, &r)
 			if err != nil {
 				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
 				continue

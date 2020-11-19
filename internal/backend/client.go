@@ -31,14 +31,14 @@ import (
 type Client struct {
 	client       *http.Client
 	backendURL   *url.URL
-	logger       *plog.Logger
+	logger       plog.DebugLevelLogger
 	session      string
 	signalClient *client.Client
 	infra        *signal.AgentInfra
 	health       *HealthStatus
 }
 
-func NewClient(baseURL string, proxy string, logger *plog.Logger) (*Client, error) {
+func NewClient(baseURL string, proxy string, logger plog.DebugLevelLogger) (*Client, error) {
 	var transport *http.Transport
 	if proxy == "" {
 		// No user settings. The default transport uses standard global proxy

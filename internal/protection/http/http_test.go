@@ -5,7 +5,6 @@
 package http
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -14,190 +13,143 @@ import (
 	"testing"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/sqreen/go-agent/internal/event"
+	http_protection_mockups "github.com/sqreen/go-agent/internal/protection/http/_testlib/mockups"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
-	"github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
+	middleware_mockups "github.com/sqreen/go-agent/sdk/middleware/_testlib/mockups"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-type ResponseWriterMockup struct {
-	mock.Mock
-}
-
-func (r *ResponseWriterMockup) Header() http.Header {
-	h, _ := r.Called().Get(0).(http.Header)
-	return h
-}
-
-func (r *ResponseWriterMockup) Write(bytes []byte) (int, error) {
-	ret := r.Called(bytes)
-	return ret.Int(0), ret.Error(1)
-}
-
-func (r *ResponseWriterMockup) WriteHeader(statusCode int) {
-	r.Called(statusCode)
-}
-
-func (r *ResponseWriterMockup) WriteString(s string) (n int, err error) {
-	ret := r.Called(s)
-	return ret.Int(0), ret.Error(1)
-}
-
-type RequestReaderMockup struct {
-	mock.Mock
-}
-
-func (r *RequestReaderMockup) Body() []byte {
-	value, _ := r.Called().Get(0).([]byte)
-	return value
-}
-
-func (r *RequestReaderMockup) Header(header string) (value *string) {
-	value, _ = r.Called(header).Get(0).(*string)
-	return value
-}
-
-func (r *RequestReaderMockup) Headers() http.Header {
-	h, _ := r.Called().Get(0).(http.Header)
-	return h
-}
-
-func (r *RequestReaderMockup) Method() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) URL() *url.URL {
-	u, _ := r.Called().Get(0).(*url.URL)
-	return u
-}
-
-func (r *RequestReaderMockup) ExpectURL() *mock.Call {
-	return r.On("URL")
-}
-
-func (r *RequestReaderMockup) RequestURI() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) Host() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) RemoteAddr() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) IsTLS() bool {
-	return r.Called().Bool(0)
-}
-
-func (r *RequestReaderMockup) UserAgent() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) Referer() string {
-	return r.Called().String(0)
-}
-
-func (r *RequestReaderMockup) QueryForm() url.Values {
-	v, _ := r.Called().Get(0).(url.Values)
-	return v
-}
-
-func (r *RequestReaderMockup) PostForm() url.Values {
-	v, _ := r.Called().Get(0).(url.Values)
-	return v
-}
-
-func (r *RequestReaderMockup) ClientIP() net.IP {
-	ip, _ := r.Called().Get(0).(net.IP)
-	return ip
-}
-
-func (r *RequestReaderMockup) ExpectClientIP() *mock.Call {
-	return r.On("ClientIP")
-}
-
-func (r *RequestReaderMockup) Params() types.RequestParamMap {
-	v, _ := r.Called().Get(0).(types.RequestParamMap)
-	return v
-}
-
 func TestProtectionAPI(t *testing.T) {
+	newMockups := func(t *testing.T, ip net.IP, allowPath, allowIP bool) (*middleware_mockups.RootHTTPProtectionContextMockup, *middleware_mockups.HTTPProtectionConfigMockup, *http_protection_mockups.RequestReaderMockup, *http_protection_mockups.ResponseWriterMockup) {
+		r := &middleware_mockups.RootHTTPProtectionContextMockup{}
+
+		cfg := middleware_mockups.NewHTTPProtectionConfigMockup()
+
+		responseWriterMockup := &http_protection_mockups.ResponseWriterMockup{}
+
+		requestReaderMockup := &http_protection_mockups.RequestReaderMockup{}
+
+		// Path passlist
+		u, err := url.Parse("https://test.com/foo/bar/")
+		require.NoError(t, err)
+		requestReaderMockup.ExpectURL().Return(u)
+		r.ExpectIsPathAllowed(u.Path).Return(allowPath)
+
+		if !allowPath {
+			r.ExpectConfig().Return(cfg)
+
+			// The following calls only happen when the path is not passlisted
+			// Make ClientIP return a given IP address
+			requestReaderMockup.ExpectRemoteAddr().Return(ip.String())
+			requestReaderMockup.ExpectHeaders().Return(nil)
+
+			// IP passlist
+			r.ExpectIsIPAllowed(ip).Return(allowIP)
+		}
+
+		return r, cfg, requestReaderMockup, responseWriterMockup
+	}
+
 	t.Run("passlists", func(t *testing.T) {
 		t.Run("ip allowed", func(t *testing.T) {
-			agentMockup := &mockups.AgentMockup{}
-			defer agentMockup.AssertExpectations(t)
-
-			responseWriterMockup := &ResponseWriterMockup{}
-			defer responseWriterMockup.AssertExpectations(t)
-
-			requestReaderMockup := &RequestReaderMockup{}
-			defer requestReaderMockup.AssertExpectations(t)
-			ip := net.ParseIP("1.2.3.4")
-			requestReaderMockup.ExpectClientIP().Return(ip)
-			agentMockup.ExpectIsIPAllowed(ip).Return(true)
-
-			// The request path is not passlisted
-			u, err := url.Parse("https://test.com/foo/bar/")
-			require.NoError(t, err)
-			requestReaderMockup.ExpectURL().Return(u)
-			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
-
-			ctx, _, _ := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
-			require.Nil(t, ctx)
+			r, cfg, req, w := newMockups(t, net.ParseIP("1.2.3.4"), false, true)
+			defer r.AssertExpectations(t)
+			defer cfg.AssertExpectations(t)
+			defer req.AssertExpectations(t)
+			defer w.AssertExpectations(t)
+			p := NewProtectionContext(r, w, req)
+			require.Nil(t, p)
 		})
 
 		t.Run("path allowed", func(t *testing.T) {
-			agentMockup := &mockups.AgentMockup{}
-			defer agentMockup.AssertExpectations(t)
-
-			responseWriterMockup := &ResponseWriterMockup{}
-			defer responseWriterMockup.AssertExpectations(t)
-
-			requestReaderMockup := &RequestReaderMockup{}
-			defer requestReaderMockup.AssertExpectations(t)
-
-			// The request path is allowed
-			u, err := url.Parse("https://test.com/foo/bar/")
-			require.NoError(t, err)
-			requestReaderMockup.ExpectURL().Return(u)
-			agentMockup.ExpectIsPathAllowed(u.Path).Return(true)
-
-			ctx, _, _ := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
-			require.Nil(t, ctx)
+			r, cfg, req, w := newMockups(t, net.ParseIP("1.2.3.4"), true, false)
+			defer r.AssertExpectations(t)
+			defer cfg.AssertExpectations(t)
+			defer req.AssertExpectations(t)
+			defer w.AssertExpectations(t)
+			p := NewProtectionContext(r, w, req)
+			require.Nil(t, p)
 		})
 
 		t.Run("none allowed", func(t *testing.T) {
-			agentMockup := &mockups.AgentMockup{}
-			defer agentMockup.AssertExpectations(t)
-
-			responseWriterMockup := &ResponseWriterMockup{}
-			defer responseWriterMockup.AssertExpectations(t)
-
-			requestReaderMockup := &RequestReaderMockup{}
-			defer requestReaderMockup.AssertExpectations(t)
-
-			// The IP is not allowed
 			ip := net.ParseIP("1.2.3.4")
-			requestReaderMockup.ExpectClientIP().Return(ip)
-			agentMockup.ExpectIsIPAllowed(ip).Return(false)
+			r, cfg, req, w := newMockups(t, ip, false, false)
+			defer r.AssertExpectations(t)
+			defer cfg.AssertExpectations(t)
+			defer req.AssertExpectations(t)
+			defer w.AssertExpectations(t)
 
-			// The request path is not allowed
-			u, err := url.Parse("https://test.com/foo/bar/")
-			require.NoError(t, err)
-			requestReaderMockup.ExpectURL().Return(u)
-			agentMockup.ExpectIsPathAllowed(u.Path).Return(false)
-
-			ctx, reqCtx, cancel := NewRequestContext(context.Background(), agentMockup, responseWriterMockup, requestReaderMockup)
-
-			require.NotNil(t, ctx)
-			require.NotNil(t, reqCtx)
-			require.NotNil(t, cancel)
+			p := NewProtectionContext(r, w, req)
+			require.NotNil(t, p)
 		})
 	})
 
-	// TODO: more test cases
+	t.Run("nil root context", func(t *testing.T) {
+		w := &http_protection_mockups.ResponseWriterMockup{}
+		req := &http_protection_mockups.RequestReaderMockup{}
+		p := NewProtectionContext(nil, w, req)
+		require.Nil(t, p)
+	})
+
+	t.Run("protection/callback api", func(t *testing.T) {
+		ip := net.ParseIP("1.2.3.4")
+		r, cfg, req, w := newMockups(t, ip, false, false)
+		defer cfg.AssertExpectations(t)
+		defer req.AssertExpectations(t)
+		defer w.AssertExpectations(t)
+
+		p := NewProtectionContext(r, w, req)
+		require.NotNil(t, p)
+
+		require.Equal(t, ip, p.ClientIP())
+
+		// Handle a non-blocking attack
+		blocked := p.HandleAttack(false, &event.AttackEvent{})
+		require.False(t, blocked)
+		r.AssertExpectations(t)
+
+		// Handle a blocking attack
+		r.ExpectCancelContext().Once() // the context should be closed
+		blocked = p.HandleAttack(true, &event.AttackEvent{})
+		require.True(t, blocked)
+		r.AssertExpectations(t)
+
+		// Handle a blocking attack without logging an attack
+		r.ExpectCancelContext().Once() // the context should be closed
+		blocked = p.HandleAttack(true, nil)
+		require.True(t, blocked)
+		r.AssertExpectations(t)
+
+		// Fake response
+		response := &http_protection_mockups.ResponseMockup{}
+		response.ExpectStatus().Return(433)
+		response.ExpectContentType().Return("sqreen/test")
+		response.ExpectContentLength().Return(int64(4321))
+
+		// Fake request
+		req.ExpectMethod().Return("GET")
+		u, _ := url.Parse("http://test.com/")
+		req.ExpectURL().Return(u)
+		req.ExpectRequestURI().Return(u.RequestURI())
+		req.ExpectHost().Return(u.Host)
+		req.ExpectIsTLS().Return(false)
+		req.ExpectUserAgent().Return("ua")
+		req.ExpectReferer().Return("referer")
+		req.ExpectQueryForm().Return(nil)
+		req.ExpectPostForm().Return(nil)
+		req.ExpectParams().Return(nil)
+
+		// Close the protection context
+		r.ExpectClose(mock.MatchedBy(func(closed types.ClosedProtectionContextFace) bool {
+			events := closed.Events()
+			require.Len(t, events.AttackEvents, 2)
+			return true
+		}))
+		p.Close(response)
+		r.AssertExpectations(t)
+	})
 }
 
 func TestParseClientIPHeaderHeaderValue(t *testing.T) {

@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
 )
 
@@ -47,7 +46,7 @@ type AttackEvent struct {
 	Blocked    bool
 	Timestamp  time.Time
 	Info       interface{}
-	StackTrace errors.StackTrace
+	StackTrace []uintptr
 	AttackType string
 }
 
@@ -87,7 +86,6 @@ func (r *Record) AddUserSignup(id UserIdentifierMap, ip net.IP) {
 	r.addUserEvent(event)
 }
 
-// TODO: rename as "metrics" or "observations"
 type UserEventFace interface {
 	isUserEvent()
 }

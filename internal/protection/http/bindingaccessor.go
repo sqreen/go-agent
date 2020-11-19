@@ -7,10 +7,7 @@
 package http
 
 import (
-	"context"
-
 	"github.com/sqreen/go-agent/internal/protection/http/types"
-	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 )
 
 // RequestBindingAccessorContext is wrapper type of a request providing
@@ -42,25 +39,28 @@ func NewRequestBindingAccessorContext(r types.RequestReader) *RequestBindingAcce
 	return &RequestBindingAccessorContext{RequestReader: r}
 }
 
-func (r *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBindingAccessorContext, error) {
-	if r.RequestReader != nil {
-		return r, nil
-	}
-	ctx, ok := v.(context.Context)
-	if !ok {
-		return nil, sqerrors.Errorf("unexpected argument type `%T`: type `context.Context` expected", v)
-	}
-	reqCtx := FromContext(ctx)
-	if reqCtx == nil {
-		return nil, sqerrors.Errorf("could not get the http protection context from the context value `%#+v`: did you pass the request context?", v)
-	}
-	r.RequestReader = reqCtx.RequestReader
-	return r, nil
-}
+//func (r *RequestBindingAccessorContext) FromContext(v interface{}) (*RequestBindingAccessorContext, error) {
+//	if r.RequestReader != nil {
+//		return r, nil
+//	}
+//	ctx, ok := v.(context.Context)
+//	if !ok {
+//		return nil, sqerrors.Errorf("unexpected argument type `%T`: type `context.Context` expected", v)
+//	}
+//	reqCtx := FromContext(ctx)
+//	if reqCtx == nil {
+//		return nil, sqerrors.Errorf("could not get the http protection context from the context value `%#+v`: did you pass the request context?", v)
+//	}
+//	r.RequestReader = reqCtx.RequestReader
+//	return r, nil
+//}
 
 func (r *RequestBindingAccessorContext) FilteredParams() RequestParamMap {
-	queryForm := r.QueryForm()
-	postForm := r.PostForm()
+	// Careful: the types need to be changed to avoid types with aliases because
+	//  their conversion to JS will make the `url.Values` method names take
+	//  precedence over the field names
+	queryForm := map[string][]string(r.QueryForm())
+	postForm := map[string][]string(r.PostForm())
 	params := r.RequestReader.Params()
 
 	res := make(types.RequestParamMap, 2+len(params))

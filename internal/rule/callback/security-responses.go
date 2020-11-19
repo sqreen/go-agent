@@ -13,43 +13,56 @@ import (
 
 	"github.com/sqreen/go-agent/internal/actor"
 	"github.com/sqreen/go-agent/internal/backend/api"
-	protectioncontext "github.com/sqreen/go-agent/internal/protection/context"
-	httpprotection "github.com/sqreen/go-agent/internal/protection/http"
+	protection_context "github.com/sqreen/go-agent/internal/protection/context"
+	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
+	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
+	"github.com/sqreen/go-agent/sdk/types"
 )
 
 // Event names
 const (
-	blockIPEventName      = "app.sqreen.action.block_ip"
-	blockUserEventName    = "app.sqreen.action.block_user"
-	redirectIPEventName   = "app.sqreen.action.redirect_ip"
-	redirectUserEventName = "app.sqreen.action.redirect_user"
+	blockIPEventName      = "sq.action.block_ip"
+	blockUserEventName    = "sq.action.block_user"
+	redirectIPEventName   = "sq.action.redirect_ip"
+	redirectUserEventName = "sq.action.redirect_user"
 )
 
-func NewIPSecurityResponseCallback(RuleFace, NativeCallbackConfig) (sqhook.PrologCallback, error) {
-	return newIPSecurityResponsePrologCallback(), nil
+func NewIPSecurityResponseCallback(r RuleContext, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
+	return newIPSecurityResponsePrologCallback(r), nil
 }
 
 type securityResponseError struct{}
 
 func (securityResponseError) Error() string { return "aborted by a security response" }
 
-func newIPSecurityResponsePrologCallback() httpprotection.BlockingPrologCallbackType {
-	return func(m **httpprotection.RequestContext) (httpprotection.BlockingEpilogCallbackType, error) {
-		ctx := *m
-		ip := ctx.RequestReader.ClientIP()
-		action, exists, err := ctx.FindActionByIP(ip)
-		if err != nil {
-			ctx.Logger().Error(err)
-			return nil, nil
-		}
-		if !exists {
-			return nil, nil
-		}
-		return func(e *error) {
-			writeIPSecurityResponse(ctx, action, ip)
-			*e = securityResponseError{}
-		}, nil
+func newIPSecurityResponsePrologCallback(r RuleContext) http_protection.BlockingPrologCallbackType {
+	return func(ctx **http_protection.ProtectionContext) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
+		r.Pre(func(c CallbackContext) error {
+			p := *ctx
+			sqassert.NotNil(ctx)
+			ip := p.ClientIP()
+			action, exists, err := p.FindActionByIP(ip)
+			if err != nil {
+				type errKey struct{}
+				return sqerrors.WithKey(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP action data structure", ip), errKey{})
+			}
+
+			if !exists {
+				return nil
+			}
+
+			writeIPSecurityResponse(p, action, ip)
+
+			epilog = func(e *error) {
+				*e = types.SqreenError{Err: securityResponseError{}}
+			}
+			prologErr = nil
+			return nil
+		})
+
+		return
 	}
 }
 
@@ -57,53 +70,73 @@ func newIPSecurityResponsePrologCallback() httpprotection.BlockingPrologCallback
 // response only for redirection, otherwise it blocks with the global blocking
 // settings. The contract with the HTTP protection here is to use a distinct
 // error value according to what we need.
-func writeIPSecurityResponse(ctx *httpprotection.RequestContext, action actor.Action, ip net.IP) {
-	var properties protectioncontext.EventProperties
+func writeIPSecurityResponse(p *http_protection.ProtectionContext, action actor.Action, ip net.IP) {
+	var properties protection_context.EventProperties
 	if redirect, ok := action.(actor.RedirectAction); ok {
-		properties = newRedirectedIPEventProperties(redirect, ip)
-		ctx.TrackEvent(redirectIPEventName).WithProperties(properties)
-		writeRedirectionResponse(ctx.ResponseWriter, redirect.RedirectionURL())
+		defer handleRedirectionResponse(p, redirect.RedirectionURL())
+		properties = makeRedirectedIPEventProperties(redirect, ip)
+		p.TrackEvent(redirectIPEventName).WithProperties(properties)
 	} else {
-		properties = newBlockedIPEventProperties(action, ip)
-		ctx.TrackEvent(blockIPEventName).WithProperties(properties)
-		ctx.WriteDefaultBlockingResponse()
+		defer handleDefaultBlockingResponse(p)
+		properties = makeBlockedIPEventProperties(action, ip)
+		p.TrackEvent(blockIPEventName).WithProperties(properties)
 	}
 }
 
-func NewUserSecurityResponseCallback(RuleFace, NativeCallbackConfig) (sqhook.PrologCallback, error) {
-	return newUserSecurityResponsePrologCallback(), nil
+func NewUserSecurityResponseCallback(r RuleContext, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
+	return newUserSecurityResponsePrologCallback(r), nil
 }
 
-func newUserSecurityResponsePrologCallback() httpprotection.IdentifyUserPrologCallbackType {
-	return func(m **httpprotection.RequestContext, uid *map[string]string) (httpprotection.BlockingEpilogCallbackType, error) {
-		ctx := *m
-		id := *uid
-		action, exists := ctx.FindActionByUserID(id)
-		if !exists {
-			return nil, nil
-		}
-		return func(e *error) {
-			writeUserSecurityResponse(ctx, action, id)
-			*e = securityResponseError{}
-		}, nil
+func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.IdentifyUserPrologCallbackType {
+	return func(p **http_protection.ProtectionContext, uid *map[string]string) (epilog http_protection.BlockingEpilogCallbackType, prologErr error) {
+		r.Pre(func(c CallbackContext) error {
+			sqassert.NotNil(p)
+			p := *p
+
+			id := *uid
+			action, exists := p.FindActionByUserID(id)
+
+			if !exists {
+				return nil
+			}
+
+			writeUserSecurityResponse(p, action, id)
+
+			epilog = func(e *error) {
+				*e = types.SqreenError{Err: securityResponseError{}}
+			}
+			prologErr = nil
+			return nil
+		})
+
+		return
 	}
 }
 
-func writeUserSecurityResponse(ctx *httpprotection.RequestContext, action actor.Action, userID map[string]string) {
-	// Since this call happens in the handler, we need to close its context
-	// which also let know the HTTP protection layer that it shouldn't continue
-	// with post-handler protections.
-	defer ctx.CancelHandlerContext()
-	var properties protectioncontext.EventProperties
+func writeUserSecurityResponse(p *http_protection.ProtectionContext, action actor.Action, userID map[string]string) {
 	if redirect, ok := action.(actor.RedirectAction); ok {
-		properties = newRedirectedUserEventProperties(redirect, userID)
-		ctx.TrackEvent(redirectUserEventName).WithProperties(properties)
-		writeRedirectionResponse(ctx.ResponseWriter, redirect.RedirectionURL())
+		defer handleRedirectionResponse(p, redirect.RedirectionURL())
+		properties := makeRedirectedUserEventProperties(redirect, userID)
+		p.TrackEvent(redirectUserEventName).WithProperties(properties)
 	} else {
-		properties = newBlockedUserEventProperties(action, userID)
-		ctx.TrackEvent(blockUserEventName).WithProperties(properties)
-		ctx.WriteDefaultBlockingResponse()
+		defer handleDefaultBlockingResponse(p)
+		properties := makeBlockedUserEventProperties(action, userID)
+		p.TrackEvent(blockUserEventName).WithProperties(properties)
 	}
+}
+
+func handleDefaultBlockingResponse(p *http_protection.ProtectionContext) {
+	// Use the default attack blocking
+	p.HandleAttack(true, nil)
+}
+
+func handleRedirectionResponse(p *http_protection.ProtectionContext, location string) {
+	// We do a "low-level" protection context call to CancelContext() in order
+	// to bypass the default blocking response.
+	// It will also let the HTTP protection layer know that it shouldn't
+	// continue with request-handler post-protections.
+	defer p.CancelContext()
+	writeRedirectionResponse(p.ResponseWriter, location)
 }
 
 func writeRedirectionResponse(w http.ResponseWriter, location string) {
@@ -118,14 +151,14 @@ type blockedIPEventProperties struct {
 	ip     net.IP
 }
 
-func newBlockedIPEventProperties(action actor.Action, ip net.IP) *blockedIPEventProperties {
-	return &blockedIPEventProperties{
+func makeBlockedIPEventProperties(action actor.Action, ip net.IP) blockedIPEventProperties {
+	return blockedIPEventProperties{
 		action: action,
 		ip:     ip,
 	}
 }
-func (p *blockedIPEventProperties) MarshalJSON() ([]byte, error) {
-	pb := api.NewBlockedIPEventPropertiesFromFace(p)
+func (p blockedIPEventProperties) MarshalJSON() ([]byte, error) {
+	pb := api.NewBlockedIPEventPropertiesFromFace(&p)
 	return json.Marshal(pb)
 }
 func (p *blockedIPEventProperties) GetActionId() string {
@@ -145,23 +178,23 @@ type blockedUserEventProperties struct {
 	userID map[string]string
 }
 
-func newBlockedUserEventProperties(action actor.Action, userID map[string]string) *blockedUserEventProperties {
-	return &blockedUserEventProperties{
+func makeBlockedUserEventProperties(action actor.Action, userID map[string]string) blockedUserEventProperties {
+	return blockedUserEventProperties{
 		action: action,
 		userID: userID,
 	}
 }
-func (p *blockedUserEventProperties) MarshalJSON() ([]byte, error) {
+func (p blockedUserEventProperties) MarshalJSON() ([]byte, error) {
 	pb := api.NewBlockedUserEventPropertiesFromFace(p)
 	return json.Marshal(pb)
 }
-func (p *blockedUserEventProperties) GetActionId() string {
+func (p blockedUserEventProperties) GetActionId() string {
 	return p.action.ActionID()
 }
-func (p *blockedUserEventProperties) GetOutput() api.BlockedUserEventPropertiesOutput {
+func (p blockedUserEventProperties) GetOutput() api.BlockedUserEventPropertiesOutput {
 	return *api.NewBlockedUserEventPropertiesOutputFromFace(p)
 }
-func (p *blockedUserEventProperties) GetUser() map[string]string {
+func (p blockedUserEventProperties) GetUser() map[string]string {
 	return p.userID
 }
 
@@ -172,23 +205,23 @@ type redirectedUserEventProperties struct {
 	userID map[string]string
 }
 
-func newRedirectedUserEventProperties(action actor.Action, userID map[string]string) *redirectedUserEventProperties {
-	return &redirectedUserEventProperties{
+func makeRedirectedUserEventProperties(action actor.Action, userID map[string]string) redirectedUserEventProperties {
+	return redirectedUserEventProperties{
 		action: action,
 		userID: userID,
 	}
 }
-func (p *redirectedUserEventProperties) MarshalJSON() ([]byte, error) {
+func (p redirectedUserEventProperties) MarshalJSON() ([]byte, error) {
 	pb := api.NewRedirectedUserEventPropertiesFromFace(p)
 	return json.Marshal(pb)
 }
-func (p *redirectedUserEventProperties) GetActionId() string {
+func (p redirectedUserEventProperties) GetActionId() string {
 	return p.action.ActionID()
 }
-func (p *redirectedUserEventProperties) GetOutput() api.RedirectedUserEventPropertiesOutput {
+func (p redirectedUserEventProperties) GetOutput() api.RedirectedUserEventPropertiesOutput {
 	return *api.NewRedirectedUserEventPropertiesOutputFromFace(p)
 }
-func (p *redirectedUserEventProperties) GetUser() map[string]string {
+func (p redirectedUserEventProperties) GetUser() map[string]string {
 	return p.userID
 }
 
@@ -199,14 +232,14 @@ type redirectedIPEventProperties struct {
 	ip     net.IP
 }
 
-func newRedirectedIPEventProperties(action actor.RedirectAction, ip net.IP) *redirectedIPEventProperties {
-	return &redirectedIPEventProperties{
+func makeRedirectedIPEventProperties(action actor.RedirectAction, ip net.IP) redirectedIPEventProperties {
+	return redirectedIPEventProperties{
 		action: action,
 		ip:     ip,
 	}
 }
-func (p *redirectedIPEventProperties) MarshalJSON() ([]byte, error) {
-	pb := api.NewRedirectedIPEventPropertiesFromFace(p)
+func (p redirectedIPEventProperties) MarshalJSON() ([]byte, error) {
+	pb := api.NewRedirectedIPEventPropertiesFromFace(&p)
 	return json.Marshal(pb)
 }
 func (p *redirectedIPEventProperties) GetActionId() string {

@@ -11,7 +11,7 @@ import (
 )
 
 type CommandManager struct {
-	logger   *plog.Logger
+	logger   plog.DebugLevelLogger
 	agent    CommandManagerAgent
 	handlers map[string]CommandHandler
 }
@@ -30,9 +30,10 @@ type CommandManagerAgent interface {
 	SetPathPasslist([]string) error
 	ReloadRules() (rulespackID string, err error)
 	SendAppBundle() error
+	SetPerformanceBudget(budget float64) error
 }
 
-func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandManager {
+func NewCommandManager(agent CommandManagerAgent, logger plog.DebugLevelLogger) *CommandManager {
 	mng := &CommandManager{
 		agent:  agent,
 		logger: logger,
@@ -47,6 +48,7 @@ func NewCommandManager(agent CommandManagerAgent, logger *plog.Logger) *CommandM
 		"rules_reload":           mng.ReloadRules,
 		"get_bundle":             mng.GetBundle,
 		"paths_whitelist":        mng.SetPathPasslist,
+		"performance_budget":     mng.SetPerformanceBudget,
 	}
 
 	return mng
@@ -123,6 +125,22 @@ func (m *CommandManager) SetPathPasslist(args []json.RawMessage) (string, error)
 	return "", m.agent.SetPathPasslist(paths)
 }
 
+func (m *CommandManager) SetPerformanceBudget(args []json.RawMessage) (string, error) {
+	if argc := len(args); argc != 1 {
+		return "", fmt.Errorf("unexpected number of arguments: expected 1 argument but got %d", argc)
+	}
+	var v *float64
+	arg0 := args[0]
+	if err := json.Unmarshal(arg0, &v); err != nil {
+		return "", err
+	}
+	var budget float64
+	if v != nil {
+		budget = *v
+	}
+	return "", m.agent.SetPerformanceBudget(budget)
+}
+
 func (m *CommandManager) ReloadRules([]json.RawMessage) (string, error) {
 	return m.agent.ReloadRules()
 }
@@ -132,7 +150,7 @@ func (m *CommandManager) GetBundle([]json.RawMessage) (string, error) {
 }
 
 // commandResult converts an error to a command result API object.
-func commandResult(logger *plog.Logger, output string, err error) api.CommandResult {
+func commandResult(logger plog.ErrorLogger, output string, err error) api.CommandResult {
 	if err != nil {
 		logger.Error(errors.Wrap(err, "command error"))
 		return api.CommandResult{

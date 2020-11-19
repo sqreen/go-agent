@@ -59,7 +59,7 @@ func (e *ExceptionEvent) GetContext() api.ExceptionContext {
 
 func (e *ExceptionEvent) GetBacktrace() []api.StackFrame {
 	st := sqerrors.StackTrace(e.err)
-	return stackTraceAPIAdapter(st).GetBacktrace()
+	return errorStackTraceAPIAdapter(st).GetBacktrace()
 }
 
 func (e *ExceptionEvent) GetInfos() interface{} {
@@ -81,10 +81,11 @@ func (f apiStackFrame) GetLineNumber() int {
 }
 
 type closedHTTPRequestContextEvent struct {
-	rulepackID string
-	request    types.RequestReader
-	response   types.ResponseFace
-	events     event.Recorded
+	start, finish time.Time
+	rulepackID    string
+	request       types.RequestReader
+	response      types.ResponseFace
+	events        event.Recorded
 }
 
 func (e *closedHTTPRequestContextEvent) shouldSend() bool {
@@ -108,8 +109,10 @@ func (e *closedHTTPRequestContextEvent) shouldSend() bool {
 	return false
 }
 
-func newClosedHTTPRequestContextEvent(rulepackID string, response types.ResponseFace, request types.RequestReader, events event.Recorded) *closedHTTPRequestContextEvent {
+func newClosedHTTPRequestContextEvent(rulepackID string, start, finish time.Time, response types.ResponseFace, request types.RequestReader, events event.Recorded) *closedHTTPRequestContextEvent {
 	return &closedHTTPRequestContextEvent{
+		start:      start,
+		finish:     finish,
 		rulepackID: rulepackID,
 		request:    request,
 		response:   response,
