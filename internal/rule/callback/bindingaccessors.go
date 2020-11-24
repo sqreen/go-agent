@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	grpc_protection "github.com/sqreen/go-agent/internal/protection/http/grpc"
 	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqgo"
@@ -210,6 +211,8 @@ func NewRequestBindingAccessorContext(p ProtectionContext) (*HTTPRequestBindingA
 		return nil, sqerrors.Errorf("unexpected request type `%T`", actual)
 
 	case *http_protection.ProtectionContext:
+		return NewHTTPRequestBindingAccessorContext(actual.RequestReader), nil
+	case *grpc_protection.UnaryRPCProtectionContext:
 		return NewHTTPRequestBindingAccessorContext(actual.RequestReader), nil
 	}
 }
