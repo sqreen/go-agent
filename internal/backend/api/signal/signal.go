@@ -239,14 +239,14 @@ func newAgentExceptionPayload(klass, message string, infos interface{}) *api.Sig
 }
 
 func FromLegacyMetrics(metrics []legacy_api.MetricsTimeBucket, agentVersion string, logger plog.ErrorLogger) api.Batch {
-	batch := make(api.Batch, len(metrics))
-	for i, metric := range metrics {
+	batch := make(api.Batch, 0, len(metrics))
+	for _, metric := range metrics {
 		metric, err := convertLegacyMetrics(&metric, agentVersion)
 		if err != nil {
 			logger.Error(err)
-		} else {
-			batch[i] = metric
+			continue
 		}
+		batch = append(batch, metric)
 	}
 	return batch
 }

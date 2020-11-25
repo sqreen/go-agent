@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"runtime"
 	"sync"
@@ -194,7 +195,7 @@ type staticMetrics struct {
 	allowedIP,
 	allowedPath,
 	callCounts *metrics.TimeHistogram
-	requestTime, sqreenTime, sqreenOverheadPercentage *metrics.PerfHistogram
+	requestTime, sqreenTime, sqreenOverheadRate *metrics.PerfHistogram
 }
 
 // Error channel buffer length.
@@ -256,7 +257,12 @@ func New(cfg *config.Config) *AgentType {
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "`req` performance histogram constructor error"))
 	}
-	sqOverheadPercentage, err := metrics.PerfHistogram("pct", perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+
+	const (
+		sqreenOverheadRateBase = 1.3
+		sqreenOverheadRateUnit = 1.0
+	)
+	sqOverheadRate, err := metrics.PerfHistogram("pct", sqreenOverheadRateUnit, sqreenOverheadRateBase, perfHistogramPeriod)
 	if err != nil {
 		logger.Error(sqerrors.Wrap(err, "`pct` performance histogram constructor error"))
 	}
@@ -269,14 +275,14 @@ func New(cfg *config.Config) *AgentType {
 		isDone:        make(chan struct{}),
 		metrics:       metrics,
 		staticMetrics: staticMetrics{
-			sdkUserLoginSuccess:      metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod, 60000),
-			sdkUserLoginFailure:      metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod, 60000),
-			sdkUserSignup:            metrics.TimeHistogram("sdk-signup", sdkMetricsPeriod, 60000),
-			allowedIP:                metrics.TimeHistogram("whitelisted", sdkMetricsPeriod, 60000),
-			allowedPath:              metrics.TimeHistogram("whitelisted_paths", sdkMetricsPeriod, 60000),
-			requestTime:              req,
-			sqreenTime:               sq,
-			sqreenOverheadPercentage: sqOverheadPercentage,
+			sdkUserLoginSuccess: metrics.TimeHistogram("sdk-login-success", sdkMetricsPeriod, 60000),
+			sdkUserLoginFailure: metrics.TimeHistogram("sdk-login-fail", sdkMetricsPeriod, 60000),
+			sdkUserSignup:       metrics.TimeHistogram("sdk-signup", sdkMetricsPeriod, 60000),
+			allowedIP:           metrics.TimeHistogram("whitelisted", sdkMetricsPeriod, 60000),
+			allowedPath:         metrics.TimeHistogram("whitelisted_paths", sdkMetricsPeriod, 60000),
+			requestTime:         req,
+			sqreenTime:          sq,
+			sqreenOverheadRate:  sqOverheadRate,
 		},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -322,9 +328,12 @@ func (a *AgentType) sendClosedHTTPProtectionContext(ctx http_protection_types.Cl
 		a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
 	}
 
-	sqOverhead := 100 * sq / (req - sq)
-	if err := a.staticMetrics.sqreenOverheadPercentage.Add(sqOverhead); err != nil {
-		a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
+	if overheadRate, err := overheadRate(req, sq); err != nil {
+		if err := a.staticMetrics.sqreenOverheadRate.Add(overheadRate); err != nil {
+			a.logger.Error(sqerrors.Wrap(err, "could not add sqreen overhead rate"))
+		}
+	} else {
+		a.logger.Error(sqerrors.Wrap(err, "sqreen overhead rate calculation error"))
 	}
 
 	event := newClosedHTTPRequestContextEvent(a.RulespackID(), start, finish, ctx.Response(), ctx.Request(), events)
@@ -332,6 +341,27 @@ func (a *AgentType) sendClosedHTTPProtectionContext(ctx http_protection_types.Cl
 		return
 	}
 	a.eventMng.send(event)
+}
+
+func overheadRate(req float64, sq float64) (rate float64, err error) {
+	if req <= 0 || math.IsNaN(req) || math.IsInf(req, 0) {
+		return 0, sqerrors.Errorf("unexpected req value `%v`", req)
+	}
+	if sq <= 0 || math.IsNaN(sq) || math.IsInf(sq, 0) {
+		return 0, sqerrors.Errorf("unexpected sq value `%v`", sq)
+	}
+	if req < sq {
+		return 0, sqerrors.Errorf("unexpected req `%v` and sq `%v` values: req should be greater or equal to sq", req, sq)
+	}
+	if req == sq {
+		return 100, nil
+	}
+
+	userTime := req - sq
+	if userTime == 0 {
+		return 100, nil
+	}
+	return 100 * sq / userTime, nil
 }
 
 type withNotificationError struct {
