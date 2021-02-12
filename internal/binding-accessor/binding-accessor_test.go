@@ -5,6 +5,7 @@
 package bindingaccessor_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +13,12 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/antonmedv/expr"
+	"github.com/antonmedv/expr/vm"
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/checker/decls"
+	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/rego"
 	bindingaccessor "github.com/sqreen/go-agent/internal/binding-accessor"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
@@ -661,4 +668,139 @@ type FlattenedResult []interface{}
 
 func requireEqualFlatResult(t *testing.T, expected FlattenedResult, value interface{}) {
 	require.ElementsMatch(t, expected, value)
+}
+
+func BenchmarkEvaluation(b *testing.B) {
+	b.Run("hello world", func(b *testing.B) {
+		//ctx := struct{ A struct{ B string } }{A: struct{ B string }{B: "Hello World"}}
+		//_ = ctx
+		//ctxM := map[string]interface{}{"A": map[string]interface{}{"B": "Hello World"}}
+		//ctx := map[string]interface{}{"v": http.Header{"A": []string{"Hello World"}}}
+		ctx := [][][][][][][][][][]string{{{{{{{{{{"Hello World"}}}}}}}}}}
+
+		b.Run("ba", func(b *testing.B) {
+			ba, err := bindingaccessor.Compile(`#[0][0][0][0][0][0][0][0][0][0]`)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for n := 0; n < b.N; n++ {
+				v, err := ba(ctx)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if a, ok := v.(string); !ok || a != "Hello World" {
+					b.Fatal("unexpected value", v)
+				}
+			}
+		})
+
+		b.Run("expr", func(b *testing.B) {
+			program, err := expr.Compile(`A[0][0][0][0][0][0][0][0][0][0]`)
+			if err != nil {
+				panic(err)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			vm := vm.VM{}
+			for n := 0; n < b.N; n++ {
+				v, err := vm.Run(program, struct{ A interface{} }{ctx})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if a, ok := v.(string); !ok || a != "Hello World" {
+					b.Fatal("unexpected value", v)
+				}
+			}
+		})
+
+		b.Run("cel", func(b *testing.B) {
+			d := cel.Declarations(decls.NewVar("req", decls.Dyn))
+			env, err := cel.NewEnv(d)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			ast, iss := env.Compile(`req.Header`)
+			// Check iss for compilation errors.
+			if iss.Err() != nil {
+				b.Fatal(iss.Err())
+			}
+			prg, err := env.Program(ast)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for n := 0; n < b.N; n++ {
+				v, _, err := prg.Eval(map[string]interface{}{"req": &http.Request{}})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if a, ok := v.Value().(string); !ok || a != "Hello World" {
+					b.Fatal("unexpected value", v)
+				}
+			}
+		})
+
+		b.Run("rego", func(b *testing.B) {
+			ctx := context.Background()
+
+			// Define a simple policy.
+			module := `
+		package example
+
+		default allow = false
+
+		allow {
+			input.identity = "admin"
+		}
+
+		allow {
+			input.method = "GET"
+		}
+	`
+
+			// Compile the module. The keys are used as identifiers in error messages.
+			compiler, _ := ast.CompileModules(map[string]string{
+				"example.rego": module,
+			})
+
+			// Create a new query that uses the compiled policy from above.
+			r := rego.New(
+				rego.Query("data.example.allow"),
+				rego.Compiler(compiler),
+			)
+
+			// Prepare for evaluation
+			pq, err := r.PrepareForEval(ctx)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			input := rego.EvalInput(
+				map[string]interface{}{
+					"identity": "bob",
+					"method":   "GET",
+				},
+			)
+
+			// Run evaluation.
+			b.ReportAllocs()
+			b.ResetTimer()
+			for n := 0; n < b.N; n++ {
+				rs, err := pq.Eval(ctx, input)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if rs[0].Expressions[0].Value.(bool) != true {
+					b.Fatal()
+				}
+			}
+		})
+	})
 }

@@ -315,8 +315,12 @@ func (r requestReaderImpl) RemoteAddr() string {
 	return r.r.RemoteAddr
 }
 
-func (r requestReaderImpl) IsTLS() bool {
-	return r.r.TLS != nil
+func (r requestReaderImpl) Transport() string {
+	if r.r.TLS != nil {
+		return "https"
+	} else {
+		return "http"
+	}
 }
 
 func (r requestReaderImpl) QueryForm() url.Values {

@@ -216,9 +216,14 @@ type Rule struct {
 	AttackType        string             `json:"attack_type"`
 	Priority          int                `json:"priority"`
 	CallCountInterval int                `json:"call_count_interval"`
+	Reactive          *RuleReactive      `json:"reactive"`
 }
 
 type RuleConditions struct{}
+
+type RuleReactive struct {
+	AuthorizedAddresses []string `json:"authorized_addresses"`
+}
 
 type (
 	RuleCallbacks struct {
@@ -278,10 +283,11 @@ type RuleDataValues []RuleDataEntry
 type RuleDataEntry Struct
 
 const (
-	CustomErrorPageType = "custom_error_page"
-	RedirectionType     = "redirection"
-	WAFType             = "waf"
-	CustomType          = "custom"
+	CustomErrorPageType    = "custom_error_page"
+	RedirectionType        = "redirection"
+	BindingAccessorWAFType = "waf"
+	ReactiveWAFType        = "waf2"
+	CustomType             = "custom"
 )
 
 type CustomRuleDataEntry map[string]interface{}
@@ -294,10 +300,19 @@ type RedirectionRuleDataEntry struct {
 	RedirectionURL string `json:"redirection_url"`
 }
 
-type WAFRuleDataEntry struct {
+type CommonWAFRuleDataEntry struct {
+	WAFRules string `json:"waf_rules"`
+	Timeout  uint64 `json:"max_budget_ms"`
+}
+
+type BindingAccessorWAFRuleDataEntry struct {
+	CommonWAFRuleDataEntry
 	BindingAccessors []string `json:"binding_accessors"`
-	WAFRules         string   `json:"waf_rules"`
-	Timeout          uint64   `json:"max_budget_ms"`
+}
+
+type ReactiveWAFRuleDataEntry struct {
+	CommonWAFRuleDataEntry
+	Subscriptions [][]string `json:"rule_request"`
 }
 
 type ReflectedCallbackBindingAccessorConfig struct {
@@ -402,16 +417,7 @@ type RequestRecord_Request_Header struct {
 	Value string `json:"value"`
 }
 
-type RequestRecord_Request_Parameters struct {
-	// Query parameters
-	Query map[string][]string `json:"query,omitempty"`
-	// application/x-www-form-urlencoded or multipart/form-data parameters
-	Form map[string][]string `json:"form,omitempty"`
-	// Framework-specific parameters
-	Params map[string][]interface{} `json:"params,omitempty"`
-	// Raw body string
-	RawBody string `json:"rawbody,omitempty"`
-}
+type RequestRecord_Request_Parameters map[string]interface{}
 
 type RequestRecord_Response struct {
 	Status        int    `json:"status"`
@@ -434,24 +440,29 @@ type RequestRecord_Observed_Attack struct {
 	Backtrace  []StackFrame `json:"backtrace,omitempty"`
 }
 
-type WAFAttackInfo struct {
-	WAFData json.RawMessage `json:"waf_data"`
-}
+type (
+	WAFAttackInfo struct {
+		WAFData json.RawMessage `json:"waf_data"`
+	}
 
-type WAFInfoFilter struct {
-	Operator        string `json:"operator"`
-	OperatorValue   string `json:"operator_value"`
-	BindingAccessor string `json:"binding_accessor"`
-	ResolvedValue   string `json:"resolved_value"`
-	MatchStatus     string `json:"match_status,omitempty"`
-}
-type WAFInfo struct {
-	RetCode int             `json:"ret_code"`
-	Flow    string          `json:"flow"`
-	Step    string          `json:"step"`
-	Rule    string          `json:"rule"`
-	Filter  []WAFInfoFilter `json:"filter"`
-}
+	WAFInfo struct {
+		RetCode int             `json:"ret_code"`
+		Flow    string          `json:"flow"`
+		Step    string          `json:"step"`
+		Rule    string          `json:"rule"`
+		Filter  []WAFInfoFilter `json:"filter"`
+	}
+
+	WAFInfoFilter struct {
+		Operator        string        `json:"operator"`
+		OperatorValue   string        `json:"operator_value"`
+		BindingAccessor string        `json:"binding_accessor"`
+		ResolvedValue   string        `json:"resolved_value"`
+		MatchStatus     string        `json:"match_status,omitempty"`
+		ManifestKey     string        `json:"manifest_key"`
+		KeyPath         []interface{} `json:"key_path"`
+	}
+)
 
 // Scrub of WAF attack information by implementing spec 22. This is a temporary
 // solution until a better WAF API is provided that would avoid that.
@@ -473,7 +484,7 @@ func (i *WAFAttackInfo) Scrub(scrubber *sqsanitize.Scrubber, info sqsanitize.Inf
 	for sanitized := range info {
 		re, err := regexp.Compile(`(?i)` + regexp.QuoteMeta(sanitized))
 		if err != nil {
-			return false, sqerrors.Wrapf(err, "could not ")
+			return false, sqerrors.Wrapf(err, "could not compile the regular expression `%s`", `(?i)`+regexp.QuoteMeta(sanitized))
 		}
 
 		for e := range wafInfo {

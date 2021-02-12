@@ -80,6 +80,7 @@ func Middleware() echo.MiddlewareFunc {
 				return next(c)
 			}
 			defer cancel()
+			c.SetRequest(c.Request().WithContext(ctx.Context()))
 			return middlewareHandlerFromRootProtectionContext(ctx, next, c)
 		}
 	}

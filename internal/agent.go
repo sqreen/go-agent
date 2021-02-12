@@ -8,9 +8,7 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"runtime"
 	"sync"
@@ -219,7 +217,7 @@ func New(cfg *config.Config) *AgentType {
 		logger.Error(sqerrors.Wrap(err, "ecdsa public key"))
 		return nil
 	}
-	rulesEngine := rule.NewEngine(logger, nil, metrics, publicKey, perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
+	rulesEngine := rule.NewEngine(cfg, logger, nil, metrics, publicKey, perfHistogramUnit, perfHistogramBase, perfHistogramPeriod)
 
 	// Early health checking
 	if err := rulesEngine.Health(agentVersion); err != nil {
@@ -229,10 +227,10 @@ func New(cfg *config.Config) *AgentType {
 		return nil
 	}
 
-	if waf.Version() == nil {
-		message := "in-app waf disabled: cgo was disabled during the program compilation while required by the in-app waf"
+	if err := waf.Health(); err != nil {
+		message := fmt.Sprintf("In-App WAF disabled: %s", err)
 		backend.SendAgentMessage(logger, cfg, message)
-		logger.Info("agent: ", message)
+		logger.Infof("agent: %s", message)
 	}
 
 	// TODO: remove this SDK metrics period config when the corresponding js rule
@@ -363,7 +361,10 @@ func (a *AgentType) Serve() error {
 	}
 
 	// Load the rulepack side car
-	a.rules.SetRules(appLoginRes.PackID, appLoginRes.Rules)
+	if appLoginRes.PackID != "" {
+		a.rules.SetRules(appLoginRes.PackID, appLoginRes.Rules)
+	}
+
 	// Load the actionpack side car
 	if err := a.actors.SetActions(appLoginRes.Actions); err != nil {
 		a.logger.Error(sqerrors.Wrap(err, "could not load the list of actions taken from the login response"))
@@ -416,6 +417,7 @@ func (a *AgentType) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(a.ctx, &appBeatReq)
 			if err != nil {
+				// TODO: make it networking error metrics
 				a.logger.Error(sqerrors.Wrap(err, "heartbeat failed"))
 				continue
 			}
@@ -523,21 +525,6 @@ func (a *AgentType) ReloadRules() (string, error) {
 	if err != nil {
 		a.logger.Error(err)
 		return "", err
-	}
-
-	// Insert local rules if any
-	if localRulesJSON := a.config.LocalRulesFile(); localRulesJSON != "" {
-		buf, err := ioutil.ReadFile(localRulesJSON)
-		if err == nil {
-			var localRules []api.Rule
-			err = json.Unmarshal(buf, &localRules)
-			if err == nil {
-				rulespack.Rules = append(rulespack.Rules, localRules...)
-			}
-		}
-		if err != nil {
-			a.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
-		}
 	}
 
 	a.rules.SetRules(rulespack.PackID, rulespack.Rules)

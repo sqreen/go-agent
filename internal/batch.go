@@ -83,7 +83,7 @@ func (f apiStackFrame) GetLineNumber() int {
 type closedHTTPRequestContextEvent struct {
 	start, finish time.Time
 	rulepackID    string
-	request       types.RequestReader
+	request       types.ClosedRequestReader
 	response      types.ResponseFace
 	events        event.Recorded
 }
@@ -109,7 +109,7 @@ func (e *closedHTTPRequestContextEvent) shouldSend() bool {
 	return false
 }
 
-func newClosedHTTPRequestContextEvent(rulepackID string, start, finish time.Time, response types.ResponseFace, request types.RequestReader, events event.Recorded) *closedHTTPRequestContextEvent {
+func newClosedHTTPRequestContextEvent(rulepackID string, start, finish time.Time, response types.ResponseFace, request types.ClosedRequestReader, events event.Recorded) *closedHTTPRequestContextEvent {
 	return &closedHTTPRequestContextEvent{
 		start:      start,
 		finish:     finish,

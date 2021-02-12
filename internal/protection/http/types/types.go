@@ -34,49 +34,43 @@ type ConfigReader interface {
 	HTTPClientIPHeaderFormat() string
 }
 
-// RequestReader is the read-only interface to the request.
-type RequestReader interface {
-	Header(header string) (value *string)
-	Headers() http.Header
-	Method() string
-	URL() *url.URL
-	RequestURI() string
-	Host() string
-	RemoteAddr() string
-	IsTLS() bool
-	UserAgent() string
-	Referer() string
-	QueryForm() url.Values
-	PostForm() url.Values
-	ClientIP() net.IP
-	// Params returns the request parameters parsed by the handler so far at the
-	// moment of the call.
-	Params() RequestParamMap
-	// Body returns the body bytes read by the handler so far at the moment of the
-	// call.
-	Body() []byte
-}
-
 type (
-	// RequestParamValueMap is the map of request param values per param name.
-	// The slice of values allows to have multiple values per param name. For
-	// example, the same request parameter name can be use both in the query and
-	// form parameters.
-	RequestParamMap map[string]RequestParamValueSlice
-	// RequestParamValueSlice is the slice of request param values.
-	// Note that this is a type alias to allow conversions to []interface{},
-	// so that map[string]RequestParamValueSlice and map[string][]interface{} are
-	// considered the same type.
-	RequestParamValueSlice = []interface{}
+	// RequestReader is the read-only interface to the request.
+	RequestReader interface {
+		Headers() http.Header
+		Method() string
+		URL() *url.URL
+		Host() string
+		RemoteAddr() string
+		UserAgent() string
+		Referer() string
+		Transport() string
+		RequestURI() string
+	}
+
+	// RequestPathParamsGetter is an optional interface for HTTP frameworks
+	// having request path parameters such as `/path/:arg1/:arg2`.
+	RequestPathParamsGetter interface {
+		PathParams() interface{}
+	}
+
+	RequestBindingAccessorReader interface {
+		RequestReader
+		Body() []byte
+		Params() RequestParamMap
+	}
+
+	ClosedRequestReader interface {
+		ClientIP() net.IP
+		Params() RequestParamMap
+		RequestReader
+	}
 )
 
-func (m *RequestParamMap) Add(key string, value interface{}) {
-	if *m == nil {
-		*m = make(RequestParamMap)
-	}
-	params := (*m)[key]
-	(*m)[key] = append(params, value)
-}
+type (
+	// RequestParamMap is the map of request param values per span address name.
+	RequestParamMap map[string]interface{}
+)
 
 // ResponseWriter is the response writer interface.
 type ResponseWriter interface {
@@ -92,7 +86,7 @@ type ResponseFace interface {
 
 type ClosedProtectionContextFace interface {
 	Response() ResponseFace
-	Request() RequestReader
+	Request() ClosedRequestReader
 	Events() event.Recorded
 	Start() time.Time
 	Duration() time.Duration

@@ -60,16 +60,13 @@ func (a *closedHTTPRequestContextEventAPIAdapter) GetEnd() time.Time {
 }
 
 type httpRequestAPIAdapter struct {
-	adaptee            types.RequestReader
+	adaptee            types.ClosedRequestReader
 	stripHTTPReferer   bool
 	httpClientIPHeader string
 }
 
 func (a *httpRequestAPIAdapter) GetRid() string {
-	if rid := a.adaptee.Header("X-Request-Id"); rid != nil {
-		return *rid
-	}
-	return ""
+	return a.adaptee.Headers().Get("X-Request-Id")
 }
 
 func (a *httpRequestAPIAdapter) GetHeaders() []api.RequestRecord_Request_Header {
@@ -77,12 +74,15 @@ func (a *httpRequestAPIAdapter) GetHeaders() []api.RequestRecord_Request_Header 
 	if extraHeader := a.httpClientIPHeader; extraHeader != "" {
 		trackedHeaders = append(trackedHeaders, extraHeader)
 	}
-	var headers []api.RequestRecord_Request_Header
+	var (
+		reqHeaders = a.adaptee.Headers()
+		headers    []api.RequestRecord_Request_Header
+	)
 	for _, header := range trackedHeaders {
-		if value := a.adaptee.Header(header); value != nil {
+		if value := reqHeaders.Get(header); value != "" {
 			headers = append(headers, api.RequestRecord_Request_Header{
 				Key:   header,
-				Value: *value,
+				Value: value,
 			})
 		}
 	}
@@ -117,11 +117,7 @@ func (a *httpRequestAPIAdapter) GetRemotePort() string {
 }
 
 func (a *httpRequestAPIAdapter) GetScheme() string {
-	if a.adaptee.IsTLS() {
-		return "https"
-	} else {
-		return "http"
-	}
+	return a.adaptee.Transport()
 }
 
 func (a *httpRequestAPIAdapter) GetUserAgent() string {
@@ -136,21 +132,7 @@ func (a *httpRequestAPIAdapter) GetReferer() string {
 }
 
 func (a *httpRequestAPIAdapter) GetParameters() api.RequestRecord_Request_Parameters {
-	req := a.adaptee
-	// .Form and .PostForm are taken as is, without calling `ParseForm()` so
-	// that we take what has been done during the request handling.
-	// So they can be nil even if there were form parameters in the
-	// body.
-	var rawBody string
-	if len(req.Body()) > 0 {
-		rawBody = "<Redacted By Sqreen>"
-	}
-	return api.RequestRecord_Request_Parameters{
-		Query:   req.QueryForm(),
-		Form:    req.PostForm(),
-		Params:  req.Params(),
-		RawBody: rawBody,
-	}
+	return api.RequestRecord_Request_Parameters(a.adaptee.Params())
 }
 
 func (a closedHTTPRequestContextEventAPIAdapter) GetRequest() api.RequestRecord_Request {

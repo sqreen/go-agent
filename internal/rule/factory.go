@@ -7,11 +7,12 @@ package rule
 import (
 	"github.com/sqreen/go-agent/internal/backend/api"
 	"github.com/sqreen/go-agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/internal/span"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
-// NewCallback returns the callback object or function for the given callback
+// NewNativeCallback returns the callback object or function for the given callback
 // name. An error is returned if the callback name is unknown or an error
 // occurred during the constructor call.
 func NewNativeCallback(name string, ctx *nativeRuleContext, cfg callback.NativeCallbackConfig) (prolog sqhook.PrologCallback, err error) {
@@ -30,8 +31,8 @@ func NewNativeCallback(name string, ctx *nativeRuleContext, cfg callback.NativeC
 	case "MonitorHTTPStatusCode":
 		ctx.SetCritical(true)
 		callbackCtor = callback.NewMonitorHTTPStatusCodeCallback
-	case "WAF":
-		callbackCtor = callback.NewWAFCallback
+	//case "WAF":
+	//	callbackCtor = callback.NewWAFCallback
 	case "IPSecurityResponse":
 		ctx.SetCritical(true)
 		callbackCtor = callback.NewIPSecurityResponseCallback
@@ -54,6 +55,7 @@ func NewReflectedCallback(name string, r callback.RuleContext, rule *api.Rule) (
 	switch name {
 	default:
 		return nil, sqerrors.Errorf("undefined reflected callback name `%s`", name)
+
 	case "", "JSExec":
 		cfg, err := newJSReflectedCallbackConfig(rule)
 		if err != nil {
@@ -61,15 +63,24 @@ func NewReflectedCallback(name string, r callback.RuleContext, rule *api.Rule) (
 		}
 		return callback.NewJSExecCallback(r, cfg)
 
-	case "FunctionWAF":
-		cfg, err := newReflectedCallbackConfig(rule)
-		if err != nil {
-			return nil, sqerrors.Wrap(err, "configuration error")
-		}
-		callbacks, ok := rule.Callbacks.RuleCallbacksNode.(*api.RuleFunctionWAFCallbacks)
-		if !ok {
-			return nil, sqerrors.Errorf("unexpected callbacks type `%T` instead of `%T`", rule.Callbacks.RuleCallbacksNode, callbacks)
-		}
-		return callback.NewFunctionWAFCallback(r, cfg, callbacks)
+		//case "FunctionWAF":
+		//	cfg, err := newReflectedCallbackConfig(rule)
+		//	if err != nil {
+		//		return nil, sqerrors.Wrap(err, "configuration error")
+		//	}
+		//	callbacks, ok := rule.Callbacks.RuleCallbacksNode.(*api.RuleFunctionWAFCallbacks)
+		//	if !ok {
+		//		return nil, sqerrors.Errorf("unexpected callbacks type `%T` instead of `%T`", rule.Callbacks.RuleCallbacksNode, callbacks)
+		//	}
+		//	return callback.NewFunctionWAFCallback(r, cfg, callbacks)
+	}
+}
+
+func newReactiveCallback(name string, ctx *nativeRuleContext, cfg callback.NativeCallbackConfig) (span.EventListener, error) {
+	switch name {
+	default:
+		return nil, sqerrors.Errorf("undefined reactive callback name `%s`", name)
+	case "ReactiveWAF":
+		return callback.NewReactiveWAFCallback(ctx, cfg)
 	}
 }

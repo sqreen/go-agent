@@ -150,22 +150,6 @@ type WAFBindingAccessorContextType struct {
 	BindingAccessorResultCache
 }
 
-func MakeWAFCallbackBindingAccessorContext(c CallbackContext) (WAFBindingAccessorContextType, error) {
-	switch protCtx := c.ProtectionContext().(type) {
-	case *http_protection.ProtectionContext:
-		return makeHTTPWAFCallbackBindingAccessorContext(protCtx.RequestReader), nil
-	default:
-		return WAFBindingAccessorContextType{}, sqerrors.Errorf("unexpected protection context type `%T`", protCtx)
-	}
-}
-
-func makeHTTPWAFCallbackBindingAccessorContext(request http_protection_types.RequestReader) WAFBindingAccessorContextType {
-	return WAFBindingAccessorContextType{
-		HTTPRequestBindingAccessorContext: MakeHTTPRequestBindingAccessorContext(request),
-		BindingAccessorResultCache:        MakeBindingAccessorResultCache(),
-	}
-}
-
 type FuncCallBindingAccessorContextType struct {
 	Args []interface{}
 	Rets []interface{}
@@ -210,16 +194,16 @@ func NewRequestBindingAccessorContext(p ProtectionContext) (*HTTPRequestBindingA
 		return nil, sqerrors.Errorf("unexpected request type `%T`", actual)
 
 	case *http_protection.ProtectionContext:
-		return NewHTTPRequestBindingAccessorContext(actual.RequestReader), nil
+		return NewHTTPRequestBindingAccessorContext(actual.RequestBindingAccessorReader()), nil
 	}
 }
 
-func NewHTTPRequestBindingAccessorContext(req http_protection_types.RequestReader) *HTTPRequestBindingAccessorContext {
+func NewHTTPRequestBindingAccessorContext(req http_protection_types.RequestBindingAccessorReader) *HTTPRequestBindingAccessorContext {
 	ctx := MakeHTTPRequestBindingAccessorContext(req)
 	return &ctx
 }
 
-func MakeHTTPRequestBindingAccessorContext(request http_protection_types.RequestReader) HTTPRequestBindingAccessorContext {
+func MakeHTTPRequestBindingAccessorContext(request http_protection_types.RequestBindingAccessorReader) HTTPRequestBindingAccessorContext {
 	return HTTPRequestBindingAccessorContext{
 		Request: http_protection.NewRequestBindingAccessorContext(request),
 	}

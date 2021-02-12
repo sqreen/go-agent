@@ -20,26 +20,28 @@ package rule
 
 import (
 	"crypto/ecdsa"
+	"encoding/json"
 	"io"
+	"io/ioutil"
 	"sort"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/sqreen/go-agent/internal/backend/api"
+	"github.com/sqreen/go-agent/internal/config"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
+	"github.com/sqreen/go-agent/internal/span"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
 )
 
 type Engine struct {
-	logger plog.DebugLevelLogger
-	// Map rules to their corresponding symbol in order to be able to modify them
-	// at run time by atomically replacing a running rule.
-	// TODO: write a test to check two HookFaces are correctly comparable
-	//   to find back a hook
-	hooks                                hookDescriptorMap
-	packID                               string
+	config                               *config.Config
+	logger                               plog.DebugLevelLogger
 	enabled                              bool
+	rulepack                             *rulepack
 	metricsEngine                        *metrics.Engine
 	publicKey                            *ecdsa.PublicKey
 	instrumentationEngine                InstrumentationFace
@@ -47,13 +49,20 @@ type Engine struct {
 	perfHistogramPeriod                  time.Duration
 }
 
+type rulepack struct {
+	id                string
+	hooks             hookDescriptorMap
+	reactiveCallbacks []span.EventListener
+}
+
 // NewEngine returns a new rule engine.
-func NewEngine(logger plog.DebugLevelLogger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) *Engine {
+func NewEngine(cfg *config.Config, logger plog.DebugLevelLogger, instrumentationEngine InstrumentationFace, metricsEngine *metrics.Engine, publicKey *ecdsa.PublicKey, perfHistogramUnit, perfHistogramBase float64, perfHistogramPeriod time.Duration) *Engine {
 	if instrumentationEngine == nil {
 		instrumentationEngine = defaultInstrumentationEngine
 	}
 
 	return &Engine{
+		config:                cfg,
 		logger:                logger,
 		metricsEngine:         metricsEngine,
 		publicKey:             publicKey,
@@ -69,28 +78,72 @@ func (e *Engine) Health(expectedVersion string) error {
 	return e.instrumentationEngine.Health(expectedVersion)
 }
 
+func (e *Engine) setRulepack(p *rulepack) {
+	addr := (*unsafe.Pointer)(unsafe.Pointer(&e.rulepack))
+	atomic.StorePointer(addr, unsafe.Pointer(p))
+}
+
+func (e *Engine) getRulepack() *rulepack {
+	addr := (*unsafe.Pointer)(unsafe.Pointer(&e.rulepack))
+	ptr := atomic.LoadPointer(addr)
+	if ptr == nil {
+		return nil
+	}
+	return (*rulepack)(ptr)
+}
+
 // PackID returns the ID of the current pack of rules.
-func (e *Engine) PackID() string {
-	return e.packID
+func (e *Engine) PackID() (id string) {
+	if rulepack := e.getRulepack(); rulepack != nil {
+		id = rulepack.id
+	}
+	return
 }
 
 // SetRules set the currents rules. If rules were already set, it will replace
 // them by atomically modifying the hooks, and removing what is left.
 func (e *Engine) SetRules(packID string, rules []api.Rule) {
 	// Create the new rule descriptors and replace the existing ones
-	var ruleDescriptors hookDescriptorMap
-	if len(rules) > 0 {
-		e.logger.Debugf("security rules: loading rules from pack `%s`", packID)
-		ruleDescriptors = newHookDescriptors(e, packID, rules)
+	var (
+		instrumentationDescriptors hookDescriptorMap
+		reactiveRules              []span.EventListener
+	)
+
+	// Insert local rules if any
+	if localRulesJSON := e.config.LocalRulesFile(); localRulesJSON != "" {
+		buf, err := ioutil.ReadFile(localRulesJSON)
+		if err == nil {
+			var localRules []api.Rule
+			err = json.Unmarshal(buf, &localRules)
+			if err == nil {
+				rules = append(rules, localRules...)
+			}
+		}
+
+		if err != nil {
+			e.logger.Error(sqerrors.Wrap(err, "config: could not read the local rules file"))
+		}
 	}
-	e.setRules(packID, ruleDescriptors)
+
+	e.logger.Debugf("security rules: loading rules from pack `%s`", packID)
+	instrumentationDescriptors, reactiveRules = newRuleDescriptors(e, packID, rules)
+
+	e.setRules(packID, instrumentationDescriptors, reactiveRules)
 }
 
-func (e *Engine) setRules(packID string, descriptors hookDescriptorMap) {
-	// Firstly update already enabled hookpoints with their new callbacks in order
-	// to avoid having a blank moment without any callback set. This case happens
-	// when a rule is updated.
-	disabledDescriptors := e.hooks
+func (e *Engine) setRules(packID string, descriptors hookDescriptorMap, reactiveCallbacks []span.EventListener) {
+	// Firstly replace already enabled hookpoints with their new callbacks.
+	var (
+		currentHooks             hookDescriptorMap
+		currentReactiveCallbacks []span.EventListener
+	)
+	if rulepack := e.getRulepack(); rulepack != nil {
+		currentHooks = rulepack.hooks
+		currentReactiveCallbacks = rulepack.reactiveCallbacks
+	}
+
+	// Create the set of completely disabled hooks while enabling the new ones
+	disabledDescriptors := currentHooks
 	for hook, descr := range descriptors {
 		if e.enabled {
 			// Attach the callback to the hook, possibly overwriting the previous one.
@@ -113,7 +166,7 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptorMap) {
 		}
 	}
 
-	// Close the previous descriptors that are now disabled.
+	// Close the previous descriptors that are now completely disabled.
 	for hook, descr := range disabledDescriptors {
 		e.logger.Debugf("security rules: disabling no longer needed hook `%s`", hook)
 		err := hook.Attach(nil)
@@ -126,111 +179,229 @@ func (e *Engine) setRules(packID string, descriptors hookDescriptorMap) {
 		}
 	}
 
-	// Save the rules pack ID and the new set of enabled hooks
-	e.packID = packID
-	e.hooks = descriptors
+	// Close the reactive callback objects
+	for _, o := range currentReactiveCallbacks {
+		if closer, ok := o.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				e.logger.Error(sqerrors.Wrapf(err, "security rules: error while closing the reactive callback"))
+			}
+		}
+	}
+
+	// Set the new rulespack
+	e.setRulepack(&rulepack{
+		id:                packID,
+		hooks:             descriptors,
+		reactiveCallbacks: reactiveCallbacks,
+	})
 }
 
-// newHookDescriptors walks the list of received rules and creates the map of
-// hook descriptors indexed by their hook pointer. A hook descriptor contains
-// all it takes to enable and disable rules at run time.
-func newHookDescriptors(e *Engine, rulepackID string, rules []api.Rule) hookDescriptorMap {
+// newRuleDescriptors walks the list of received rules and creates reactive
+// rules and the map of hook descriptors indexed by their hook pointer.
+// A hook descriptor contains all it takes to enable and disable rules at run
+// time.
+func newRuleDescriptors(e *Engine, rulepackID string, rules []api.Rule) (hookDescriptorMap, []span.EventListener) {
 	logger := e.logger
-
-	// Create and configure the list of callbacks according to the given rules
-	var hookDescriptors = make(hookDescriptorMap)
+	var (
+		hookDescriptors = make(hookDescriptorMap)
+		reactiveRules   []span.EventListener
+	)
 	for i := len(rules) - 1; i >= 0; i-- {
-		r := rules[i]
+		r := &rules[i]
 		// Verify the signature
-		if err := VerifyRuleSignature(&r, e.publicKey); err != nil {
+		if err := VerifyRuleSignature(r, e.publicKey); err != nil {
 			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: signature verification", r.Name))
 			continue
 		}
-		// Find the symbol
-		hookpoint := r.Hookpoint
-		symbol := hookpoint.Method
-		hook, err := e.instrumentationEngine.Find(symbol)
+
+		if r.Reactive != nil || (r.Hookpoint.Callback == "" && r.Hookpoint.Strategy == "") {
+			// Reactive engine subscriber rule
+			listener, err := newReactiveRule(e, rulepackID, r)
+			if err != nil {
+				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: ", r.Name))
+				continue
+			}
+			reactiveRules = append(reactiveRules, listener)
+			continue
+		}
+
+		// Native instrumentation rule
+		hook, prolog, err := newInstrumentationRule(e, rulepackID, r)
 		if err != nil {
-			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: unexpected error while looking for the hook of `%s`", r.Name, symbol))
+			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: ", r.Name))
 			continue
 		}
-		if hook == nil {
-			logger.Debugf("security rules: rule `%s`: could not find the hook of function `%s`", r.Name, symbol)
-			continue
-		} else {
-			logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
-		}
-
-		// Create the rule context
-		ruleCtx, err := newNativeRuleContext(&r, rulepackID, e.metricsEngine, logger, e.perfHistogramUnit, e.perfHistogramBase, e.perfHistogramPeriod)
-		if err != nil {
-			logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback configuration", r.Name))
-			continue
-		}
-
-		// Create the prolog callback
-		var prolog sqhook.PrologCallback
-		switch hookpoint.Strategy {
-		case "", "native":
-			cfg, err := newNativeCallbackConfig(&r)
-			if err != nil {
-				logger.Error(sqerrors.Wrap(err, "callback configuration"))
-				continue
-			}
-
-			prolog, err = NewNativeCallback(hookpoint.Callback, ruleCtx, cfg)
-			if err != nil {
-				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
-				continue
-			}
-
-		case "reflected":
-			prolog, err = NewReflectedCallback(hookpoint.Callback, ruleCtx, &r)
-			if err != nil {
-				logger.Error(sqerrors.Wrapf(err, "security rules: rule `%s`: callback constructor", r.Name))
-				continue
-			}
-		}
-
-		// Create the descriptor with everything required to be able to enable or
-		// disable it afterwards.
+		e.logger.Debugf("security rules: rule `%s`: successfully found hook `%v`", r.Name, hook)
 		hookDescriptors.Add(hook, prolog, r.Priority)
 	}
-	// Nothing in the end
-	if len(hookDescriptors) == 0 {
-		return nil
+
+	if rulepackID != "" {
+		addStaticRuleDescriptors(logger, e.instrumentationEngine, hookDescriptors, &reactiveRules)
 	}
-	return hookDescriptors
+
+	if len(hookDescriptors) == 0 {
+		// No instrumentation rules in the end, return nil instead of an empty map
+		hookDescriptors = nil
+	}
+	return hookDescriptors, reactiveRules
+}
+
+func addStaticRuleDescriptors(logger plog.ErrorLogger, instrumentationEngine InstrumentationFace, hookDescriptors hookDescriptorMap, reactiveRules *[]span.EventListener) {
+	if staticDescriptors == nil {
+		// TODO: wrap the event listener with callback middlewares
+
+		staticDescriptors = &staticRuleDescriptors{
+			nativeInstrumentation: make(hookDescriptorMap),
+		}
+
+		logRuleErr := func(rule string, err error) {
+			logger.Error(sqerrors.Wrapf(err, "security rules: static rule `%s`: ", rule))
+		}
+
+		for _, sr := range staticRules {
+			switch instrumentation := sr.Instrumentation.(type) {
+			default:
+				logRuleErr(sr.Name, sqerrors.Errorf("unexpected static rule type `%T`", sr))
+				continue
+
+			case NativeInstrumentation:
+				hook, err := instrumentationEngine.Find(instrumentation.Function)
+				if err != nil {
+					logRuleErr(sr.Name, sqerrors.Wrapf(err, "hook lookup of function `%s`", instrumentation.Function))
+					continue
+				}
+
+				if hook == nil {
+					logRuleErr(sr.Name, sqerrors.Errorf("could not find the hook of function `%s`", instrumentation.Function))
+					continue
+				}
+
+				staticDescriptors.nativeInstrumentation.Add(hook, instrumentation.Callback, instrumentation.Priority)
+
+			case SpanInstrumentation:
+				staticDescriptors.spanInstrumentation = append(staticDescriptors.spanInstrumentation, instrumentation.EventListener)
+			}
+		}
+	}
+
+	*reactiveRules = append(*reactiveRules, staticDescriptors.spanInstrumentation...)
+	for h, d := range staticDescriptors.nativeInstrumentation {
+		for i := range d.callbacks {
+			hookDescriptors.Add(h, d.callbacks[i], d.priorities[i])
+		}
+	}
+}
+
+func newReactiveRule(e *Engine, rulepackID string, r *api.Rule) (span.EventListener, error) {
+	// Create the rule context
+	ruleCtx, err := newNativeRuleContext(r, rulepackID, e.metricsEngine, e.logger, e.perfHistogramUnit, e.perfHistogramBase, e.perfHistogramPeriod)
+	if err != nil {
+		return nil, sqerrors.Wrap(err, "rule context creation")
+	}
+
+	cfg, err := newNativeCallbackConfig(r)
+	if err != nil {
+		return nil, sqerrors.Wrap(err, "rule callback configuration")
+	}
+
+	return newReactiveCallback(r.Hookpoint.Callback, ruleCtx, cfg)
+}
+
+func newInstrumentationRule(e *Engine, rulepackID string, r *api.Rule) (HookFace, sqhook.PrologCallback, error) {
+	// Find the symbol
+	hookpoint := r.Hookpoint
+	symbol := hookpoint.Method
+	hook, err := e.instrumentationEngine.Find(symbol)
+	if err != nil {
+		return nil, nil, sqerrors.Wrapf(err, "hook lookup of function `%s`", symbol)
+	}
+
+	if hook == nil {
+		return nil, nil, sqerrors.Errorf("could not find the hook of function `%s`", symbol)
+	}
+
+	// Create the rule context
+	ruleCtx, err := newNativeRuleContext(r, rulepackID, e.metricsEngine, e.logger, e.perfHistogramUnit, e.perfHistogramBase, e.perfHistogramPeriod)
+	if err != nil {
+		return nil, nil, sqerrors.Wrap(err, "rule context creation")
+	}
+
+	// Create the prolog callback
+	var prolog sqhook.PrologCallback
+	switch hookpoint.Strategy {
+	case "", "native":
+		cfg, err := newNativeCallbackConfig(r)
+		if err != nil {
+			return nil, nil, sqerrors.Wrap(err, "rule callback configuration")
+		}
+
+		prolog, err = NewNativeCallback(hookpoint.Callback, ruleCtx, cfg)
+		if err != nil {
+			return nil, nil, sqerrors.Wrap(err, "callback constructor")
+		}
+
+	case "reflected":
+		prolog, err = NewReflectedCallback(hookpoint.Callback, ruleCtx, r)
+		if err != nil {
+			return nil, nil, sqerrors.Wrap(err, "callback constructor")
+		}
+	}
+
+	return hook, prolog, nil
 }
 
 // Enable the hooks of the ongoing configured rules.
 func (e *Engine) Enable() {
-	for hook, descr := range e.hooks {
+	var descriptors hookDescriptorMap
+	if rulepack := e.getRulepack(); rulepack != nil {
+		descriptors = rulepack.hooks
+	}
+	for hook, descr := range descriptors {
 		e.logger.Debugf("security rules: attaching callback to hook `%s`", hook)
 		if err := hook.Attach(descr.callbacks...); err != nil {
 			e.logger.Error(sqerrors.Wrapf(err, "security rules: could not attach the callback to hook `%v`", hook))
 		}
 	}
 	e.enabled = true
-	e.logger.Debugf("security rules: %d security rules enabled", len(e.hooks))
+	e.logger.Debugf("security rules: %d security rules enabled", len(descriptors))
 }
 
 // Disable the hooks currently attached to callbacks.
 func (e *Engine) Disable() {
 	e.enabled = false
-	for hook := range e.hooks {
+
+	var descriptors hookDescriptorMap
+	if rulepack := e.getRulepack(); rulepack != nil {
+		descriptors = rulepack.hooks
+	}
+
+	if l := len(descriptors); l == 0 {
+		return
+	}
+	for hook := range descriptors {
 		err := hook.Attach(nil)
 		if err != nil {
 			e.logger.Error(sqerrors.Wrapf(err, "security rules: error while disabling hook `%v`", hook))
 		}
 	}
-	e.logger.Debugf("security rules: %d security rules disabled", len(e.hooks))
+	e.logger.Debugf("security rules: %d security rules disabled")
+}
+
+func (e *Engine) SpanEventListeners() []span.EventListener {
+	var reactiveCallbacks []span.EventListener
+	if rulepack := e.getRulepack(); rulepack != nil {
+		reactiveCallbacks = rulepack.reactiveCallbacks
+	}
+	return reactiveCallbacks
 }
 
 // Count returns the count of correctly instantiated and enabled rules.
-func (e *Engine) Count() int {
+func (e *Engine) Count() (c int) {
 	// Not precise but should do the job for now
-	return len(e.hooks)
+	if rulepack := e.getRulepack(); rulepack != nil {
+		c = len(rulepack.hooks) + len(rulepack.reactiveCallbacks)
+	}
+	return
 }
 
 type (

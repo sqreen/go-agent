@@ -11,6 +11,7 @@ import (
 
 	"github.com/sqreen/go-agent/internal/actor"
 	http_protection_types "github.com/sqreen/go-agent/internal/protection/http/types"
+	"github.com/sqreen/go-agent/internal/span"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
 )
@@ -22,6 +23,7 @@ type RootHTTPProtectionContext struct {
 	agent         *AgentType
 	sqreenTime    *sqtime.SharedStopWatch
 	maxSqreenTime time.Duration
+	rootSpan      span.SpanEnder
 }
 
 func NewRootHTTPProtectionContext(ctx context.Context) (*RootHTTPProtectionContext, context.CancelFunc) {
@@ -30,14 +32,16 @@ func NewRootHTTPProtectionContext(ctx context.Context) (*RootHTTPProtectionConte
 		return nil, nil
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	rootSpan, _ := span.NewSpan(span.WithEventListeners(agent.rules.SpanEventListeners()...))
 
+	ctx, cancel := context.WithCancel(ctx)
 	return &RootHTTPProtectionContext{
 		ctx:           ctx,
 		cancel:        cancel,
 		agent:         agent,
-		maxSqreenTime: agent.performanceBudget,
+		maxSqreenTime: agent.performanceBudget, // FIXME: thread-safe performance budget getter
 		sqreenTime:    sqtime.NewSharedStopWatch(),
+		rootSpan:      rootSpan,
 	}, cancel
 }
 
@@ -95,6 +99,7 @@ func (p *RootHTTPProtectionContext) CancelContext() {
 }
 
 func (p *RootHTTPProtectionContext) Close(ctx http_protection_types.ClosedProtectionContextFace) {
+	_ = p.rootSpan.End(nil)
 	p.agent.sendClosedHTTPProtectionContext(ctx)
 }
 

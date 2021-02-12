@@ -17,7 +17,7 @@ import (
 func TestUsage(t *testing.T) {
 	seen := make(span.AttributeMap)
 
-	onCreate := span.OnNewChildSpanEventListenerFunc(func(s span.EmergingSpan) error {
+	onCreate := span.OnNewChildEventListenerFunc(func(s span.EmergingSpan) error {
 		if v, ok := s.Get("span.name"); ok && v == "http.handler" {
 			if v, ok := s.Get("k1"); ok {
 				seen["k1"] = v

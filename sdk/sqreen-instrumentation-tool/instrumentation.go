@@ -201,6 +201,7 @@ var (
 	limitedInstrumentationPkgPaths = []string{
 		"os",
 		"net/http",
+		"net/url",
 		"github.com/gin-gonic/gin",
 		"github.com/labstack/echo",
 		"github.com/labstack/echo/v4",
@@ -220,6 +221,10 @@ var (
 			//   not found
 			"client.go",
 			"request.go",
+			"transfer.go", // for (*body).Read()
+		},
+		"net/url": {
+			"url.go", // for ParseQuery
 		},
 		"github.com/gin-gonic/gin": {
 			// Same comment as net/http

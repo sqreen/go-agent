@@ -4,25 +4,29 @@
 
 package span
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
+)
 
 type (
 	eventEmitter struct {
 		mu          sync.RWMutex
-		onNewChild  []OnNewChildSpanEventListenerFunc
+		onNewChild  []OnNewChildEventListenerFunc
 		onEnd       []OnEndEventListenerFunc
 		onChildData []OnChildDataEventListenerFunc
-		onNamedSpan map[string][]OnNewChildSpanEventListenerFunc
+		onNamedSpan map[string][]OnNewChildEventListenerFunc
 	}
 
-	OnNewChildSpanEventListenerFunc func(s EmergingSpan) error
-	OnChildDataEventListenerFunc    func(s Span, data AttributeGetter) error
-	OnEndEventListenerFunc          func(results AttributeGetter) error
+	OnNewChildEventListenerFunc  func(s EmergingSpan) error
+	OnChildDataEventListenerFunc func(s Span, data AttributeGetter) error
+	OnEndEventListenerFunc       func(results AttributeGetter) error
 
 	EventRegister interface {
 		Register(l EventListener)
-		OnNewChild(l OnNewChildSpanEventListenerFunc)
-		OnNewNamedChild(name string, l OnNewChildSpanEventListenerFunc)
+		OnNewChild(l OnNewChildEventListenerFunc)
+		OnNewNamedChild(name string, l OnNewChildEventListenerFunc)
 		OnChildData(l OnChildDataEventListenerFunc)
 		OnEnd(l OnEndEventListenerFunc)
 	}
@@ -35,17 +39,17 @@ type (
 
 type EventListener interface{ applyTo(*eventEmitter) }
 
-func (e *eventEmitter) Register(l EventListener)                  { l.applyTo(e) }
-func (l OnNewChildSpanEventListenerFunc) applyTo(e *eventEmitter) { e.OnNewChild(l) }
-func (l OnEndEventListenerFunc) applyTo(e *eventEmitter)          { e.OnEnd(l) }
-func (l OnChildDataEventListenerFunc) applyTo(e *eventEmitter)    { e.OnChildData(l) }
+func (e *eventEmitter) Register(l EventListener)               { l.applyTo(e) }
+func (l OnNewChildEventListenerFunc) applyTo(e *eventEmitter)  { e.OnNewChild(l) }
+func (l OnEndEventListenerFunc) applyTo(e *eventEmitter)       { e.OnEnd(l) }
+func (l OnChildDataEventListenerFunc) applyTo(e *eventEmitter) { e.OnChildData(l) }
 
 type newNamedChildSpanEventListener struct {
 	name string
-	l    OnNewChildSpanEventListenerFunc
+	l    OnNewChildEventListenerFunc
 }
 
-func NewNamedChildSpanEventListener(name string, l OnNewChildSpanEventListenerFunc) EventListener {
+func NewNamedChildSpanEventListener(name string, l OnNewChildEventListenerFunc) EventListener {
 	return newNamedChildSpanEventListener{
 		name: name,
 		l:    l,
@@ -56,9 +60,9 @@ func (l newNamedChildSpanEventListener) applyTo(e *eventEmitter) {
 	e.OnNewNamedChild(l.name, l.l)
 }
 
-func (e *eventEmitter) OnNewNamedChild(name string, l OnNewChildSpanEventListenerFunc) {
+func (e *eventEmitter) OnNewNamedChild(name string, l OnNewChildEventListenerFunc) {
 	if e.onNamedSpan == nil {
-		e.onNamedSpan = make(map[string][]OnNewChildSpanEventListenerFunc)
+		e.onNamedSpan = make(map[string][]OnNewChildEventListenerFunc)
 		e.OnNewChild(func(s EmergingSpan) error {
 			v, exists := s.Get("span.name")
 			if !exists {
@@ -84,7 +88,7 @@ func (e *eventEmitter) OnNewNamedChild(name string, l OnNewChildSpanEventListene
 	e.onNamedSpan[name] = append(e.onNamedSpan[name], l)
 }
 
-func (e *eventEmitter) OnNewChild(l OnNewChildSpanEventListenerFunc) {
+func (e *eventEmitter) OnNewChild(l OnNewChildEventListenerFunc) {
 	e.onNewChild = append(e.onNewChild, l)
 }
 
@@ -112,13 +116,14 @@ func (e *eventEmitter) EmitEndEvent(results AttributeGetter) error {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
+	var errs sqerrors.ErrorCollection
 	for _, l := range e.onEnd {
-		if err := l(results)
-			err != nil {
-			return err
+		if err := l(results); err != nil {
+			errs.Add(err)
 		}
 	}
-	return nil
+
+	return errs.ToError()
 }
 
 func (e *eventEmitter) EmitChildDataEvent(s Span, data AttributeGetter) error {
@@ -136,7 +141,10 @@ func (e *eventEmitter) EmitChildDataEvent(s Span, data AttributeGetter) error {
 func (e *eventEmitter) Clear() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	*e = eventEmitter{}
+	e.onNewChild = nil
+	e.onEnd = nil
+	e.onNamedSpan = nil
+	e.onChildData = nil
 }
 
 func forEachRunningParent(s Span, do func(Span) error) error {
@@ -169,7 +177,7 @@ type ChildDataEventEmitter interface {
 	EmitChildDataEvent(s Span, data AttributeGetter) error
 }
 
-func emitDataEvent(s Span, data AttributeGetter) error {
+func emitChildDataEvent(s Span, data AttributeGetter) error {
 	return forEachRunningParent(s, func(parent Span) error {
 		emitter, ok := parent.(ChildDataEventEmitter)
 		if !ok {

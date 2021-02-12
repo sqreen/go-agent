@@ -6,17 +6,16 @@ package http
 
 import (
 	"context"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
+	"strings"
 	"time"
 
 	"github.com/sqreen/go-agent/internal/actor"
 	"github.com/sqreen/go-agent/internal/event"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
-	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
+	"github.com/sqreen/go-agent/internal/span"
 )
 
 type ProtectionContext struct {
@@ -27,8 +26,8 @@ type ProtectionContext struct {
 
 	events event.Record
 
-	requestReader *requestReader
-	start         time.Time
+	requestBindingAccessorFeed *requestBindingAccessorFeed
+	start                      time.Time
 }
 
 type SecurityResponseStore interface {
@@ -52,33 +51,32 @@ func NewProtectionContext(ctx types.RootProtectionContext, w types.ResponseWrite
 		return nil
 	}
 
-	rr := &requestReader{
+	rr := &requestBindingAccessorFeed{
 		RequestReader: r,
 		clientIP:      clientIP,
-		requestParams: make(types.RequestParamMap),
 	}
 
 	p := &ProtectionContext{
-		RootProtectionContext: ctx,
-		ResponseWriter:        w,
-		RequestReader:         rr,
-		requestReader:         rr,
+		RootProtectionContext:      ctx,
+		ResponseWriter:             w,
+		RequestReader:              r,
+		requestBindingAccessorFeed: rr,
 	}
+
 	return p
 }
 
 func NewTestProtectionContext(ctx types.RootProtectionContext, clientIP net.IP, w types.ResponseWriter, r types.RequestReader) *ProtectionContext {
-	rr := &requestReader{
+	rr := &requestBindingAccessorFeed{
 		RequestReader: r,
 		clientIP:      clientIP,
-		requestParams: make(types.RequestParamMap),
 	}
 
 	return &ProtectionContext{
-		RootProtectionContext: ctx,
-		ResponseWriter:        w,
-		RequestReader:         rr,
-		requestReader:         rr,
+		RootProtectionContext:      ctx,
+		ResponseWriter:             w,
+		RequestReader:              rr,
+		requestBindingAccessorFeed: rr,
 	}
 }
 
@@ -129,21 +127,16 @@ func (p *ProtectionContext) IdentifyUser(id map[string]string) error {
 func (p *ProtectionContext) Before() (err error) {
 	p.start = time.Now()
 
-	// Set the current goroutine local storage to this request storage to be able
-	// to retrieve it from lower-level functions.
-	sqgls.Set(p)
-
 	p.addSecurityHeaders()
 
+	// TODO: turn IP-based protections into span callbacks
 	if err := p.isIPBlocked(); err != nil {
 		return err
 	}
 	if err := p.ipSecurityResponse(); err != nil {
 		return err
 	}
-	if err := p.waf(); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -202,17 +195,11 @@ func (p *ProtectionContext) Close(response types.ResponseFace) {
 	// Compute the request duration
 	duration := time.Since(p.start)
 
-	// Make sure to clear the goroutine local storage to avoid keeping it if some
-	// memory pools are used under the hood.
-	// TODO: enforce this by design of the gls instrumentation
-	defer sqgls.Set(nil)
-
 	// Copy everything we need here as it is not safe to keep then after the
 	// request is done because of memory pools reusing them.
-	p.monitorObservedResponse(response)
 	p.RootProtectionContext.Close(&closedProtectionContext{
 		response:   response,
-		request:    copyRequest(p.RequestReader),
+		request:    copyRequest(p.requestBindingAccessorFeed, p.ClientIP()),
 		events:     p.events.CloseRecord(),
 		start:      p.start,
 		duration:   duration,
@@ -226,6 +213,10 @@ func (p *ProtectionContext) Close(response types.ResponseFace) {
 //go:noinline
 func (p *ProtectionContext) WriteDefaultBlockingResponse() { /* dynamically instrumented */ }
 
+func (p *ProtectionContext) MonitorObservedResponse(response types.ResponseFace) {
+	p.monitorObservedResponse(response)
+}
+
 //go:noinline
 func (p *ProtectionContext) monitorObservedResponse(response types.ResponseFace) {
 	/* dynamically instrumented */
@@ -234,37 +225,65 @@ func (p *ProtectionContext) monitorObservedResponse(response types.ResponseFace)
 // WrapRequest is a helper method to prepare an http.Request with its
 // new context, the protection context, and a body buffer.
 func (p *ProtectionContext) WrapRequest(r *http.Request) *http.Request {
-	r = r.WithContext(context.WithValue(r.Context(), protection_context.ContextKey, p))
-	if r.Body != nil {
-		r.Body = p.wrapBody(r.Body)
-	}
+	// TODO: we no longer need to store the full protection context as this is for
+	//  sdk events only now - we could just store the event recorder, or
+	//  completely rely on the GLS now
+	ctx := context.WithValue(r.Context(), protection_context.ContextKey, p)
+	r = r.WithContext(ctx)
 	return r
 }
 
-func (p *ProtectionContext) wrapBody(body io.ReadCloser) io.ReadCloser {
-	return rawBodyWAF{
-		ReadCloser: body,
-		c:          p,
-	}
-}
-
-// AddRequestParam adds a new request parameter to the set. Request parameters
-// are taken from the HTTP request and parsed into a Go value. It can be the
-// result of a JSON parsing, query-string parsing, etc. The source allows to
-// specify where it was taken from.
-func (p *ProtectionContext) AddRequestParam(name string, param interface{}) {
-	params := p.requestReader.requestParams[name]
-	var v interface{}
-	switch actual := param.(type) {
-	default:
-		v = param
-	case url.Values:
-		// Bare Go type so that it doesn't have any method (for the JS conversion)
-		v = map[string][]string(actual)
-	}
-	p.requestReader.requestParams[name] = append(params, v)
+// SetRequestBindingAccessorValue adds a new request parameter to the set of
+// request parameters exposed to binding accessors.
+// Examples include the result of a JSON parsing of the request body,
+// query-string parsing, etc.
+// The address is the span address used to publish this value.
+func (p *ProtectionContext) SetRequestBindingAccessorValue(address string, value interface{}) {
+	p.requestBindingAccessorFeed.params.Set(address, value)
 }
 
 func (p *ProtectionContext) ClientIP() net.IP {
-	return p.requestReader.clientIP
+	return p.requestBindingAccessorFeed.clientIP
+}
+
+func (p *ProtectionContext) RequestBindingAccessorReader() types.RequestBindingAccessorReader {
+	return p.requestBindingAccessorFeed
+}
+
+func NewHTTPHandlerSpan(ip net.IP, r types.RequestReader) (span.SpanEnder, error) {
+	// TODO: request reader function to span attributes + tests with raw
+	//   unescaped values
+	headers := make(map[string][]string, len(r.Headers()))
+	var cookies []string
+	for h, v := range r.Headers() {
+		if h == "Cookie" {
+			cookies = v
+			continue
+		}
+		// TODO: have a custom waf marshaler instead so that we can avoid the string
+		//   copy here and rather lower-case the C copy
+		headers[strings.ToLower(h)] = v
+	}
+
+	attrs := span.AttributeMap{
+		"span.name":                         "http.handler",
+		"server.request.headers.no_cookies": headers,
+		"server.request.uri.raw":            r.RequestURI(),
+		"server.request.client_ip":          ip.String(),
+		"server.request.method":             r.Method(),
+		"server.request.transport":          r.Transport(),
+
+		// Extra values for our own RE logic
+		"server.request.go_url": r.URL(),
+	}
+
+	if len(cookies) > 0 {
+		attrs["server.request.cookies"] = cookies
+	}
+
+	if r, ok := r.(types.RequestPathParamsGetter); ok {
+		attrs["server.request.path_params"] = r.PathParams()
+	}
+
+	return span.NewSpan(span.WithAttributes(attrs))
 }

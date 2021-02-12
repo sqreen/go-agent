@@ -5,7 +5,6 @@
 package sqhttp
 
 import (
-	"net"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -56,9 +55,11 @@ func Middleware(next http.Handler) http.Handler {
 			return
 		}
 		defer cancel()
+		r = r.WithContext(ctx.Context())
 		middlewareHandlerFromRootProtectionContext(ctx, next, w, r)
 	})
 }
+
 func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, next http.Handler, w http.ResponseWriter, r *http.Request) {
 	// requestReader is a pointer value in order to change the inner request
 	// pointer with the new one created by http.(*Request).WithContext below
@@ -77,19 +78,23 @@ func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext,
 	middlewareHandlerFromProtectionContext(p, next, responseWriter, requestReader)
 }
 
-type protectionContext interface {
-	WrapRequest(*http.Request) *http.Request
-	Before() error
-	After() error
-}
-
-func middlewareHandlerFromProtectionContext(p protectionContext, next http.Handler, w http.ResponseWriter, r *requestReaderImpl) {
+func middlewareHandlerFromProtectionContext(p *http_protection.ProtectionContext, next http.Handler, w http.ResponseWriter, r *requestReaderImpl) {
 	r.Request = p.WrapRequest(r.Request)
 
+	// TODO: remove or make it a http span callback
 	if err := p.Before(); err != nil {
 		return
 	}
+
+	sp, err := http_protection.NewHTTPHandlerSpan(nil, p.RequestReader)
+	if err != nil {
+		return
+	}
+	defer sp.End(nil)
+
 	next.ServeHTTP(w, r.Request)
+
+	// TODO: remove or make it a http span callback
 	if err := p.After(); err != nil {
 		return
 	}
@@ -97,7 +102,28 @@ func middlewareHandlerFromProtectionContext(p protectionContext, next http.Handl
 
 type requestReaderImpl struct {
 	*http.Request
-	queryForm url.Values
+}
+
+func (r *requestReaderImpl) Transport() string {
+	if r.IsTLS() {
+		return "https"
+	}
+	return "http"
+}
+
+func (r *requestReaderImpl) PathParams() interface{} {
+	return r.pathParams()
+}
+
+func (r *requestReaderImpl) pathParams() []string {
+	reqURL := r.URL()
+	segments := strings.FieldsFunc(reqURL.Path, func(c rune) bool {
+		return c == '/'
+	})
+	if len(segments) == 0 {
+		return nil
+	}
+	return segments
 }
 
 func (r *requestReaderImpl) Body() []byte {
@@ -123,10 +149,7 @@ const urlSegmentsFrameworkParamsKey = "URL Segments"
 // by returning the list of segments in the URL path. This allows to better cover frameworks using this `net/http`
 // middleware, such as Gorilla and Beego.
 func (r *requestReaderImpl) Params() types.RequestParamMap {
-	reqURL := r.URL()
-	segments := strings.FieldsFunc(reqURL.Path, func(c rune) bool {
-		return c == '/'
-	})
+	segments := r.pathParams()
 	if len(segments) == 0 {
 		return nil
 	}
@@ -135,10 +158,6 @@ func (r *requestReaderImpl) Params() types.RequestParamMap {
 			segments,
 		},
 	}
-}
-
-func (r *requestReaderImpl) ClientIP() net.IP {
-	return nil // Delegated to the middleware according the agent configuration
 }
 
 func (r *requestReaderImpl) Method() string {
@@ -159,13 +178,6 @@ func (r *requestReaderImpl) Host() string {
 
 func (r *requestReaderImpl) IsTLS() bool {
 	return r.Request.TLS != nil
-}
-
-func (r *requestReaderImpl) QueryForm() url.Values {
-	if r.queryForm == nil {
-		r.queryForm = r.Request.URL.Query()
-	}
-	return r.queryForm
 }
 
 func (r *requestReaderImpl) PostForm() url.Values {

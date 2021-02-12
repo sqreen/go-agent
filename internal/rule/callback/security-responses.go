@@ -15,6 +15,7 @@ import (
 	"github.com/sqreen/go-agent/internal/backend/api"
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/span"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
@@ -31,6 +32,10 @@ const (
 
 func NewIPSecurityResponseCallback(r RuleContext, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newIPSecurityResponsePrologCallback(r), nil
+}
+
+func NewIPSecurityResponseSpanCallback(r RuleContext, _ NativeCallbackConfig) (span.EventListener, error) {
+	return newIPSecurityResponseSpanCallback(r), nil
 }
 
 type securityResponseError struct{}
@@ -66,6 +71,34 @@ func newIPSecurityResponsePrologCallback(r RuleContext) http_protection.Blocking
 	}
 }
 
+func newIPSecurityResponseSpanCallback(r RuleContext) span.EventListener {
+	return span.NewNamedChildSpanEventListener("http.handler", func(s span.EmergingSpan) (spanErr error) {
+		r.Pre(func(c CallbackContext) error {
+			p, ok := c.ProtectionContext().(*http_protection.ProtectionContext)
+			if !ok {
+				return nil
+			}
+
+			ip := p.ClientIP()
+			action, exists, err := p.FindActionByIP(ip)
+			if err != nil {
+				type errKey struct{}
+				return sqerrors.WithKey(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP action data structure", ip), errKey{})
+			}
+
+			if !exists {
+				return nil
+			}
+
+			writeIPSecurityResponse(p, action, ip)
+
+			spanErr = types.SqreenError{Err: securityResponseError{}}
+			return nil
+		})
+		return
+	})
+}
+
 // The security responses are a bit weird as they allow to customize the
 // response only for redirection, otherwise it blocks with the global blocking
 // settings. The contract with the HTTP protection here is to use a distinct
@@ -85,6 +118,10 @@ func writeIPSecurityResponse(p *http_protection.ProtectionContext, action actor.
 
 func NewUserSecurityResponseCallback(r RuleContext, _ NativeCallbackConfig) (sqhook.PrologCallback, error) {
 	return newUserSecurityResponsePrologCallback(r), nil
+}
+
+func NewUserSecurityResponseSpanCallback(r RuleContext, _ NativeCallbackConfig) (span.EventListener, error) {
+	return newUserSecurityResponseSpanCallback(r), nil
 }
 
 func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.IdentifyUserPrologCallbackType {
@@ -111,6 +148,41 @@ func newUserSecurityResponsePrologCallback(r RuleContext) http_protection.Identi
 
 		return
 	}
+}
+
+func newUserSecurityResponseSpanCallback(r RuleContext) span.EventListener {
+	return span.NewNamedChildSpanEventListener("http.handler", func(s span.EmergingSpan) error {
+		s.OnChildData(func(s span.Span, data span.AttributeGetter) (spanErr error) {
+			v, exists := data.Get("user.id")
+			if !exists {
+				return nil
+			}
+
+			uid, ok := v.(map[string]string)
+			if !ok {
+				return
+			}
+
+			r.Pre(func(c CallbackContext) error {
+				p, ok := c.ProtectionContext().(*http_protection.ProtectionContext)
+				if !ok {
+					return nil
+				}
+
+				action, exists := p.FindActionByUserID(uid)
+				if !exists {
+					return nil
+				}
+
+				writeUserSecurityResponse(p, action, uid)
+
+				spanErr = types.SqreenError{Err: securityResponseError{}}
+				return nil
+			})
+			return
+		})
+		return nil
+	})
 }
 
 func writeUserSecurityResponse(p *http_protection.ProtectionContext, action actor.Action, userID map[string]string) {

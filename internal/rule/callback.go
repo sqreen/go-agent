@@ -16,27 +16,12 @@ import (
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/metrics"
 	"github.com/sqreen/go-agent/internal/plog"
-	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	protection_types "github.com/sqreen/go-agent/internal/protection/types"
 	"github.com/sqreen/go-agent/internal/rule/callback"
+	"github.com/sqreen/go-agent/internal/span"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
-	"github.com/sqreen/go-agent/internal/sqlib/sqgls"
 	"github.com/sqreen/go-agent/internal/sqlib/sqsafe"
 )
-
-type ProtectionContext interface {
-	callback.ProtectionContext
-	HandleAttack(block bool, attack *event.AttackEvent) (blocked bool)
-}
-
-func FromGLS() ProtectionContext {
-	v := sqgls.Get()
-	actual, _ := v.(ProtectionContext)
-	return actual
-}
-
-// Static assert that protection contexts correctly implement the
-// ProtectionContext interface
-var _ ProtectionContext = (*http_protection.ProtectionContext)(nil)
 
 type nativeRuleContext struct {
 	name         string
@@ -200,8 +185,10 @@ func (r *nativeRuleContext) Post(post func(c callback.CallbackContext) error) {
 func (r *nativeRuleContext) call(cb NativeCallbackFunc, m []NativeCallbackMiddlewareFunc) {
 	c, ok := makeCallbackContext(r)
 	if !ok {
+		r.logger.Debugf("rule `%s`: ignoring the protection due to missing protection context", r.name)
 		return
 	}
+
 	cb = wrapCallback(cb, m)
 	if err := cb(c); err != nil {
 		// TODO: add rule info
@@ -279,17 +266,16 @@ func wrapCallback(cb NativeCallbackFunc, middlewares []NativeCallbackMiddlewareF
 type (
 	callbackContext struct {
 		r *nativeRuleContext
-		p ProtectionContext
+		p protection_types.ProtectionContext
 	}
 )
 
-func makeCallbackContext(r *nativeRuleContext) (c callbackContext, ok bool) {
-	p := FromGLS()
+func makeCallbackContext(r *nativeRuleContext) (callbackContext, bool) {
+	sp := span.Current()
+	p := span.ProtectionContext(sp)
 	if p == nil {
-		ok = false
-		return
+		return callbackContext{}, false
 	}
-
 	return callbackContext{
 		r: r,
 		p: p,

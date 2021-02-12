@@ -7,14 +7,13 @@
 package http
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/textproto"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -23,7 +22,7 @@ import (
 	"github.com/sqreen/go-agent/internal/protection/http/types"
 )
 
-type requestReader struct {
+type requestBindingAccessorFeed struct {
 	types.RequestReader
 
 	// clientIP is the actual IP address of the client performing the request.
@@ -33,57 +32,21 @@ type requestReader struct {
 	// request. The map key is the source (eg. json, query, multipart-form, etc.)
 	// so that we can report it and make it clearer to understand where the value
 	// comes from.
-	requestParams types.RequestParamMap
-
-	// bodyReadBuffer is the buffers body reads
-	bodyReadBuffer bytes.Buffer
+	params requestParamMap
 }
 
-func (r *requestReader) Body() []byte { return r.bodyReadBuffer.Bytes() }
-
-func (r *requestReader) ClientIP() net.IP { return r.clientIP }
-
-func (r *requestReader) Params() types.RequestParamMap {
-	params := r.RequestReader.Params()
-	if len(params) == 0 {
-		return r.requestParams
+func (r *requestBindingAccessorFeed) Body() []byte {
+	v, exists := r.params.Get("server.request.body")
+	if !exists || v == nil {
+		return nil
 	}
-
-	if len(r.requestParams) == 0 {
-		return params
-	}
-
-	res := make(types.RequestParamMap, len(params)+len(r.requestParams))
-	for n, v := range params {
-		res[n] = v
-	}
-	for n, v := range r.requestParams {
-		res[n] = v
-	}
-	return res
+	return v.([]byte)
 }
 
-type rawBodyWAF struct {
-	io.ReadCloser
-	c *ProtectionContext
-}
+func (r *requestBindingAccessorFeed) ClientIP() net.IP { return r.clientIP }
 
-// Read buffers what has been read and ultimately calls the WAF on EOF.
-func (t rawBodyWAF) Read(p []byte) (n int, err error) {
-	n, err = t.ReadCloser.Read(p)
-	if n > 0 {
-		t.c.requestReader.bodyReadBuffer.Write(p[:n])
-	}
-
-	if err == io.EOF {
-		if wafErr := t.c.bodyWAF(); wafErr != nil {
-			// Return 0 and the sqreen error so that the caller doesn't take anything
-			// into account.
-			n = 0
-			err = wafErr
-		}
-	}
-	return
+func (r *requestBindingAccessorFeed) Params() types.RequestParamMap {
+	return r.params.Snapshot()
 }
 
 func ClientIP(remoteAddr string, headers http.Header, prioritizedIPHeader string, prioritizedIPHeaderFormat string) net.IP {
@@ -227,14 +190,11 @@ type handledRequest struct {
 	requestURI string
 	host       string
 	remoteAddr string
-	isTLS      bool
 	userAgent  string
 	referer    string
-	queryForm  url.Values
-	postForm   url.Values
 	clientIP   net.IP
+	transport  string
 	params     types.RequestParamMap
-	body       []byte
 }
 
 func (h *handledRequest) Headers() http.Header          { return h.headers }
@@ -243,14 +203,12 @@ func (h *handledRequest) URL() *url.URL                 { return h.url }
 func (h *handledRequest) RequestURI() string            { return h.requestURI }
 func (h *handledRequest) Host() string                  { return h.host }
 func (h *handledRequest) RemoteAddr() string            { return h.remoteAddr }
-func (h *handledRequest) IsTLS() bool                   { return h.isTLS }
 func (h *handledRequest) UserAgent() string             { return h.userAgent }
 func (h *handledRequest) Referer() string               { return h.referer }
-func (h *handledRequest) QueryForm() url.Values         { return h.queryForm }
-func (h *handledRequest) PostForm() url.Values          { return h.postForm }
 func (h *handledRequest) ClientIP() net.IP              { return h.clientIP }
+func (h *handledRequest) Transport() string             { return h.transport }
 func (h *handledRequest) Params() types.RequestParamMap { return h.params }
-func (h *handledRequest) Body() []byte                  { return h.body }
+
 func (h *handledRequest) Header(header string) (value *string) {
 	headers := h.headers
 	if headers == nil {
@@ -263,7 +221,7 @@ func (h *handledRequest) Header(header string) (value *string) {
 	return &v[0]
 }
 
-func copyRequest(reader types.RequestReader) types.RequestReader {
+func copyRequest(reader types.ClosedRequestReader, ip net.IP) types.ClosedRequestReader {
 	return &handledRequest{
 		headers:    reader.Headers(),
 		method:     reader.Method(),
@@ -271,20 +229,17 @@ func copyRequest(reader types.RequestReader) types.RequestReader {
 		requestURI: reader.RequestURI(),
 		host:       reader.Host(),
 		remoteAddr: reader.RemoteAddr(),
-		isTLS:      reader.IsTLS(),
 		userAgent:  reader.UserAgent(),
 		referer:    reader.Referer(),
-		queryForm:  reader.QueryForm(),
-		postForm:   reader.PostForm(),
-		clientIP:   reader.ClientIP(),
+		clientIP:   ip,
+		transport:  reader.Transport(),
 		params:     reader.Params(),
-		body:       reader.Body(),
 	}
 }
 
 type closedProtectionContext struct {
 	response   types.ResponseFace
-	request    types.RequestReader
+	request    types.ClosedRequestReader
 	events     event.Recorded
 	start      time.Time
 	duration   time.Duration
@@ -293,9 +248,32 @@ type closedProtectionContext struct {
 
 var _ types.ClosedProtectionContextFace = (*closedProtectionContext)(nil)
 
-func (c *closedProtectionContext) Events() event.Recorded       { return c.events }
-func (c *closedProtectionContext) Request() types.RequestReader { return c.request }
-func (c *closedProtectionContext) Response() types.ResponseFace { return c.response }
-func (c *closedProtectionContext) Start() time.Time             { return c.start }
-func (c *closedProtectionContext) Duration() time.Duration      { return c.duration }
-func (c *closedProtectionContext) SqreenTime() time.Duration    { return c.sqreenTime }
+func (c *closedProtectionContext) Events() event.Recorded             { return c.events }
+func (c *closedProtectionContext) Request() types.ClosedRequestReader { return c.request }
+func (c *closedProtectionContext) Response() types.ResponseFace       { return c.response }
+func (c *closedProtectionContext) Start() time.Time                   { return c.start }
+func (c *closedProtectionContext) Duration() time.Duration            { return c.duration }
+func (c *closedProtectionContext) SqreenTime() time.Duration          { return c.sqreenTime }
+
+type requestParamMap sync.Map
+
+func (m *requestParamMap) unwrap() *sync.Map { return (*sync.Map)(m) }
+
+func (m *requestParamMap) Set(address string, value interface{}) {
+	m.unwrap().Store(address, value)
+}
+
+func (m *requestParamMap) Get(address string) (value interface{}, exists bool) {
+	return m.unwrap().Load(address)
+	return
+}
+
+func (m *requestParamMap) Snapshot() types.RequestParamMap {
+	snapshot := types.RequestParamMap{}
+	m.unwrap().Range(func(k, v interface{}) bool {
+		key := k.(string)
+		snapshot[key] = v
+		return true
+	})
+	return snapshot
+}

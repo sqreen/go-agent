@@ -18,6 +18,7 @@ import (
 	protection_context "github.com/sqreen/go-agent/internal/protection/context"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
 	"github.com/sqreen/go-agent/internal/protection/http/types"
+	"github.com/sqreen/go-agent/internal/span"
 )
 
 // Middleware is Sqreen's middleware function for Gin to monitor and protect the
@@ -67,39 +68,49 @@ func Middleware() gin.HandlerFunc {
 			return
 		}
 		defer cancel()
+		c.Request = c.Request.WithContext(ctx.Context())
 		middlewareHandlerFromRootProtectionContext(ctx, c)
 	}
 }
 
 func middlewareHandlerFromRootProtectionContext(ctx types.RootProtectionContext, c *gin.Context) {
 	r := &requestReaderImpl{c: c}
-	p := http_protection.NewProtectionContext(ctx, c.Writer, r)
+	w := &responseWriter{ResponseWriter: c.Writer}
+	p := http_protection.NewProtectionContext(ctx, w, r)
 	if p == nil {
 		c.Next()
 		return
 	}
 
+	sp, _ := span.NewSpan(span.WithProtectionContext(p))
+
 	defer func() {
-		p.Close(newObservedResponse(c.Writer))
+		response := newObservedResponse(w)
+		sp.End(response)
+		p.Close(response)
 	}()
 
-	middlewareHandlerFromProtectionContext(p, c)
+	middlewareHandlerFromProtectionContext(p, c, w)
 }
 
-type protectionContext interface {
-	WrapRequest(*http.Request) *http.Request
-	Before() error
-	After() error
-}
-
-func middlewareHandlerFromProtectionContext(p protectionContext, c *gin.Context) {
+func middlewareHandlerFromProtectionContext(p *http_protection.ProtectionContext, c *gin.Context, w *responseWriter) {
 	c.Request = p.WrapRequest(c.Request)
 	c.Set(protection_context.ContextKey.String, p)
+	c.Writer = w
 
 	if err := p.Before(); err != nil {
 		c.Abort()
 		return
 	}
+
+	sp, err := http_protection.NewHTTPHandlerSpan(p.ClientIP(), p.RequestReader)
+	if err != nil {
+		return
+	}
+	defer func() {
+		sp.End(newObservedResponse(w))
+	}()
+
 	c.Next()
 	// Handler-based protection such as user security responses or RASP
 	// protection may lead to aborted requests.
@@ -113,8 +124,33 @@ func middlewareHandlerFromProtectionContext(p protectionContext, c *gin.Context)
 }
 
 type requestReaderImpl struct {
-	c         *gin.Context
-	queryForm url.Values
+	c *gin.Context
+}
+
+func (r *requestReaderImpl) Transport() string {
+	if r.IsTLS() {
+		return "https"
+	}
+	return "http"
+}
+
+func (r *requestReaderImpl) PathParams() interface{} {
+	return r.pathParams()
+}
+
+func (r *requestReaderImpl) pathParams() map[string][]string {
+	// TODO: make it once at construction time
+	params := r.c.Params
+	l := len(params)
+	if l == 0 {
+		return nil
+	}
+
+	m := make(map[string][]string, l)
+	for _, param := range params {
+		m[param.Key] = append(m[param.Key], param.Value)
+	}
+	return m
 }
 
 func (r *requestReaderImpl) Body() []byte {
@@ -155,27 +191,6 @@ func (r *requestReaderImpl) IsTLS() bool {
 	return r.c.Request.TLS != nil
 }
 
-func (r *requestReaderImpl) Params() types.RequestParamMap {
-	params := r.c.Params
-	l := len(params)
-	if l == 0 {
-		return nil
-	}
-
-	m := make(types.RequestParamMap, l)
-	for _, param := range params {
-		m.Add(param.Key, param.Value)
-	}
-	return m
-}
-
-func (r *requestReaderImpl) QueryForm() url.Values {
-	if r.queryForm == nil {
-		r.queryForm = r.c.Request.URL.Query()
-	}
-	return r.queryForm
-}
-
 func (r *requestReaderImpl) PostForm() url.Values {
 	return r.c.Request.PostForm
 }
@@ -200,12 +215,23 @@ func (r *requestReaderImpl) RemoteAddr() string {
 	return r.c.Request.RemoteAddr
 }
 
-type responseWriterImpl struct {
+type responseWriter struct {
 	gin.ResponseWriter
+	status int
 }
 
-func (w *responseWriterImpl) closeResponseWriter() types.ResponseFace {
-	return newObservedResponse(w)
+func (w *responseWriter) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *responseWriter) WriteHeader(statusCode int) {
+	if w.status == 0 {
+		w.status = statusCode
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
 }
 
 // response observed by the response writer
@@ -215,7 +241,7 @@ type observedResponse struct {
 	status        int
 }
 
-func newObservedResponse(response gin.ResponseWriter) *observedResponse {
+func newObservedResponse(response *responseWriter) *observedResponse {
 	headers := response.Header()
 
 	// Content-Type will be not empty only when explicitly set.
@@ -234,9 +260,12 @@ func newObservedResponse(response gin.ResponseWriter) *observedResponse {
 		}
 	}
 
-	// Use the status code saved by Gin
+	// Do not use Gin's status code until this gets
+	// somehow solved: https://github.com/gin-gonic/gin/pull/2627
 	var status int
-	if s := response.Status(); s > 0 {
+	if s := response.status; s > 0 {
+		status = s
+	} else if s := response.ResponseWriter.Status(); s > 0 {
 		status = s
 	}
 
@@ -261,4 +290,13 @@ func (r *observedResponse) ContentType() string {
 
 func (r *observedResponse) ContentLength() int64 {
 	return r.contentLength
+}
+
+func (r *observedResponse) Get(key string) (value interface{}, exists bool) {
+	switch key {
+	default:
+		return nil, false
+	case "server.response.status":
+		return r.status, true
+	}
 }

@@ -152,8 +152,10 @@ func (v *RuleDataEntry) UnmarshalJSON(data []byte) error {
 		value = &CustomErrorPageRuleDataEntry{}
 	case RedirectionType:
 		value = &RedirectionRuleDataEntry{}
-	case WAFType:
-		value = &WAFRuleDataEntry{}
+	case BindingAccessorWAFType:
+		value = &BindingAccessorWAFRuleDataEntry{}
+	case ReactiveWAFType:
+		value = &ReactiveWAFRuleDataEntry{}
 	case CustomType:
 		value = &CustomRuleDataEntry{}
 	default:

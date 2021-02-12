@@ -37,3 +37,31 @@ func newMonitorHTTPStatusCodePrologCallback(r RuleContext) http_protection.Respo
 		return nil, nil
 	}
 }
+
+//func newMonitorHTTPStatusCodePrologCallback(r RuleContext) span.EventListener {
+//	return span.NewNamedChildSpanEventListener("http.handler", func(s span.EmergingSpan) error {
+//		s.OnEnd(func(results span.AttributeGetter) error {
+//			r.Pre(func(c CallbackContext) error {
+//				if results == nil {
+//					return nil
+//				}
+//				response := results.(types.ResponseFace)
+//				if response == nil {
+//					return nil
+//				}
+//
+//				status := response.Status()
+//				_ = c.AddMetricsValue(status, 1)
+//				if status == http.StatusNotFound {
+//					// Enforce test to true despite the rule's - current backend-internals
+//					// detail
+//					blocked := c.j(false, event.WithAttackInfo(struct{}{}), event.WithTest(true))
+//					sqassert.False(blocked)
+//				}
+//				return nil
+//			})
+//			return nil
+//		})
+//		return nil
+//	})
+//}

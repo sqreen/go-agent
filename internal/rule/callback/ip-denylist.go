@@ -12,6 +12,7 @@ import (
 
 	"github.com/sqreen/go-agent/internal/actor"
 	http_protection "github.com/sqreen/go-agent/internal/protection/http"
+	"github.com/sqreen/go-agent/internal/span"
 	"github.com/sqreen/go-agent/internal/sqlib/sqassert"
 	"github.com/sqreen/go-agent/internal/sqlib/sqerrors"
 	"github.com/sqreen/go-agent/internal/sqlib/sqhook"
@@ -48,6 +49,38 @@ func NewIPDenyListCallback(r RuleContext, cfg NativeCallbackConfig) (sqhook.Prol
 		return nil, sqerrors.Wrapf(err, "unexpected error while creating the IP denylist")
 	}
 	return newIPDenyListPrologCallback(r, denylist), nil
+}
+
+func NewIPDenyListSpanCallback(r RuleContext, cfg NativeCallbackConfig) (span.EventListener, error) {
+	sqassert.NotNil(r)
+	sqassert.NotNil(cfg)
+
+	data, ok := cfg.Data().([]interface{})
+	if !ok {
+		return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `%T`", cfg.Data(), data)
+	}
+
+	if l := len(data); l == 0 {
+		return nil, sqerrors.New("empty denylist`")
+	} else if l > 1 {
+		return nil, sqerrors.Errorf("unexpected number of data entries`")
+	}
+
+	d1 := data[0]
+	cidrs, ok := d1.([]string)
+	if !ok {
+		return nil, sqerrors.Errorf("unexpected callback data type: got `%T` instead of `%T`", d1, cidrs)
+	}
+
+	if len(cidrs) == 0 {
+		return nil, sqerrors.New("empty denylist`")
+	}
+
+	denylist, err := actor.NewCIDRIPListStore(cidrs)
+	if err != nil {
+		return nil, sqerrors.Wrapf(err, "unexpected error while creating the IP denylist")
+	}
+	return newIPDenyListReactivCallback(r, denylist), nil
 }
 
 type IPDenyListPrologCallbackType = http_protection.BlockingPrologCallbackType
@@ -96,4 +129,37 @@ func newIPDenyListPrologCallback(r RuleContext, denylist *actor.CIDRIPListStore)
 		})
 		return
 	}
+}
+
+func newIPDenyListReactivCallback(r RuleContext, denylist *actor.CIDRIPListStore) span.EventListener {
+	return span.NewNamedChildSpanEventListener("http.handler", func(s span.EmergingSpan) (spanErr error) {
+		r.Pre(func(c CallbackContext) error {
+			ip := c.ProtectionContext().ClientIP()
+			exists, matched, err := denylist.Find(ip)
+			if err != nil {
+				type errKey struct{}
+				return sqerrors.WithKey(sqerrors.Wrapf(err, "unexpected error while searching IP address `%#+v` in the IP denylist", ip), errKey{})
+			}
+
+			if !exists {
+				return nil
+			}
+
+			c.HandleAttack(true)
+
+			_ = c.AddMetricsValue(matched, 1)
+
+			spanErr = sdk_types.SqreenError{
+				Err: IPDenyListError{
+					DeniedIP:      ip,
+					DenyListEntry: matched,
+				},
+			}
+
+			// Display the error message explaining why the request is denied.
+			c.Logger().Debug(err.Error())
+			return nil
+		})
+		return
+	})
 }

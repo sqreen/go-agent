@@ -5,12 +5,9 @@
 package callback
 
 import (
-	"net"
-	"time"
-
 	"github.com/sqreen/go-agent/internal/event"
 	"github.com/sqreen/go-agent/internal/plog"
-	"github.com/sqreen/go-agent/internal/sqlib/sqtime"
+	protection_types "github.com/sqreen/go-agent/internal/protection/types"
 )
 
 type (
@@ -29,10 +26,7 @@ type CallbackContext interface {
 }
 
 type ProtectionContext interface {
-	AddRequestParam(name string, v interface{})
-	ClientIP() net.IP
-	SqreenTime() *sqtime.SharedStopWatch
-	DeadlineExceeded(needed time.Duration) (exceeded bool)
+	protection_types.ProtectionContext
 }
 
 type Logger interface {

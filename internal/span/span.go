@@ -64,12 +64,6 @@ func NewSpan(options ...Option) (s SpanEnder, err error) {
 
 	if sp.parent == nil {
 		glsPush(sp)
-		defer func() {
-			sp.OnEnd(func(AttributeGetter) error {
-				glsPop(s)
-				return nil
-			})
-		}()
 	}
 
 	defer func() {
@@ -95,16 +89,28 @@ func (s *span) State() State {
 	return s.state.Get()
 }
 
+func (s *span) Get(key string) (value interface{}, exists bool) {
+	if s.AttributeGetter == nil {
+		return nil, false
+	}
+	return s.AttributeGetter.Get(key)
+}
+
+func (s *span) ProtectionContext() protection_types.ProtectionContext {
+	return s.protection
+}
+
 func (s *span) End(results AttributeGetter) error {
 	defer func() {
 		s.eventEmitter.Clear()
 		s.state.Set(EndedState)
+		glsPop(s)
 	}()
 	return s.EmitEndEvent(results)
 }
 
 func (s *span) EmitData(data AttributeGetter) error {
-	return emitDataEvent(s, data)
+	return emitChildDataEvent(s, data)
 }
 
 type (
@@ -157,15 +163,24 @@ func fromGLS() Span {
 func glsPush(s *span) {
 	s.parent = Current()
 	sqgls.Set(s)
+	current := Current()
+	sqassert.True(current == s)
 }
 
-func glsPop(span Span) {
-	sqassert.True(Current() == span)
-	sqgls.Set(span.Parent())
+func glsPop(s *span) {
+	current := Current()
+	sqassert.True(current == s)
+	parent := s.Parent()
+	sqgls.Set(parent)
+	current = Current()
+	sqassert.True(current == parent)
 }
 
 func ProtectionContext(span Span) protection_types.ProtectionContext {
 	for span := span; span != nil; span = span.Parent() {
+		if span.State() != RunningState {
+			continue
+		}
 		if p, ok := span.(ProtectionContextGetter); ok {
 			if p := p.ProtectionContext(); p != nil {
 				return p
@@ -176,6 +191,9 @@ func ProtectionContext(span Span) protection_types.ProtectionContext {
 }
 
 func (m AttributeMap) Get(key string) (value interface{}, exists bool) {
+	if len(m) == 0 {
+		return nil, false
+	}
 	value, exists = m[key]
 	return
 }
