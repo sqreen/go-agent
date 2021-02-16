@@ -170,7 +170,7 @@ func initFakeServerSession(endpointCfg *config.HTTPAPIEndpoint, request, respons
 
 	token := testlib.RandHTTPHeaderValue(2, 50)
 	appName := testlib.RandHTTPHeaderValue(2, 50)
-	_, err = client.AppLogin(loginReq, token, appName, false)
+	_, err = client.AppLogin(loginReq, token, appName, false, nil)
 	if err != nil {
 		panic(err)
 	}

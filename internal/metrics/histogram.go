@@ -285,6 +285,10 @@ func (s *PerfHistogram) Ready() bool {
 }
 
 func (s *PerfHistogram) Add(v float64) error {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return sqerrors.Errorf("invalid performance value `%v`", v)
+	}
+
 	s.timeHistogram.flushLock.RLock()
 	defer s.timeHistogram.flushLock.RUnlock()
 

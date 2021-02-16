@@ -526,6 +526,30 @@ func TestPerfHistogram(t *testing.T) {
 		}{
 			{
 				Base:            2,
+				Unit:            0.1,
+				Values:          []float64{-math.MaxFloat64},
+				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 1},
+				ExpectedMax:     -math.MaxFloat64,
+			},
+
+			{
+				Base:            2,
+				Unit:            0.1,
+				Values:          []float64{math.MaxFloat64},
+				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1029): 1},
+				ExpectedMax:     math.MaxFloat64,
+			},
+
+			{
+				Base:            2,
+				Unit:            0.1,
+				Values:          []float64{math.MaxFloat64, -math.MaxFloat64},
+				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 1, metrics.PerfHistogramBucketType(1029): 1},
+				ExpectedMax:     math.MaxFloat64,
+			},
+
+			{
+				Base:            2,
 				Unit:            1,
 				Values:          []float64{1.0, 0.2, 2.2, 2.0, -0.0},
 				ExpectedMetrics: metrics.ReadyStoreMap{metrics.PerfHistogramBucketType(1): 2, metrics.PerfHistogramBucketType(2): 1, metrics.PerfHistogramBucketType(3): 2},
@@ -598,6 +622,16 @@ func TestPerfHistogram(t *testing.T) {
 
 	t.Run("perf histogram usage", func(t *testing.T) {
 		t.Parallel()
+
+		t.Run("forbidden float values", func(t *testing.T) {
+			t.Parallel()
+			store, err := metrics.NewPerfHistogram(time.Microsecond, 10, 10, MaxStoreLen)
+			require.NoError(t, err)
+			require.Error(t, store.Add(math.Inf(1)))
+			require.Error(t, store.Add(math.Inf(-1)))
+			require.Error(t, store.Add(math.NaN()))
+		})
+
 		t.Run("empty stores are never ready", func(t *testing.T) {
 			t.Parallel()
 			store, err := metrics.NewPerfHistogram(time.Microsecond, 10, 10, MaxStoreLen)
