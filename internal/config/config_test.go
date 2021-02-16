@@ -167,7 +167,7 @@ func TestFileLocation(t *testing.T) {
 	require.Equal(t, cwdToken, token)
 
 	tmpToken := "tmp-token"
-	tmpDir := "./" + testlib.RandPrintableUSASCIIString(4)
+	tmpDir := "./.config"
 	tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
 	defer os.RemoveAll(tmpDir)
 	os.Setenv("SQREEN_CONFIG_FILE", tmpFile)
