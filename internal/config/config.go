@@ -215,26 +215,29 @@ const (
 const (
 	configEnvKeyConfigFile = `config_file`
 
-	configKeyBackendHTTPAPIBaseURL     = `url`
-	configKeyBackendHTTPAPIToken       = `token`
-	configKeyLogLevel                  = `log_level`
-	configKeyAppName                   = `app_name`
-	configKeyHTTPClientIPHeader        = `ip_header`
-	configKeyHTTPClientIPHeaderFormat  = `ip_header_format`
-	configKeyBackendHTTPAPIProxy       = `proxy`
-	configKeyDisable                   = `disable`
-	configKeyStripHTTPReferer          = `strip_http_referer`
-	configKeyRules                     = `rules`
-	configKeySDKMetricsPeriod          = `sdk_metrics_period`
-	configKeyMaxMetricsStoreLength     = `max_metrics_store_length`
-	configKeyDisableSignalBackend      = `disable_signal_backend`
-	configKeyStripSensitiveKeyRegexp   = `strip_sensitive_key_regexp`
-	configKeyStripSensitiveValueRegexp = `strip_sensitive_value_regexp`
+	configKeyBackendHTTPAPIBaseURL          = `url`
+	configKeyIngestionBackendHTTPAPIBaseURL = `ingestion_url`
+	configKeyBackendHTTPAPIToken            = `token`
+	configKeyLogLevel                       = `log_level`
+	configKeyAppName                        = `app_name`
+	configKeyHTTPClientIPHeader             = `ip_header`
+	configKeyHTTPClientIPHeaderFormat       = `ip_header_format`
+	configKeyBackendHTTPAPIProxy            = `proxy`
+	configKeyDisable                        = `disable`
+	configKeyStripHTTPReferer               = `strip_http_referer`
+	configKeyRules                          = `rules`
+	configKeySDKMetricsPeriod               = `sdk_metrics_period`
+	configKeyMaxMetricsStoreLength          = `max_metrics_store_length`
+	configKeyDisableSignalBackend           = `disable_signal_backend`
+	configKeyStripSensitiveKeyRegexp        = `strip_sensitive_key_regexp`
+	configKeyStripSensitiveValueRegexp      = `strip_sensitive_value_regexp`
 )
 
 // User configuration's default values.
 const (
-	configDefaultBackendHTTPAPIBaseURL = `https://back.sqreen.com`
+	configDefaultBackendHTTPAPIBaseURL          = `https://back.sqreen.com`
+	configDefaultIngestionBackendHTTPAPIBaseURL = "https://ingestion.sqreen.com/"
+
 	configDefaultLogLevel              = `info`
 	configDefaultSDKMetricsPeriod      = 60
 	configDefaultMaxMetricsStoreLength = 100 * 1024 * 1024
@@ -265,6 +268,7 @@ func New(logger *plog.Logger) (*Config, error) {
 		hidden         bool
 	}{
 		{key: configKeyBackendHTTPAPIBaseURL, defaultValue: configDefaultBackendHTTPAPIBaseURL},
+		{key: configKeyIngestionBackendHTTPAPIBaseURL, defaultValue: configDefaultIngestionBackendHTTPAPIBaseURL},
 		{key: configKeyLogLevel, defaultValue: configDefaultLogLevel},
 		{key: configKeyBackendHTTPAPIToken, defaultValue: "", secretFromChar: len(BackendHTTPAPIOrganizationTokenSubstr) + 3},
 		{key: configKeyAppName, defaultValue: ""},
@@ -343,6 +347,11 @@ func New(logger *plog.Logger) (*Config, error) {
 // BackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
 func (c *Config) BackendHTTPAPIBaseURL() string {
 	return sanitizeString(c.GetString(configKeyBackendHTTPAPIBaseURL))
+}
+
+// IngestionBackendHTTPAPIBaseURL returns the base URL of the backend HTTP API.
+func (c *Config) IngestionBackendHTTPAPIBaseURL() string {
+	return sanitizeString(c.GetString(configKeyIngestionBackendHTTPAPIBaseURL))
 }
 
 // BackendHTTPAPIToken returns the access token to the backend API.

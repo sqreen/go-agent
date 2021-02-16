@@ -37,6 +37,13 @@ func TestUserConfig(t *testing.T) {
 			SomeValue:    testlib.RandUTF8String(2, 50),
 		},
 		{
+			Name:         "Ingestion Backend HTTP API Base URL",
+			GetCfgValue:  cfg.BackendHTTPAPIBaseURL,
+			ConfigKey:    configKeyBackendHTTPAPIBaseURL,
+			DefaultValue: configDefaultBackendHTTPAPIBaseURL,
+			SomeValue:    testlib.RandUTF8String(2, 50),
+		},
+		{
 			Name:        "App Name",
 			GetCfgValue: cfg.AppName,
 			ConfigKey:   configKeyAppName,

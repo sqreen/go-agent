@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
 	"os"
 	"runtime"
 	"sync"
@@ -377,7 +378,8 @@ func (a *AgentType) Serve() error {
 
 	token := a.config.BackendHTTPAPIToken()
 	appName := a.config.AppName()
-	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.DisableSignalBackend())
+	ingestionUrl, _ := url.Parse(a.config.IngestionBackendHTTPAPIBaseURL())
+	appLoginRes, err := appLogin(a.ctx, a.logger, a.client, token, appName, a.appInfo, a.config.DisableSignalBackend(), ingestionUrl)
 	if err != nil {
 		if xerrors.Is(err, context.Canceled) {
 			a.logger.Debug(err)
