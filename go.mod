@@ -30,7 +30,8 @@ require (
 	github.com/spf13/viper v1.3.2
 	github.com/sqreen/go-libsqreen v0.7.1
 	github.com/sqreen/go-sdk/signal v1.2.0
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/objx v0.3.0 // indirect
+	github.com/stretchr/testify v1.6.1
 	go.elastic.co/apm/module/apmsql v1.9.0
 	golang.org/x/crypto v0.0.0-20201116153603-4be66e5b6582 // indirect
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974
@@ -41,4 +42,5 @@ require (
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )

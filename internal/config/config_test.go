@@ -38,9 +38,9 @@ func TestUserConfig(t *testing.T) {
 		},
 		{
 			Name:         "Ingestion Backend HTTP API Base URL",
-			GetCfgValue:  cfg.BackendHTTPAPIBaseURL,
-			ConfigKey:    configKeyBackendHTTPAPIBaseURL,
-			DefaultValue: configDefaultBackendHTTPAPIBaseURL,
+			GetCfgValue:  cfg.IngestionBackendHTTPAPIBaseURL,
+			ConfigKey:    configKeyIngestionBackendHTTPAPIBaseURL,
+			DefaultValue: configDefaultIngestionBackendHTTPAPIBaseURL,
 			SomeValue:    testlib.RandUTF8String(2, 50),
 		},
 		{
@@ -167,7 +167,7 @@ func TestFileLocation(t *testing.T) {
 	require.Equal(t, cwdToken, token)
 
 	tmpToken := "tmp-token"
-	tmpDir := "./" + testlib.RandPrintableUSASCIIString(4)
+	tmpDir := "./.config"
 	tmpFile := newCfgFile(t, tmpDir, `token: `+tmpToken)
 	defer os.RemoveAll(tmpDir)
 	os.Setenv("SQREEN_CONFIG_FILE", tmpFile)

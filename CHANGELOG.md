@@ -1,3 +1,16 @@
+# v1.0.1 - 16 February 2021
+
+## Fix
+
+- Fix Sqreen's overhead rate calculation when the observed execution time is 0.
+  This situation can happen when the execution timer wasn't precise enough in
+  order to observe fast execution times.
+
+## Internal Changes
+
+- Add a new backend url configuration key `ingestion_url` for validation
+  testing.
+
 # v1.0.0 - 19 November 2020
 
 ## New Features

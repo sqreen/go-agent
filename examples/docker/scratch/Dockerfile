@@ -9,6 +9,10 @@ FROM golang:$GO_VERSION AS build
 WORKDIR /app
 COPY . .
 
+# Update the go.mod and go.sum dependencies
+RUN go get -d github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool
+RUN go get -d ./...
+
 # Install Sqreen's instrumentation tool.
 # Go modules make it easier by correctly choosing the version of your go.mod.
 RUN go build -v github.com/sqreen/go-agent/sdk/sqreen-instrumentation-tool
