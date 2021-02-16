@@ -22,7 +22,6 @@ require (
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
-	github.com/mxschmitt/golang-combinations v1.1.0
 	github.com/onsi/ginkgo v1.7.0
 	github.com/onsi/gomega v1.4.3
 	github.com/pkg/errors v0.9.1
@@ -31,7 +30,7 @@ require (
 	github.com/spf13/viper v1.3.2
 	github.com/sqreen/go-libsqreen v0.7.1
 	github.com/sqreen/go-sdk/signal v1.2.0
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	go.elastic.co/apm/module/apmsql v1.9.0
 	golang.org/x/crypto v0.0.0-20201116153603-4be66e5b6582 // indirect
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974

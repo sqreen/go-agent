@@ -328,12 +328,10 @@ func (a *AgentType) sendClosedHTTPProtectionContext(ctx http_protection_types.Cl
 		a.logger.Error(sqerrors.Wrap(err, "could not add sqreen's execution time"))
 	}
 
-	if overheadRate, err := overheadRate(req, sq); err != nil {
+	if overheadRate, err := overheadRate(req, sq); err == nil {
 		if err := a.staticMetrics.sqreenOverheadRate.Add(overheadRate); err != nil {
 			a.logger.Error(sqerrors.Wrap(err, "could not add sqreen overhead rate"))
 		}
-	} else {
-		a.logger.Error(sqerrors.Wrap(err, "sqreen overhead rate calculation error"))
 	}
 
 	event := newClosedHTTPRequestContextEvent(a.RulespackID(), start, finish, ctx.Response(), ctx.Request(), events)
