@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -157,7 +156,7 @@ type defaultPackageInstrumentation struct {
 }
 
 func newDefaultPackageInstrumentation(pkgPath string, fullInstrumentation bool, packageBuildDir string) *defaultPackageInstrumentation {
-	projectBuildDir := path.Join(packageBuildDir, "..")
+	projectBuildDir := filepath.Join(packageBuildDir, "..")
 	hookListFilepath := getHookListFilepath(projectBuildDir)
 
 	return &defaultPackageInstrumentation{
