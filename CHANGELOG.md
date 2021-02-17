@@ -1,3 +1,13 @@
+# v1.0.2 - 17 February 2021
+
+## Fix
+
+- Configuration:  
+  Use the configuration key `proxy` both as an HTTP and HTTPS proxy setting.
+
+- `sdk/sqreen-instrumentation-tool`:  
+  Fix filepath generation on Windows.
+
 # v1.0.1 - 16 February 2021
 
 ## Fix

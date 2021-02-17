@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -157,7 +156,7 @@ type defaultPackageInstrumentation struct {
 }
 
 func newDefaultPackageInstrumentation(pkgPath string, fullInstrumentation bool, packageBuildDir string) *defaultPackageInstrumentation {
-	projectBuildDir := path.Join(packageBuildDir, "..")
+	projectBuildDir := filepath.Join(packageBuildDir, "..")
 	hookListFilepath := getHookListFilepath(projectBuildDir)
 
 	return &defaultPackageInstrumentation{
@@ -364,7 +363,7 @@ func (m *mainPackageInstrumentation) writeHookTable() (string, error) {
 		return "", err
 	}
 	defer hookTableFile.Close()
-	log.Printf("creating the hook table for %d hooks into `%s`", len(hooks), hookTableFile.Name())
+	log.Printf("creating the hook table for %d hooks from `%s` into `%s`", len(hooks), m.hookListFilepath, hookTableFile.Name())
 	if err := writeHookTable(hookTableFile, hooks); err != nil {
 		return "", err
 	}
