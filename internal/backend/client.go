@@ -50,9 +50,10 @@ func NewClient(baseURL string, proxy string, logger plog.DebugLevelLogger) (*Cli
 		transport = (http.DefaultTransport).(*http.Transport)
 	} else {
 		// Use the settings.
-		logger.Infof("client: using configured https proxy `%s`", proxy)
+		logger.Infof("client: using configured https and http proxy `%s`", proxy)
 		proxyCfg := httpproxy.Config{
 			HTTPSProxy: proxy,
+			HTTPProxy:  proxy,
 		}
 		proxyURL := proxyCfg.ProxyFunc()
 		proxy := func(req *http.Request) (*url.URL, error) {
