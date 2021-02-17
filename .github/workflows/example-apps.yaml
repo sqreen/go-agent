@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         example: [ alpine, debian, scratch ]
-        go-version: [ rc, 1.14, 1.13, 1.12 ]
+        go-version: [ rc, 1.16, 1.15, 1.14, 1.13, 1.12 ]
         do-vendoring: [ true, false ]
     runs-on: ubuntu-latest
     steps:

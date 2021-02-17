@@ -1,3 +1,9 @@
+# v1.0.2 - 17 February 2021
+
+## Fix
+
+- Use the configuration key `proxy` both as an HTTP and HTTPS proxy setting.
+
 # v1.0.1 - 16 February 2021
 
 ## Fix
