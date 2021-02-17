@@ -364,7 +364,7 @@ func (m *mainPackageInstrumentation) writeHookTable() (string, error) {
 		return "", err
 	}
 	defer hookTableFile.Close()
-	log.Printf("creating the hook table for %d hooks into `%s`", len(hooks), hookTableFile.Name())
+	log.Printf("creating the hook table for %d hooks from `%s` into `%s`", m.hookListFilepath, len(hooks), hookTableFile.Name())
 	if err := writeHookTable(hookTableFile, hooks); err != nil {
 		return "", err
 	}
