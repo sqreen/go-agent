@@ -193,6 +193,14 @@ func TestGetClientIP(t *testing.T) {
 		require.False(t, isGlobal(privateIP))
 		require.True(t, isPrivate(privateIP))
 
+		globalIPv6 := RandGlobalIPv6()
+		require.True(t, isGlobal(globalIPv6))
+		require.False(t, isPrivate(globalIPv6))
+
+		privateIPv6 := RandPrivateIPv6()
+		require.False(t, isGlobal(privateIPv6))
+		require.True(t, isPrivate(privateIPv6))
+
 		for i, tc := range []struct {
 			expected, remoteAddr string
 			extraHeaders         map[string]string
@@ -239,6 +247,70 @@ func TestGetClientIP(t *testing.T) {
 				remoteAddr: "127.0.0.1",
 				extraHeaders: map[string]string{
 					"X-Forwarded-For": "127.0.0.1, 152.23.231.25:98746, 10.1.2.3, 152.23.231.29, 8.8.8.8",
+				},
+			},
+
+			{
+				expected:   "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				},
+			},
+
+			{
+				expected:   "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				remoteAddr: "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1",
+				},
+			},
+
+			{
+				expected:   "152.23.231.25",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1, 152.23.231.25:98746, 10.1.2.3, 2409:aaaa:210c:3333:5fa9:6ecb:7366:4444, 8.8.8.8",
+				},
+			},
+
+			{
+				expected:   "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1, 2409:aaaa:210c:3333:5fa9:6ecb:7366:4444, 10.1.2.3, 152.23.231.29:2793, 8.8.8.8",
+				},
+			},
+
+			{
+				expected:   "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1, [2409:aaaa:210c:3333:5fa9:6ecb:7366:4444]:3333, 10.1.2.3, 152.23.231.29:2793, 8.8.8.8",
+				},
+			},
+
+			{
+				expected:   "2409:aaaa:210c:3333:5fa9:6ecb:7366:4444",
+				remoteAddr: "127.0.0.1",
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": "127.0.0.1, 2409:aaaa:210c:3333:5fa9:6ecb:7366:4444:3333, 10.1.2.3, 152.23.231.29:2793, 8.8.8.8",
+				},
+			},
+
+			{
+				expected:   globalIPv6.String(),
+				remoteAddr: RandPrivateIPv6().String(),
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": RandPrivateIPv6().String() + "," + RandPrivateIPv6().String() + "," + globalIPv6.String() + "," + RandPrivateIPv6().String(),
+				},
+			},
+
+			{
+				expected:   globalIPv6.String(),
+				remoteAddr: RandPrivateIPv6().String(),
+				extraHeaders: map[string]string{
+					"X-Forwarded-For": globalIPv6.String() + "," + globalIP.String() + "," + privateIPv6.String() + "," + privateIP.String(),
 				},
 			},
 		} {
@@ -338,6 +410,15 @@ func RandIPv4() net.IP {
 	return net.IPv4(uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()))
 }
 
+func RandIPv6() net.IP {
+	return net.IP{
+		uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()),
+		uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()),
+		uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()),
+		uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()), uint8(rand.Uint32()),
+	}
+}
+
 func RandGlobalIPv4() net.IP {
 	for {
 		ip := RandIPv4()
@@ -347,9 +428,27 @@ func RandGlobalIPv4() net.IP {
 	}
 }
 
+func RandGlobalIPv6() net.IP {
+	for {
+		ip := RandIPv6()
+		if isGlobal(ip) && !isPrivate(ip) {
+			return ip
+		}
+	}
+}
+
 func RandPrivateIPv4() net.IP {
 	for {
 		ip := RandIPv4()
+		if !isGlobal(ip) && isPrivate(ip) {
+			return ip
+		}
+	}
+}
+
+func RandPrivateIPv6() net.IP {
+	for {
+		ip := RandIPv6()
 		if !isGlobal(ip) && isPrivate(ip) {
 			return ip
 		}
