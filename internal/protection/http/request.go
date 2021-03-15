@@ -91,11 +91,7 @@ func ClientIP(remoteAddr string, headers http.Header, prioritizedIPHeader string
 	check := func(value string) net.IP {
 		for _, ip := range strings.Split(value, ",") {
 			ipStr := strings.Trim(ip, " ")
-			ipStr, _ = splitHostPort(ipStr)
-			ip := net.ParseIP(ipStr)
-			if ip == nil {
-				return nil
-			}
+			ip := parseIP(ipStr)
 
 			if isGlobal(ip) {
 				return ip
@@ -136,18 +132,19 @@ func ClientIP(remoteAddr string, headers http.Header, prioritizedIPHeader string
 		}
 	}
 
-	remoteIPStr, _ := splitHostPort(remoteAddr)
-	if remoteIPStr == "" {
-		if privateIP != nil {
-			return privateIP
-		}
-		return nil
-	}
-
-	if remoteIP := net.ParseIP(remoteIPStr); remoteIP != nil && (privateIP == nil || isGlobal(remoteIP)) {
+	if remoteIP := parseIP(remoteAddr); remoteIP != nil && (privateIP == nil || isGlobal(remoteIP)) {
 		return remoteIP
 	}
 	return privateIP
+}
+
+func parseIP(s string) net.IP {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		s, _ := splitHostPort(s)
+		ip = net.ParseIP(s)
+	}
+	return ip
 }
 
 func isGlobal(ip net.IP) bool {
