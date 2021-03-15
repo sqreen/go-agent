@@ -1,3 +1,13 @@
+# v1.0.3 - 15 March 2021
+
+## Fix
+
+- IP headers parsing with IPv6 addresses:  
+  Fix the parsing of IP headers such as X-Forwarded-For in presence of IPv6
+  addresses. Such addresses were mistakenly split by host and port number, later
+  leading to IP parsing issues and thus ignoring the address.
+
+
 # v1.0.2 - 17 February 2021
 
 ## Fix
