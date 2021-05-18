@@ -446,7 +446,7 @@ func (a *AgentType) Serve() error {
 
 			appBeatRes, err := a.client.AppBeat(a.ctx, &appBeatReq)
 			if err != nil {
-				a.logger.Error(sqerrors.Wrap(err, "heartbeat failed"))
+				a.logger.Debug("heartbeat failed", err)
 				continue
 			}
 
