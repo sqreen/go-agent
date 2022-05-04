@@ -87,7 +87,7 @@ Congratulations, your Go web application is now protected by Sqreen!
 
 <p align="center">
 <img width="60%" src="./doc/images/blocking-page-with-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
-</p>
+</p>test
 
 # Advanced integration
 
