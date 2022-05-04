@@ -64,7 +64,7 @@ For more details, visit [sqreen.com](https://www.sqreen.com/)
        `-a -toolexec /path/to/sqreen-instrumentation-tool`.
 
        It can be done either in your Go compilation command lines or by setting
-       the `GOFLAGS` environment variable.
+       the `GOFLAGS` environment variable.test
 
        For example, the following two commands are equivalent:
        ```console
