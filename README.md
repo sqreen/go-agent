@@ -1,4 +1,4 @@
-<p align="center">
+<p align="center"> test
 <img width="30%" src="doc/images/sqreen-gopher.png" alt="Sqreen for Go" title="Sqreen for Go" />
 </p>
 
