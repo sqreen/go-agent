@@ -17,9 +17,8 @@ require (
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/kentik/patricia v0.0.0-20190405133149-20eb46c597b3
 	github.com/labstack/echo v3.3.10+incompatible
-	github.com/labstack/echo/v4 v4.1.17
+	github.com/labstack/echo/v4 v4.9.0
 	github.com/magiconair/properties v1.8.1 // indirect
-	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/onsi/ginkgo v1.7.0
@@ -31,16 +30,13 @@ require (
 	github.com/sqreen/go-libsqreen v0.7.1
 	github.com/sqreen/go-sdk/signal v1.2.0
 	github.com/stretchr/objx v0.3.0 // indirect
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	go.elastic.co/apm/module/apmsql v1.9.0
-	golang.org/x/crypto v0.0.0-20201116153603-4be66e5b6582 // indirect
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
-	golang.org/x/sys v0.0.0-20201116194326-cc9327a14d48 // indirect
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
 	golang.org/x/tools v0.0.0-20201117152513-9036a0f9af11 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
