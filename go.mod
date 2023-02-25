@@ -35,7 +35,7 @@ require (
 	go.elastic.co/apm/module/apmsql v1.9.0
 	golang.org/x/crypto v0.0.0-20201116153603-4be66e5b6582 // indirect
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974
-	golang.org/x/sys v0.0.0-20201116194326-cc9327a14d48 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/tools v0.0.0-20201117152513-9036a0f9af11 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
